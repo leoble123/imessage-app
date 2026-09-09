@@ -49,6 +49,7 @@ fun AppRoot(backend: MessagingBackend) {
     val chats by backend.chats.collectAsState(initial = emptyList())
     var openChatId by remember { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(false) }
+    var showCompose by remember { mutableStateOf(false) }
     val openChat = chats.firstOrNull { it.id == openChatId }
 
     val scope = rememberCoroutineScope()
@@ -63,8 +64,12 @@ fun AppRoot(backend: MessagingBackend) {
         progress.animateTo(if (openChatId != null) 1f else 0f, Motion.standard())
     }
 
-    BackHandler(enabled = openChatId != null || showSettings) {
-        if (showSettings) showSettings = false else openChatId = null
+    BackHandler(enabled = openChatId != null || showSettings || showCompose) {
+        when {
+            showCompose -> showCompose = false
+            showSettings -> showSettings = false
+            else -> openChatId = null
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -80,6 +85,7 @@ fun AppRoot(backend: MessagingBackend) {
                 chats = chats,
                 onOpenChat = { chat -> openChatId = chat.id },
                 onOpenSettings = { showSettings = true },
+                onCompose = { showCompose = true },
             )
             if (progress.value > 0f) {
                 Box(
@@ -137,6 +143,32 @@ fun AppRoot(backend: MessagingBackend) {
                     }
             ) {
                 com.leo.imessage.ui.screens.SettingsScreen(onBack = { showSettings = false })
+            }
+        }
+
+        // New Message presents modally, sliding up from the bottom.
+        val composeProgress by androidx.compose.animation.core.animateFloatAsState(
+            targetValue = if (showCompose) 1f else 0f,
+            animationSpec = Motion.gentle(),
+            label = "composePresent",
+        )
+        if (composeProgress > 0.001f) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        translationY = size.height * (1f - composeProgress)
+                        shadowElevation = 20f * composeProgress
+                    }
+            ) {
+                com.leo.imessage.ui.screens.ComposeScreen(
+                    chats = chats,
+                    onBack = { showCompose = false },
+                    onPick = { chat ->
+                        showCompose = false
+                        openChatId = chat.id
+                    },
+                )
             }
         }
 

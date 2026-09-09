@@ -27,7 +27,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,9 +53,20 @@ fun ChatListScreen(
     chats: List<Chat>,
     onOpenChat: (Chat) -> Unit,
     onOpenSettings: () -> Unit = {},
+    onCompose: () -> Unit = {},
 ) {
     val palette = LocalPalette.current
     val listState = rememberLazyListState()
+    var query by remember { mutableStateOf("") }
+
+    val visibleChats = remember(chats, query) {
+        if (query.isBlank()) chats
+        else chats.filter { chat ->
+            chat.displayName.contains(query, ignoreCase = true) ||
+                chat.lastMessage?.text?.contains(query, ignoreCase = true) == true ||
+                chat.participants.any { it.handle.contains(query, ignoreCase = true) }
+        }
+    }
 
     // The large title collapses into the compact bar as content scrolls under
     // it, the way a UIKit large-title nav bar does.
@@ -73,10 +86,26 @@ fun ChatListScreen(
                 bottom = 24.dp,
             ),
         ) {
-            item(key = "search") { SearchField() }
+            item(key = "search") {
+                SearchField(query = query, onQueryChange = { query = it })
+            }
 
-            val pinned = chats.filter { it.isPinned }
-            val rest = chats.filterNot { it.isPinned }
+            val pinned = visibleChats.filter { it.isPinned }
+            val rest = visibleChats.filterNot { it.isPinned }
+
+            if (visibleChats.isEmpty()) {
+                item(key = "empty") {
+                    Text(
+                        text = "No Results",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = palette.tertiaryLabel,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 48.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                }
+            }
 
             items(pinned, key = { it.id }) { chat ->
                 ChatRow(chat, onOpenChat)
@@ -123,7 +152,7 @@ fun ChatListScreen(
                         Icons.Outlined.Edit,
                         contentDescription = "New message",
                         tint = palette.accent,
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(24.dp).clickable { onCompose() },
                     )
                 }
                 Text(
@@ -138,7 +167,7 @@ fun ChatListScreen(
 }
 
 @Composable
-private fun SearchField() {
+private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
     val palette = LocalPalette.current
     Row(
         Modifier
@@ -156,11 +185,33 @@ private fun SearchField() {
             modifier = Modifier.size(18.dp),
         )
         Spacer(Modifier.width(6.dp))
-        Text(
-            text = "Search",
-            style = MaterialTheme.typography.bodyMedium,
-            color = palette.tertiaryLabel,
-        )
+        Box(Modifier.weight(1f)) {
+            if (query.isEmpty()) {
+                Text(
+                    text = "Search",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = palette.tertiaryLabel,
+                )
+            }
+            androidx.compose.foundation.text.BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = palette.label),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(palette.accent),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (query.isNotEmpty()) {
+            Text(
+                text = "✕",
+                style = MaterialTheme.typography.bodyMedium,
+                color = palette.tertiaryLabel,
+                modifier = Modifier
+                    .clickable { onQueryChange("") }
+                    .padding(horizontal = 4.dp),
+            )
+        }
     }
 }
 

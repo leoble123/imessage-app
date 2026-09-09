@@ -83,6 +83,21 @@ fun MessageBubble(
         ) {
             if (msg.isUnsent) {
                 UnsentBubble(msg)
+            } else if (msg.attachments.isNotEmpty() && msg.text.isBlank()) {
+                Column(horizontalAlignment = if (outgoing) Alignment.End else Alignment.Start) {
+                    msg.attachments.forEach { att ->
+                        if (att.isImage) {
+                            PhotoAttachment(
+                                att,
+                                Modifier
+                                    .padding(bottom = 3.dp)
+                                    .bubbleEffect(msg.effect, msg.id + att.id),
+                            )
+                        } else {
+                            FileAttachment(att, Modifier.padding(bottom = 3.dp))
+                        }
+                    }
+                }
             } else {
                 Box(
                     modifier = Modifier

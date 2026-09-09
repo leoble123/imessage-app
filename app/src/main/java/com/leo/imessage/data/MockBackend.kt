@@ -160,6 +160,14 @@ class MockBackend : MessagingBackend {
                 tapbacks = listOf(Tapback(TapbackKind.HEART, fromMe = true, senderId = "me")),
             ),
             Message(
+                id(), "ch1", "", minsAgo(48), false, priya.id,
+                attachments = listOf(
+                    Attachment("a1", "IMG_4821.HEIC", "image/heic"),
+                    Attachment("a2", "IMG_4822.HEIC", "image/heic"),
+                ),
+            ),
+            Message(id(), "ch1", "ok that patio is unreal", minsAgo(47), true, me.id),
+            Message(
                 id(), "ch1", "ok don't tell dev about the surprise yet",
                 minsAgo(24), false, priya.id,
                 unsentText = "ok don't tell dev about the surprise yet",
@@ -194,6 +202,10 @@ class MockBackend : MessagingBackend {
             ),
             Message(id(), "ch3", "perfect", minsAgo(140), false, casey.id),
             Message(id(), "ch3", "can't wait 🙌", minsAgo(58), false, sam.id),
+            Message(
+                id(), "ch3", "", minsAgo(52), false, casey.id,
+                attachments = listOf(Attachment("a3", "menu.jpg", "image/jpeg")),
+            ),
 
             // --- Mom ---
             Message(id(), "ch4", "call me when you get a chance sweetie", daysAgo(1), false, mom.id),
