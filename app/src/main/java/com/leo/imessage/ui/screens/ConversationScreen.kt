@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -58,10 +59,14 @@ import com.leo.imessage.data.Message
 import com.leo.imessage.data.MessageRow
 import com.leo.imessage.ui.components.Avatar
 import com.leo.imessage.ui.components.GlassSurface
+import com.leo.imessage.ui.components.glassSource
+import dev.chrisbanes.haze.HazeState
 import com.leo.imessage.ui.components.GroupAvatar
 import com.leo.imessage.ui.components.MessageBubble
 import com.leo.imessage.ui.components.TypingIndicator
 import com.leo.imessage.ui.theme.LocalPalette
+import com.leo.imessage.ui.theme.Motion
+import kotlinx.coroutines.launch
 import com.leo.imessage.util.conversationTimestampHeader
 
 /**
@@ -114,11 +119,17 @@ fun ConversationScreen(
     onBack: () -> Unit,
     onSend: (String, com.leo.imessage.data.MessageEffect) -> Unit,
     onTapback: (String, com.leo.imessage.data.TapbackKind) -> Unit = { _, _ -> },
+    onEmojiTapback: (String, String) -> Unit = { _, _ -> },
+    onUnsend: (String) -> Unit = {},
 ) {
     val palette = LocalPalette.current
     val listState = rememberLazyListState()
+    val hazeState = remember { HazeState() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val rows = remember(messages) { buildRows(messages, chat.isGroup) }
     var menuFor by remember { mutableStateOf<MessageRow?>(null) }
+    // Swipe the thread left to uncover per-message timestamps.
+    val stampReveal = remember { androidx.compose.animation.core.Animatable(0f) }
 
     // Keep the newest message in view as the thread grows.
     LaunchedEffect(rows.size, chat.isTyping) {
@@ -128,7 +139,25 @@ fun ConversationScreen(
     Box(Modifier.fillMaxSize().background(palette.background)) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .glassSource(hazeState)
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            scope.launch { stampReveal.animateTo(0f, Motion.snappy()) }
+                        },
+                        onDragCancel = {
+                            scope.launch { stampReveal.animateTo(0f, Motion.snappy()) }
+                        },
+                    ) { _, dragAmount ->
+                        scope.launch {
+                            // Only leftward drags reveal; rubber-band at the end.
+                            val next = (stampReveal.value - dragAmount / 140f).coerceIn(0f, 1f)
+                            stampReveal.snapTo(next)
+                        }
+                    }
+                },
             contentPadding = PaddingValues(top = 104.dp, bottom = 90.dp, start = 12.dp, end = 12.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
@@ -154,6 +183,7 @@ fun ConversationScreen(
                     row = row,
                     senderName = senderName,
                     onLongPress = { menuFor = row },
+                    timestampReveal = stampReveal.value,
                     modifier = Modifier.padding(
                         top = if (row.groupPosition == GroupPosition.SINGLE ||
                             row.groupPosition == GroupPosition.FIRST
@@ -176,6 +206,7 @@ fun ConversationScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter),
+            hazeState = hazeState,
             hairlineAtBottom = true,
         ) {
             Row(
@@ -217,6 +248,7 @@ fun ConversationScreen(
 
         MessageInputBar(
             onSend = onSend,
+            hazeState = hazeState,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
 
@@ -228,11 +260,23 @@ fun ConversationScreen(
                 focused?.let { onTapback(it.message.id, kind) }
                 menuFor = null
             },
-            actions = listOf(
-                com.leo.imessage.ui.components.MenuAction("Reply") {},
-                com.leo.imessage.ui.components.MenuAction("Copy") {},
-                com.leo.imessage.ui.components.MenuAction("Delete", destructive = true) {},
-            ),
+            onEmojiTapback = { emoji ->
+                focused?.let { onEmojiTapback(it.message.id, emoji) }
+                menuFor = null
+            },
+            actions = buildList {
+                add(com.leo.imessage.ui.components.MenuAction("Reply") {})
+                add(com.leo.imessage.ui.components.MenuAction("Copy") {})
+                if (focused?.message?.isFromMe == true && focused.message.isUnsent.not()) {
+                    add(com.leo.imessage.ui.components.MenuAction("Edit") {})
+                    add(
+                        com.leo.imessage.ui.components.MenuAction("Undo Send", destructive = true) {
+                            onUnsend(focused.message.id)
+                        }
+                    )
+                }
+                add(com.leo.imessage.ui.components.MenuAction("Delete", destructive = true) {})
+            },
             focusedContent = {
                 if (focused != null) {
                     MessageBubble(
@@ -249,6 +293,7 @@ fun ConversationScreen(
 @Composable
 private fun MessageInputBar(
     onSend: (String, com.leo.imessage.data.MessageEffect) -> Unit,
+    hazeState: HazeState,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalPalette.current
@@ -270,6 +315,7 @@ private fun MessageInputBar(
 
     GlassSurface(
         modifier = modifier.fillMaxWidth(),
+        hazeState = hazeState,
         hairlineAtTop = true,
     ) {
         Row(

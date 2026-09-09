@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -52,6 +53,8 @@ fun MessageBubble(
     senderName: String?,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
+    /** 0..1 - how far the swipe-for-timestamps gesture has been dragged. */
+    timestampReveal: Float = 0f,
 ) {
     val palette = LocalPalette.current
     val msg = row.message
@@ -65,8 +68,26 @@ fun MessageBubble(
         label = "bubblePress",
     )
 
-    Column(
-        modifier = modifier.fillMaxWidth(),
+    Box(modifier.fillMaxWidth()) {
+      // The stamp sits under the bubble at the trailing edge and is uncovered
+      // as the thread slides left, exactly like Messages.
+      if (timestampReveal > 0.01f) {
+          Text(
+              text = com.leo.imessage.util.messageStamp(msg.timestamp),
+              style = MaterialTheme.typography.labelSmall,
+              color = palette.tertiaryLabel,
+              modifier = Modifier
+                  .align(Alignment.CenterEnd)
+                  .graphicsLayer {
+                      translationX = 64.dp.toPx() * (1f - timestampReveal)
+                      alpha = timestampReveal
+                  },
+          )
+      }
+      Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { translationX = -64.dp.toPx() * timestampReveal },
         horizontalAlignment = if (outgoing) Alignment.End else Alignment.Start,
     ) {
         if (row.showSenderName && senderName != null && !outgoing) {
@@ -140,7 +161,7 @@ fun MessageBubble(
 
             if (msg.tapbacks.isNotEmpty()) {
                 TapbackCluster(
-                    kinds = msg.tapbacks.map { it.kind },
+                    tapbacks = msg.tapbacks,
                     outgoing = outgoing,
                     modifier = Modifier
                         .align(if (outgoing) Alignment.TopStart else Alignment.TopEnd)
@@ -164,6 +185,7 @@ fun MessageBubble(
         if (row.showDeliveryReceipt && outgoing) {
             DeliveryReceipt(msg)
         }
+      }
     }
 }
 
@@ -253,7 +275,7 @@ private fun DeliveryReceipt(msg: Message) {
 
 @Composable
 private fun TapbackCluster(
-    kinds: List<TapbackKind>,
+    tapbacks: List<com.leo.imessage.data.Tapback>,
     outgoing: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -262,7 +284,7 @@ private fun TapbackCluster(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy((-6).dp),
     ) {
-        kinds.take(3).forEach { kind ->
+        tapbacks.take(3).forEach { tb ->
             Box(
                 Modifier
                     .size(26.dp)
@@ -272,7 +294,7 @@ private fun TapbackCluster(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = kind.glyph(),
+                    text = tb.emoji ?: tb.kind.glyph(),
                     color = if (outgoing) palette.incomingText else Color.White,
                     style = MaterialTheme.typography.labelMedium,
                 )
@@ -288,4 +310,5 @@ fun TapbackKind.glyph(): String = when (this) {
     TapbackKind.HAHA -> "HA"
     TapbackKind.EXCLAIM -> "‼"
     TapbackKind.QUESTION -> "?"
+    TapbackKind.ANY_EMOJI -> "🙂"
 }

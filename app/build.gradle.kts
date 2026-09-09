@@ -68,5 +68,8 @@ dependencies {
 
     implementation("androidx.navigation:navigation-compose:2.8.5")
 
+    // Real backdrop blur - Compose has no native backdrop-filter.
+    implementation("dev.chrisbanes.haze:haze:1.2.2")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

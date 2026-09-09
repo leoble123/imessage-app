@@ -37,3 +37,7 @@ fun conversationTimestampHeader(ms: Long, now: Long = System.currentTimeMillis()
             SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(ms)) + " $time"
     }
 }
+
+/** Compact stamp shown by the swipe-for-timestamps gesture. */
+fun messageStamp(ms: Long): String =
+    SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(ms))

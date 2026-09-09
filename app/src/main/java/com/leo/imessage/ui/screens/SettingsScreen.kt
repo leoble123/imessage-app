@@ -28,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.leo.imessage.ui.components.GlassSurface
+import com.leo.imessage.ui.components.glassSource
+import dev.chrisbanes.haze.HazeState
 import com.leo.imessage.ui.components.ListSection
 import com.leo.imessage.ui.components.SettingsDivider
 import com.leo.imessage.ui.components.SettingsRow
@@ -37,6 +39,7 @@ import com.leo.imessage.ui.theme.LocalPalette
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     val palette = LocalPalette.current
+    val hazeState = remember { HazeState() }
     var readReceipts by remember { mutableStateOf(true) }
     var typingIndicators by remember { mutableStateOf(true) }
     var effects by remember { mutableStateOf(true) }
@@ -46,6 +49,7 @@ fun SettingsScreen(onBack: () -> Unit) {
         Column(
             Modifier
                 .fillMaxSize()
+                .glassSource(hazeState)
                 .verticalScroll(rememberScrollState())
                 .padding(top = 100.dp, bottom = 32.dp),
         ) {
@@ -84,6 +88,7 @@ fun SettingsScreen(onBack: () -> Unit) {
 
         GlassSurface(
             modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter),
+            hazeState = hazeState,
             hairlineAtBottom = true,
         ) {
             Column(Modifier.statusBarsPadding()) {

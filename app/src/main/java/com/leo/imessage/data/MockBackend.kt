@@ -112,6 +112,31 @@ class MockBackend : MessagingBackend {
         }
     }
 
+    override suspend fun setEmojiTapback(messageId: String, emoji: String) {
+        updateMessage(messageId) { msg ->
+            val without = msg.tapbacks.filterNot { it.fromMe }
+            val existing = msg.tapbacks.firstOrNull { it.fromMe }
+            if (existing?.emoji == emoji) {
+                msg.copy(tapbacks = without)
+            } else {
+                msg.copy(
+                    tapbacks = without + Tapback(
+                        TapbackKind.ANY_EMOJI,
+                        fromMe = true,
+                        senderId = me.id,
+                        emoji = emoji,
+                    )
+                )
+            }
+        }
+    }
+
+    override suspend fun unsend(messageId: String) {
+        updateMessage(messageId) { msg ->
+            msg.copy(unsentText = msg.text, isUnsent = true, text = "")
+        }
+    }
+
     override suspend fun markRead(chatId: String) {
         _chats.value = _chats.value.map {
             if (it.id == chatId) it.copy(unreadCount = 0) else it

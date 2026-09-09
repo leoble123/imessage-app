@@ -41,6 +41,8 @@ import com.leo.imessage.data.Chat
 import com.leo.imessage.data.Service
 import com.leo.imessage.ui.components.Avatar
 import com.leo.imessage.ui.components.GlassSurface
+import com.leo.imessage.ui.components.glassSource
+import dev.chrisbanes.haze.HazeState
 import com.leo.imessage.ui.components.GroupAvatar
 import com.leo.imessage.ui.components.SwipeAction
 import com.leo.imessage.ui.components.SwipeableRow
@@ -57,6 +59,7 @@ fun ChatListScreen(
 ) {
     val palette = LocalPalette.current
     val listState = rememberLazyListState()
+    val hazeState = remember { HazeState() }
     var query by remember { mutableStateOf("") }
 
     val visibleChats = remember(chats, query) {
@@ -80,7 +83,7 @@ fun ChatListScreen(
     Box(Modifier.fillMaxSize().background(palette.background)) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().glassSource(hazeState),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
                 top = 108.dp,
                 bottom = 24.dp,
@@ -131,7 +134,8 @@ fun ChatListScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter),
-            tintAlpha = 0.55f + 0.4f * collapseProgress,
+            hazeState = hazeState,
+            tintAlpha = 0.38f + 0.30f * collapseProgress,
             hairlineAtBottom = collapseProgress > 0.6f,
         ) {
             Column(Modifier.statusBarsPadding()) {

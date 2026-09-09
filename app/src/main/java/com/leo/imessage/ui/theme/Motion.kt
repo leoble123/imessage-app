@@ -8,34 +8,41 @@ import androidx.compose.animation.core.tween
 /**
  * Motion specs tuned to feel like UIKit rather than Material.
  *
- * The single biggest tell between an Android app and an iOS one is that
- * Material leans on duration+easing curves while UIKit leans on springs with
- * a little overshoot. Everything interactive here uses a spring; only
- * non-physical things (opacity crossfades) use a curve.
+ * Everything interactive is a spring with visible overshoot. Damping ratios
+ * here are deliberately lower than Compose's defaults - Material's springs
+ * settle without ever crossing their target, which reads as "smooth but
+ * dead". iOS lets things overshoot and come back, and that little rebound is
+ * most of what people mean by "bouncy".
  */
 object Motion {
-    /** Standard UI spring - what most iOS view transitions feel like. */
+    /** Standard UI spring. Overshoots slightly, settles fast. */
     fun <T> standard() = spring<T>(
-        dampingRatio = 0.82f,
-        stiffness = 380f,
+        dampingRatio = 0.68f,
+        stiffness = 340f,
     )
 
-    /** Snappier, for direct-manipulation follow-through (drags, swipes). */
+    /** Direct-manipulation follow-through (drags, swipes). Barely overshoots. */
     fun <T> snappy() = spring<T>(
-        dampingRatio = 0.9f,
-        stiffness = 700f,
+        dampingRatio = 0.78f,
+        stiffness = 620f,
     )
 
-    /** Bouncier, for things that should feel alive (bubble send, tapbacks). */
+    /** Things that should feel alive - bubble send, tapbacks, buttons. */
     fun <T> bouncy() = spring<T>(
-        dampingRatio = 0.58f,
-        stiffness = 520f,
+        dampingRatio = 0.42f,
+        stiffness = 480f,
     )
 
-    /** Very soft, for large surfaces moving (sheet presentation). */
+    /** Maximum personality, for one-shot celebratory moments. */
+    fun <T> springy() = spring<T>(
+        dampingRatio = 0.34f,
+        stiffness = 420f,
+    )
+
+    /** Large surfaces moving (sheet presentation). Soft, no bounce. */
     fun <T> gentle() = spring<T>(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = 240f,
+        dampingRatio = 0.9f,
+        stiffness = 260f,
     )
 
     /** iOS's standard ease curve, for pure opacity/color changes. */
@@ -45,7 +52,4 @@ object Motion {
         durationMillis = durationMillis,
         easing = AppleEase,
     )
-
-    /** Duration of the push/pop navigation transition, matching UIKit. */
-    const val NavTransitionMillis = 350
 }

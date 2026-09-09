@@ -122,6 +122,12 @@ fun AppRoot(backend: MessagingBackend) {
                         onTapback = { messageId, kind ->
                             scope.launch { backend.setTapback(messageId, kind) }
                         },
+                        onEmojiTapback = { messageId, emoji ->
+                            scope.launch { backend.setEmojiTapback(messageId, emoji) }
+                        },
+                        onUnsend = { messageId ->
+                            scope.launch { backend.unsend(messageId) }
+                        },
                     )
                 }
             }

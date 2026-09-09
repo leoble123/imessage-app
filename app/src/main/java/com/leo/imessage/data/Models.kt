@@ -22,13 +22,19 @@ enum class DeliveryState { SENDING, SENT, DELIVERED, READ, FAILED }
 /** iMessage's screen/bubble effects. */
 enum class MessageEffect { NONE, SLAM, LOUD, GENTLE, INVISIBLE_INK }
 
-enum class TapbackKind { HEART, THUMBS_UP, THUMBS_DOWN, HAHA, EXCLAIM, QUESTION }
+/**
+ * The six classic tapbacks, plus ANY_EMOJI for iOS 18's arbitrary-emoji
+ * reactions. [Tapback.emoji] carries the actual character in that case.
+ */
+enum class TapbackKind { HEART, THUMBS_UP, THUMBS_DOWN, HAHA, EXCLAIM, QUESTION, ANY_EMOJI }
 
 @Immutable
 data class Tapback(
     val kind: TapbackKind,
     val fromMe: Boolean,
     val senderId: String,
+    /** Set only when [kind] is ANY_EMOJI. */
+    val emoji: String? = null,
 )
 
 @Immutable
@@ -55,6 +61,8 @@ data class Message(
     val replyToId: String? = null,
     /** Original text of a message that was unsent, kept for one-tap reveal. */
     val unsentText: String? = null,
+    /** Prior versions of an edited message, oldest first. */
+    val editHistory: List<String> = emptyList(),
     val isUnsent: Boolean = unsentText != null,
     val editedAt: Long? = null,
 ) {

@@ -19,6 +19,11 @@ interface MessagingBackend {
 
     suspend fun setTapback(messageId: String, kind: TapbackKind)
 
+    suspend fun setEmojiTapback(messageId: String, emoji: String)
+
+    /** Retracts a message you sent, keeping the text for one-tap reveal. */
+    suspend fun unsend(messageId: String)
+
     suspend fun markRead(chatId: String)
 
     suspend fun setTyping(chatId: String, typing: Boolean)

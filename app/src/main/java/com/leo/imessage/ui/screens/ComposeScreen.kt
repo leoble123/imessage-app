@@ -30,6 +30,8 @@ import com.leo.imessage.data.Chat
 import com.leo.imessage.data.Contact
 import com.leo.imessage.ui.components.Avatar
 import com.leo.imessage.ui.components.GlassSurface
+import com.leo.imessage.ui.components.glassSource
+import dev.chrisbanes.haze.HazeState
 import com.leo.imessage.ui.theme.LocalPalette
 
 /**
@@ -43,6 +45,7 @@ fun ComposeScreen(
     onPick: (Chat) -> Unit,
 ) {
     val palette = LocalPalette.current
+    val hazeState = remember { HazeState() }
     var to by remember { mutableStateOf("") }
 
     val contacts = remember(chats) {
@@ -59,7 +62,7 @@ fun ComposeScreen(
 
     Box(Modifier.fillMaxSize().background(palette.background)) {
         LazyColumn(
-            Modifier.fillMaxSize(),
+            Modifier.fillMaxSize().glassSource(hazeState),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
                 top = 118.dp,
                 bottom = 24.dp,
@@ -100,6 +103,7 @@ fun ComposeScreen(
 
         GlassSurface(
             modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter),
+            hazeState = hazeState,
             hairlineAtBottom = true,
         ) {
             Column(Modifier.statusBarsPadding()) {

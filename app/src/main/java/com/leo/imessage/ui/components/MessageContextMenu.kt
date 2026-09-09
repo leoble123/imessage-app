@@ -50,6 +50,7 @@ fun MessageContextMenu(
     visible: Boolean,
     onDismiss: () -> Unit,
     onTapback: (TapbackKind) -> Unit,
+    onEmojiTapback: (String) -> Unit,
     actions: List<MenuAction>,
     focusedContent: @Composable () -> Unit,
 ) {
@@ -87,7 +88,10 @@ fun MessageContextMenu(
                     .padding(horizontal = 20.dp)
                     .scale(pop),
             ) {
-                TapbackPicker(onPick = onTapback)
+                TapbackRail(
+                    onPickClassic = onTapback,
+                    onPickEmoji = onEmojiTapback,
+                )
 
                 Spacer(Modifier.height(12.dp))
 
@@ -133,31 +137,3 @@ fun MessageContextMenu(
     }
 }
 
-@Composable
-private fun TapbackPicker(onPick: (TapbackKind) -> Unit) {
-    val palette = LocalPalette.current
-    Row(
-        Modifier
-            .clip(CircleShape)
-            .background(palette.surfaceElevated)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        TapbackKind.entries.forEach { kind ->
-            Box(
-                Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .clickable { onPick(kind) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = kind.glyph(),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = palette.secondaryLabel,
-                )
-            }
-        }
-    }
-}
