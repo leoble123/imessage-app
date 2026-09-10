@@ -1,6 +1,8 @@
 package com.leo.imessage.data
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -19,8 +21,17 @@ import kotlinx.coroutines.launch
  */
 class TypingReporter(
     private val backend: MessagingBackend,
-    private val scope: CoroutineScope,
 ) {
+    /**
+     * Its own scope, not the caller's.
+     *
+     * This used to run on the composition's scope, which is cancelled the
+     * moment the screen goes away - so backgrounding the app mid-sentence
+     * cancelled the "stopped typing" message before it was sent, and the
+     * three dots stayed on the other person's screen indefinitely.
+     */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private var activeChat: String? = null
     private var stopJob: Job? = null
 

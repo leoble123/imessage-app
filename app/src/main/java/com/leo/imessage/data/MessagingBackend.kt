@@ -97,4 +97,13 @@ interface MessagingBackend {
      * knowing before a message is typed, not after it fails to send.
      */
     suspend fun startChat(handles: List<String>): String
+
+    /**
+     * Sends a failed message again.
+     *
+     * Without this a failure is terminal - the text is on screen but there is
+     * no way to act on it except retyping, which for a long message people
+     * simply won't do.
+     */
+    suspend fun retry(messageId: String)
 }

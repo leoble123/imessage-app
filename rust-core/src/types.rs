@@ -95,6 +95,13 @@ pub struct ConversationInfo {
 pub enum EventKind {
     Text {
         text: String,
+        /// Which part of the message the text sits in.
+        ///
+        /// A message is a list of parts - attachments, then text. Tapbacks,
+        /// edits and unsends all address a specific one, so reacting to a
+        /// photo-plus-caption while assuming part zero puts the tapback on
+        /// the photo.
+        text_part: u32,
         subject: Option<String>,
         /// GUID of the message being replied to, if this is a reply.
         reply_to_id: Option<String>,

@@ -144,6 +144,14 @@ data class Message(
      * iMessage" and "the connection dropped" is the whole diagnosis.
      */
     val failureReason: String? = null,
+    /**
+     * Which part of the message the text occupies.
+     *
+     * Messages are lists of parts - attachments first, then the caption - and
+     * tapbacks, edits and unsends each address one by position. Assuming zero
+     * puts a reaction on the photo instead of the words.
+     */
+    val textPart: Long = 0,
 ) {
     val hasContent: Boolean get() = text.isNotBlank() || attachments.isNotEmpty()
 }

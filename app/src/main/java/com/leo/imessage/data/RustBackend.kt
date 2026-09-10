@@ -70,6 +70,17 @@ class RustBackend(
     var openChatId: String? = null
 
     /**
+     * Whether the app is actually on screen.
+     *
+     * `openChatId` alone is not enough: it stays set while the app is in the
+     * background, so a message arriving in the last thread you had open was
+     * marked read and a receipt sent - telling someone you had read it while
+     * the phone was in your pocket.
+     */
+    @Volatile
+    var appVisible: Boolean = false
+
+    /**
      * What happened on the last send attempt, for the diagnostics screen.
      *
      * A message that silently never arrives is the hardest kind to diagnose
@@ -166,7 +177,32 @@ class RustBackend(
      * Starts the receive loop. Safe to call more than once - the core ignores
      * a second start.
      */
+    /**
+     * Deletes attachment files nothing points at any more.
+     *
+     * Every received photo and every staged copy of a sent one was kept
+     * forever, with no cleanup and no way to clear it - storage that only ever
+     * grew. Run at startup, when nothing is mid-transfer.
+     */
+    private fun pruneOrphanedAttachments() {
+        val context = context ?: return
+        runCatching {
+            val referenced = store.messages
+                .flatMap { it.attachments }
+                .mapNotNull { it.uri }
+                .toSet()
+            AttachmentFiles.dir(context).listFiles()?.forEach { file ->
+                val uri = android.net.Uri.fromFile(file).toString()
+                if (uri !in referenced) {
+                    Log.i(TAG, "removing orphaned ${file.name}")
+                    file.delete()
+                }
+            }
+        }.onFailure { Log.w(TAG, "couldn't prune attachments", it) }
+    }
+
     suspend fun start() {
+        pruneOrphanedAttachments()
         // Clears out conversations left by that bug. They can neither send nor
         // receive, so there is nothing to preserve - and one sitting in the
         // list looks like a real thread that has simply stopped working.
@@ -227,6 +263,8 @@ class RustBackend(
             effect = effect,
             replyToId = replyToId,
             attachments = attachments,
+            // Matches how the message is built on the wire: files, then text.
+            textPart = attachments.size.toLong(),
         )
         append(pending)
 
@@ -369,7 +407,7 @@ class RustBackend(
                 groupName = chat.groupName(),
                 senderGuid = chat.groupGuid(),
                 targetId = message.id,
-                targetPart = 0uL,
+                targetPart = message.textPart.toULong(),
                 // iMessage quotes the message being reacted to in the tapback
                 // itself; that's what devices without tapback support show.
                 targetText = message.text,
@@ -413,7 +451,7 @@ class RustBackend(
                 groupName = chat.groupName(),
                 senderGuid = chat.groupGuid(),
                 targetId = messageId,
-                targetPart = 0uL,
+                targetPart = message.textPart.toULong(),
                 newText = newText,
             )
         }.onFailure { Log.e(TAG, "edit failed", it) }
@@ -432,7 +470,7 @@ class RustBackend(
                 groupName = chat.groupName(),
                 senderGuid = chat.groupGuid(),
                 targetId = messageId,
-                targetPart = 0uL,
+                targetPart = message.textPart.toULong(),
             )
         }.onFailure { Log.e(TAG, "unsend failed", it) }
     }
@@ -501,6 +539,20 @@ class RustBackend(
             ) to messages
         }
         return chatId
+    }
+
+    override suspend fun retry(messageId: String) {
+        val message = _messages.value.firstOrNull { it.id == messageId } ?: return
+        if (message.deliveryState != DeliveryState.FAILED) return
+        // Removed first so the retry doesn't sit beside its own failure.
+        delete(messageId)
+        send(
+            chatId = message.chatId,
+            text = message.text,
+            effect = message.effect,
+            replyToId = message.replyToId,
+            attachments = message.attachments,
+        )
     }
 
     // --- Local-only state ---------------------------------------------------
@@ -705,6 +757,7 @@ class RustBackend(
                     service = if (kind.isSms) Service.SMS else Service.IMESSAGE,
                     deliveryState = DeliveryState.DELIVERED,
                     effect = effectFrom(kind.effect),
+                    textPart = kind.textPart.toLong(),
                     replyToId = kind.replyToId,
                     attachments = kind.attachments.map {
                         Attachment(
@@ -718,7 +771,7 @@ class RustBackend(
                         )
                     },
                 )
-                val watching = chatId == openChatId
+                val watching = appVisible && chatId == openChatId
                 append(message, incrementUnread = !fromMe && !watching)
 
                 // A message landing clears the typing bubble - the sender has
@@ -739,7 +792,14 @@ class RustBackend(
                 if (message.attachments.isNotEmpty()) {
                     scope.launch {
                         message.attachments.forEach { attachment ->
-                            downloadAttachment(message.id, attachment.id)
+                            // Big files wait to be asked for. Fetching a
+                            // 200MB video the instant it lands spends
+                            // somebody's mobile data without asking; small
+                            // ones are the common case and worth having ready.
+                            val size = attachment.sizeBytes ?: 0
+                            if (size <= AUTO_DOWNLOAD_LIMIT || onUnmeteredNetwork()) {
+                                downloadAttachment(message.id, attachment.id)
+                            }
                         }
                     }
                 }
@@ -932,8 +992,21 @@ class RustBackend(
         }
     }
 
+    /** True on Wi-Fi, or anything else the system doesn't bill by the byte. */
+    private fun onUnmeteredNetwork(): Boolean {
+        val context = context ?: return false
+        val manager = context.getSystemService(android.net.ConnectivityManager::class.java)
+            ?: return false
+        return runCatching {
+            !manager.isActiveNetworkMetered
+        }.getOrDefault(false)
+    }
+
     private companion object {
         const val TAG = "RustBackend"
+
+        /** Anything larger waits for a tap, unless the network is free. */
+        const val AUTO_DOWNLOAD_LIMIT = 8L * 1024 * 1024
     }
 }
 

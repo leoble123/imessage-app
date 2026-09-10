@@ -51,6 +51,16 @@ class MessageStore(private val file: File) {
     var messages: List<Message> = emptyList()
         private set
 
+    /**
+     * Set when the history could not be read.
+     *
+     * Surfaced in Settings rather than only logged: every message vanishing
+     * with no explanation is the single most alarming thing this app could do.
+     */
+    @Volatile
+    var loadFailure: String? = null
+        private set
+
     init {
         load()
         scope.launch {
@@ -76,45 +86,97 @@ class MessageStore(private val file: File) {
     /** Forces an immediate write - used when the app is going to the background. */
     suspend fun flush() = persist()
 
+    /**
+     * Reads the history back.
+     *
+     * The file is one JSON object per line rather than a single document:
+     * chats on the first line, then one message per line after it. That is the
+     * whole reason it can be read at all on a phone - the previous format was
+     * one enormous object, which had to exist three times over in memory
+     * (bytes, then a UTF-16 string, then a parsed tree) before a single
+     * message could be read, and a few years of history exceeded the heap.
+     */
     private fun load() {
         if (!file.exists()) return
         try {
-            val root = JSONObject(file.readText())
-            messages = root.optJSONArray("messages").map { it.toMessage() }
-            chats = root.optJSONArray("chats").map { it.toChat(messages) }
-        } catch (e: Exception) {
-            // A truncated file (killed mid-write) would otherwise crash on
-            // every launch with no way out but clearing app data. Starting
-            // empty loses history, which is bad, but recoverable by the
-            // messages that arrive next; a crash loop is not.
-            Log.e(TAG, "history file unreadable, starting empty", e)
-            file.renameTo(File(file.parentFile, file.name + ".corrupt"))
+            val loadedMessages = ArrayList<Message>()
+            var loadedChats: List<Chat> = emptyList()
+
+            file.bufferedReader().useLines { lines ->
+                lines.forEachIndexed { index, line ->
+                    if (line.isBlank()) return@forEachIndexed
+                    if (index == 0) {
+                        val header = JSONObject(line)
+                        // Chats are few and small; only the messages need
+                        // streaming.
+                        loadedChats = header.optJSONArray("chats").map { it.toChatShell() }
+                    } else {
+                        // A single unreadable line loses one message, not the
+                        // entire history.
+                        runCatching { JSONObject(line).toMessage() }
+                            .onSuccess { loadedMessages.add(it) }
+                            .onFailure { Log.w(TAG, "skipping an unreadable message", it) }
+                    }
+                }
+            }
+
+            messages = loadedMessages
+            chats = loadedChats.map { chat ->
+                chat.copy(
+                    lastMessage = loadedMessages
+                        .filter { it.chatId == chat.id }
+                        .maxByOrNull { it.timestamp }
+                )
+            }
+        } catch (e: Throwable) {
+            // The history is the only copy there is - iMessage never resends
+            // anything - so it is set aside rather than deleted, and the
+            // failure is surfaced instead of the app quietly opening empty as
+            // though nothing had happened.
+            Log.e(TAG, "history file unreadable", e)
+            val salvaged = File(file.parentFile, file.name + ".corrupt")
+            runCatching { file.copyTo(salvaged, overwrite = true) }
+            loadFailure = "Couldn't read your saved messages. The file was kept as " +
+                "${salvaged.name} in case it can be recovered."
         }
     }
 
     private suspend fun persist() {
-        val snapshot = lock.withLock {
-            JSONObject().apply {
-                put("version", FORMAT_VERSION)
-                put("chats", JSONArray().apply { chats.forEach { put(it.toJson()) } })
-                put("messages", JSONArray().apply { messages.forEach { put(it.toJson()) } })
-            }.toString()
-        }
+        val (chatSnapshot, messageSnapshot) = lock.withLock { chats to messages }
         try {
-            // Write to a sibling and rename: a rename is atomic, so a kill
-            // during the write leaves the previous good file intact rather
-            // than a half-written one.
+            // Written to a sibling and renamed. A rename is atomic, so being
+            // killed mid-write leaves the previous good file rather than a
+            // half-written one.
             val temp = File(file.parentFile, file.name + ".tmp")
-            temp.writeText(snapshot)
-            temp.renameTo(file)
-        } catch (e: Exception) {
+            temp.bufferedWriter().use { out ->
+                out.write(
+                    JSONObject().apply {
+                        put("version", FORMAT_VERSION)
+                        put("chats", JSONArray().apply { chatSnapshot.forEach { put(it.toJson()) } })
+                    }.toString()
+                )
+                out.newLine()
+                // One message per line, written as we go. The old format built
+                // a single string holding every message at once, which grew
+                // without bound and eventually failed during the save itself -
+                // the one moment where failing loses the file.
+                messageSnapshot.forEach { message ->
+                    out.write(message.toJson().toString())
+                    out.newLine()
+                }
+            }
+            if (!temp.renameTo(file)) {
+                temp.copyTo(file, overwrite = true)
+                temp.delete()
+            }
+        } catch (e: Throwable) {
             Log.e(TAG, "couldn't save history", e)
         }
     }
 
     private companion object {
         const val TAG = "MessageStore"
-        const val FORMAT_VERSION = 1
+        const val FORMAT_VERSION = 2
     }
 }
 
@@ -233,6 +295,7 @@ internal fun Message.toJson(): JSONObject = JSONObject().apply {
     put("remindAt", remindAt)
     put("scheduledFor", scheduledFor)
     put("failureReason", failureReason)
+    put("textPart", textPart)
     put("editHistory", JSONArray(editHistory))
     put("tapbacks", JSONArray().apply { tapbacks.forEach { put(it.toJson()) } })
     put("attachments", JSONArray().apply { attachments.forEach { put(it.toJson()) } })
@@ -264,6 +327,7 @@ internal fun JSONObject.toMessage(): Message {
         remindAt = optLongOrNull("remindAt"),
         scheduledFor = optLongOrNull("scheduledFor"),
         failureReason = optStringOrNull("failureReason"),
+        textPart = optLong("textPart"),
         editHistory = optJSONArray("editHistory").strings(),
         tapbacks = optJSONArray("tapbacks").map { it.toTapback() },
         attachments = optJSONArray("attachments").map { it.toAttachment() },
@@ -285,15 +349,16 @@ internal fun Chat.toJson(): JSONObject = JSONObject().apply {
 /**
  * `lastMessage` isn't stored - it's the newest message for this chat, and
  * writing it twice invites the copy and the transcript disagreeing after an
- * edit or an unsend.
+ * edit or an unsend. The loader recomputes it.
  */
-internal fun JSONObject.toChat(allMessages: List<Message>): Chat {
+internal fun JSONObject.toChatShell(): Chat {
     val id = getString("id")
     return Chat(
         id = id,
         displayName = optString("displayName"),
         participants = optJSONArray("participants").map { it.toContact() },
-        lastMessage = allMessages.filter { it.chatId == id }.maxByOrNull { it.timestamp },
+        // Filled in by the loader once the messages have been read.
+        lastMessage = null,
         unreadCount = optInt("unreadCount"),
         isPinned = optBoolean("isPinned"),
         isMuted = optBoolean("isMuted"),

@@ -118,8 +118,14 @@ class Calls(
                 }
             }
 
-            is CallEvent.AnsweredElsewhere -> update(event.callId) {
-                it.copy(stage = Stage.ENDED, endedReason = "Answered on another device")
+            is CallEvent.AnsweredElsewhere -> {
+                // The microphone has to be released here too. Every other way
+                // a call ends stopped it; this one didn't, so answering on
+                // another device left this phone recording.
+                audio?.stop()
+                update(event.callId) {
+                    it.copy(stage = Stage.ENDED, endedReason = "Answered on another device")
+                }
             }
 
             is CallEvent.Disconnected -> {
@@ -133,15 +139,35 @@ class Calls(
         }
     }
 
+    /**
+     * Starts a call, and says so when it can't.
+     *
+     * A failure used to be swallowed whole - no call screen, no error,
+     * nothing at all on screen - which is indistinguishable from the button
+     * not being wired up.
+     */
     suspend fun place(handles: List<String>, video: Boolean) {
         val targets = handles.map(Handles::normalize)
-        val id = core.placeCall(targets, video)
-        _current.value = Call(
-            id = id,
-            stage = Stage.OUTGOING,
-            members = peopleOf(targets),
-            isVideo = video,
-        )
+        val people = peopleOf(targets)
+        try {
+            val id = core.placeCall(targets, video)
+            _current.value = Call(
+                id = id,
+                stage = Stage.OUTGOING,
+                members = people,
+                isVideo = video,
+            )
+        } catch (e: Throwable) {
+            Log.e(TAG, "couldn't place call", e)
+            _current.value = Call(
+                id = "failed",
+                stage = Stage.ENDED,
+                members = people,
+                isVideo = video,
+                endedReason = e.message?.removePrefix("reason=")?.trim()
+                    ?: "Couldn't start the call",
+            )
+        }
     }
 
     suspend fun answer() {

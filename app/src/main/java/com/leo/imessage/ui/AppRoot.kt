@@ -89,7 +89,7 @@ fun AppRoot(
     // Tells the other side we're typing. Debounced, because the wire message
     // is a real one and firing it per keystroke is a burst of traffic.
     val typing = remember(backend) {
-        com.leo.imessage.data.TypingReporter(backend, scope)
+        com.leo.imessage.data.TypingReporter(backend)
     }
     val density = LocalDensity.current
     val haptics = com.leo.imessage.ui.components.rememberHaptics()
@@ -250,6 +250,7 @@ fun AppRoot(
                             scope.launch { backend.unsend(messageId) }
                         },
                         onMarkRead = { scope.launch { backend.markRead(chat.id) } },
+                        onRetry = { id -> scope.launch { backend.retry(id) } },
                         onSetBookmarked = { id, v ->
                             scope.launch { backend.setBookmarked(id, v) }
                         },

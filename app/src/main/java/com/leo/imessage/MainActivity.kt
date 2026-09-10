@@ -180,6 +180,11 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         (application as EchoApp).isVisible = false
+        // Stops read receipts going out for messages arriving while the phone
+        // is in a pocket on whatever thread was last open.
+        account.backend?.appVisible = false
+        // The typing reporter's own timeout clears the bubble from here,
+        // now that it no longer runs on the composition's scope.
         // Android can kill the process the moment the app is backgrounded, so
         // anything still buffered has to reach disk here rather than later.
         lifecycleScope.launch { account.flush() }
@@ -188,6 +193,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         (application as EchoApp).isVisible = true
+        account.backend?.appVisible = true
         // Some launchers/OEM power paths reset the mode when the window is
         // re-shown, so re-assert it rather than only asking once.
         requestHighestRefreshRate()

@@ -79,7 +79,14 @@ class ConnectionService : Service() {
      */
     private suspend fun watchForMessages(state: AccountState.Ready) {
         val app = EchoApp.instance
-        var lastSeen: String? = null
+        // Seeded from what is already there, not from null. Starting empty
+        // meant the first thing the service did on every launch was announce
+        // the newest message in the store - often days old, often already
+        // read.
+        var lastSeen: String? = state.backend.chatsNow()
+            .mapNotNull { it.lastMessage }
+            .maxByOrNull { it.timestamp }
+            ?.id
         state.backend.chats.collect { chats ->
             val newest = chats.mapNotNull { it.lastMessage }.maxByOrNull { it.timestamp }
                 ?: return@collect

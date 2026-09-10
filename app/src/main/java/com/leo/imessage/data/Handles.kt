@@ -46,6 +46,13 @@ object Handles {
         // Anything that's mostly digits is treated as a number, so the spaces,
         // dashes and brackets people paste in don't defeat it.
         val digits = trimmed.count { it.isDigit() }
+
+        // Short codes are not phone numbers and have no country: pushing one
+        // through E.164 turns "62966" into "+162966", which matches nothing.
+        if (trimmed.all { it.isDigit() } && digits in 3..6) {
+            return "tel:$trimmed"
+        }
+
         if (digits >= 7 && trimmed.all { it.isDigit() || it in "+()- ." }) {
             // Android's own formatter knows every country's rules; the
             // alternative is a hand-rolled table that is wrong somewhere.

@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -71,6 +72,8 @@ fun MessageBubble(
     onReply: () -> Unit = {},
     onVotePoll: (String) -> Unit = {},
     onShowInfo: () -> Unit = {},
+    /** Re-sends a message that failed. */
+    onRetry: (String) -> Unit = {},
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
     /**
@@ -460,14 +463,27 @@ fun MessageBubble(
         // between "they aren't on iMessage" and "the connection dropped" is
         // the entire diagnosis.
         if (outgoing && msg.deliveryState == DeliveryState.FAILED) {
-            Text(
-                msg.failureReason?.let { "Not Delivered - $it" } ?: "Not Delivered",
-                style = MaterialTheme.typography.labelSmall,
-                color = palette.destructive,
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .padding(horizontal = 12.dp, vertical = 2.dp),
-            )
+            Column(
+                horizontalAlignment = Alignment.End,
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                Text(
+                    msg.failureReason?.let { "Not Delivered - $it" } ?: "Not Delivered",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = palette.destructive,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                )
+                // Without this a failure is terminal: the text is right there
+                // and the only way to act on it is to type it again.
+                Text(
+                    "Try Again",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = palette.accent,
+                    modifier = Modifier
+                        .clickable { onRetry(msg.id) }
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                )
+            }
         } else if (row.showDeliveryReceipt && outgoing) {
             DeliveryReceipt(msg)
         }

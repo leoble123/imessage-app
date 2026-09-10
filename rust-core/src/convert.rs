@@ -29,6 +29,18 @@ fn reaction_name(reaction: &Reaction) -> String {
     }
 }
 
+/// The index of the first text part, or zero when there isn't one.
+///
+/// Parts are addressed by position, and iMessage puts attachments before the
+/// caption - so the text of a photo message is rarely part zero.
+fn text_part_index(parts: &MessageParts) -> u32 {
+    parts
+        .0
+        .iter()
+        .position(|p| matches!(p.part, MessagePart::Text(_, _)))
+        .unwrap_or(0) as u32
+}
+
 fn attachment_info(attachment: &Attachment) -> AttachmentInfo {
     AttachmentInfo {
         name: attachment.name.clone(),
@@ -73,6 +85,7 @@ pub fn to_event(msg: &MessageInst) -> IncomingEvent {
     let kind = match &msg.message {
         Message::Message(normal) => EventKind::Text {
             text: normal.parts.raw_text(),
+            text_part: text_part_index(&normal.parts),
             subject: normal.subject.clone(),
             reply_to_id: normal.reply_guid.clone(),
             effect: normal.effect.clone(),

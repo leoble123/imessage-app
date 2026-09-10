@@ -103,6 +103,21 @@ fun SettingsScreen(
                         showChevron = false,
                         destructive = !account.servicesComplete,
                     )
+                    account.historyProblem?.let {
+                        SettingsDivider()
+                        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            Text(
+                                "Saved messages",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = palette.destructive,
+                            )
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = palette.secondaryLabel,
+                            )
+                        }
+                    }
                     account.lastSend?.let {
                         SettingsDivider()
                         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {

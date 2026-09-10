@@ -3843,6 +3843,15 @@ sealed class EventKind {
     
     data class Text(
         val `text`: kotlin.String, 
+        /**
+         * Which part of the message the text sits in.
+         *
+         * A message is a list of parts - attachments, then text. Tapbacks,
+         * edits and unsends all address a specific one, so reacting to a
+         * photo-plus-caption while assuming part zero puts the tapback on
+         * the photo.
+         */
+        val `textPart`: kotlin.UInt, 
         val `subject`: kotlin.String?, 
         /**
          * GUID of the message being replied to, if this is a reply.
@@ -3950,6 +3959,7 @@ public object FfiConverterTypeEventKind : FfiConverterRustBuffer<EventKind>{
         return when(buf.getInt()) {
             1 -> EventKind.Text(
                 FfiConverterString.read(buf),
+                FfiConverterUInt.read(buf),
                 FfiConverterOptionalString.read(buf),
                 FfiConverterOptionalString.read(buf),
                 FfiConverterOptionalString.read(buf),
@@ -4000,6 +4010,7 @@ public object FfiConverterTypeEventKind : FfiConverterRustBuffer<EventKind>{
             (
                 4UL
                 + FfiConverterString.allocationSize(value.`text`)
+                + FfiConverterUInt.allocationSize(value.`textPart`)
                 + FfiConverterOptionalString.allocationSize(value.`subject`)
                 + FfiConverterOptionalString.allocationSize(value.`replyToId`)
                 + FfiConverterOptionalString.allocationSize(value.`effect`)
@@ -4095,6 +4106,7 @@ public object FfiConverterTypeEventKind : FfiConverterRustBuffer<EventKind>{
             is EventKind.Text -> {
                 buf.putInt(1)
                 FfiConverterString.write(value.`text`, buf)
+                FfiConverterUInt.write(value.`textPart`, buf)
                 FfiConverterOptionalString.write(value.`subject`, buf)
                 FfiConverterOptionalString.write(value.`replyToId`, buf)
                 FfiConverterOptionalString.write(value.`effect`, buf)

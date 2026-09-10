@@ -77,12 +77,34 @@ object OpenBubblesImport {
                 "That doesn't look like an OpenBubbles export."
             }
 
-            val json = ByteArray(jsonLength)
-            input.readFully(json)
-            val root = runCatching { JSONObject(String(json, Charsets.UTF_8)) }
-                .getOrElse { throw IllegalArgumentException("That file isn't a readable export.") }
-
-            val parsed = parse(root, myHandles, contacts)
+            // Parsed straight off the stream rather than into a string first.
+            //
+            // The previous version read the whole JSON block into a byte
+            // array, decoded it into a String (UTF-16, so twice the size) and
+            // handed that to JSONObject, which built a full object tree on top
+            // - three copies of a file that can run to tens of megabytes. On a
+            // phone that exhausts the heap, and because runCatching also
+            // catches Error, the OutOfMemoryError was being reported as "that
+            // file isn't a readable export", which sent the search in entirely
+            // the wrong direction.
+            val parsed = try {
+                val reader = android.util.JsonReader(
+                    java.io.InputStreamReader(
+                        BoundedInputStream(input, jsonLength.toLong()),
+                        Charsets.UTF_8,
+                    )
+                )
+                parseStreaming(reader, myHandles, contacts)
+            } catch (e: OutOfMemoryError) {
+                throw IllegalArgumentException(
+                    "That export is too large to import in one go on this phone."
+                )
+            } catch (e: Exception) {
+                // The real reason, not a guess at it.
+                throw IllegalArgumentException(
+                    "Couldn't read that export: ${e::class.java.simpleName}: ${e.message}"
+                )
+            }
 
             // Attachment bytes follow the JSON, in `bytes_id` order.
             val written = writeAttachments(input, parsed.pendingBytes, attachmentDir)
@@ -107,6 +129,92 @@ object OpenBubblesImport {
         val attachmentId: String,
         val fileName: String,
     )
+
+    /**
+     * Walks the export a value at a time.
+     *
+     * The three arrays can appear in any order, and messages reference chats,
+     * so the whole thing is read into intermediate lists of small objects
+     * rather than resolved on the fly. What this avoids is the *document*
+     * ever existing in memory as one piece - each element is parsed, converted
+     * and released before the next is read.
+     */
+    private fun parseStreaming(
+        reader: android.util.JsonReader,
+        myHandles: List<String>,
+        contacts: Contacts?,
+    ): Parsed {
+        val chatObjects = ArrayList<JSONObject>()
+        val messageObjects = ArrayList<JSONObject>()
+        val attachmentObjects = ArrayList<JSONObject>()
+
+        reader.isLenient = true
+        reader.beginObject()
+        while (reader.hasNext()) {
+            when (val name = reader.nextName()) {
+                "chats" -> readArrayInto(reader, chatObjects)
+                "messages" -> readArrayInto(reader, messageObjects)
+                "atts" -> readArrayInto(reader, attachmentObjects)
+                else -> reader.skipValue()
+            }
+        }
+        reader.endObject()
+
+        val root = JSONObject().apply {
+            put("chats", JSONArray().apply { chatObjects.forEach { put(it) } })
+            put("messages", JSONArray().apply { messageObjects.forEach { put(it) } })
+            put("atts", JSONArray().apply { attachmentObjects.forEach { put(it) } })
+        }
+        return parse(root, myHandles, contacts)
+    }
+
+    private fun readArrayInto(reader: android.util.JsonReader, into: MutableList<JSONObject>) {
+        reader.beginArray()
+        while (reader.hasNext()) {
+            into.add(readObject(reader))
+        }
+        reader.endArray()
+    }
+
+    /** One JSON value, built as a small object rather than a slice of a huge one. */
+    private fun readObject(reader: android.util.JsonReader): JSONObject {
+        val out = JSONObject()
+        reader.beginObject()
+        while (reader.hasNext()) {
+            val key = reader.nextName()
+            when (reader.peek()) {
+                android.util.JsonToken.NULL -> { reader.nextNull(); out.put(key, JSONObject.NULL) }
+                android.util.JsonToken.BOOLEAN -> out.put(key, reader.nextBoolean())
+                android.util.JsonToken.NUMBER -> {
+                    // Kept as a string and re-read by the callers, which use
+                    // optLong/optInt - going through Double would round the
+                    // millisecond timestamps.
+                    out.put(key, reader.nextString())
+                }
+                android.util.JsonToken.STRING -> out.put(key, reader.nextString())
+                android.util.JsonToken.BEGIN_OBJECT -> out.put(key, readObject(reader))
+                android.util.JsonToken.BEGIN_ARRAY -> {
+                    val array = JSONArray()
+                    reader.beginArray()
+                    while (reader.hasNext()) {
+                        when (reader.peek()) {
+                            android.util.JsonToken.BEGIN_OBJECT -> array.put(readObject(reader))
+                            android.util.JsonToken.STRING -> array.put(reader.nextString())
+                            android.util.JsonToken.NUMBER -> array.put(reader.nextString())
+                            android.util.JsonToken.BOOLEAN -> array.put(reader.nextBoolean())
+                            android.util.JsonToken.NULL -> { reader.nextNull() }
+                            else -> reader.skipValue()
+                        }
+                    }
+                    reader.endArray()
+                    out.put(key, array)
+                }
+                else -> reader.skipValue()
+            }
+        }
+        reader.endObject()
+        return out
+    }
 
     private fun parse(root: JSONObject, myHandles: List<String>, contacts: Contacts?): Parsed {
         val chatsJson = root.optJSONArray("chats") ?: JSONArray()
@@ -171,7 +279,28 @@ object OpenBubblesImport {
         for (i in 0 until messagesJson.length()) {
             val m = messagesJson.optJSONObject(i) ?: continue
             val guid = m.optString("guid").takeIf { it.isNotEmpty() } ?: continue
-            val chatId = chatIdByGuid[m.optString("chat")] ?: continue
+            // A message whose conversation isn't in the export used to be
+            // dropped without a word. Its participants are on the message, so
+            // the conversation can be reconstructed instead of losing it.
+            val chatGuid = m.optString("chat")
+            val chatId = chatIdByGuid[chatGuid] ?: run {
+                val address = m.optJSONObject("handle")?.optString("address")
+                    ?.takeIf(String::isNotEmpty)
+                    ?.let(Handles::normalize)
+                    ?: return@run null
+                val recovered = Handles.chatId(listOf(address), null)
+                if (chats.none { it.id == recovered }) {
+                    val person = Handles.contact(address, contacts?.nameFor(address))
+                    chats += Chat(
+                        id = recovered,
+                        displayName = person.displayName,
+                        participants = listOf(person),
+                        lastMessage = null,
+                    )
+                }
+                chatIdByGuid[chatGuid] = recovered
+                recovered
+            } ?: continue
 
             val associated = m.optString("associatedMessageGuid").takeIf { it.isNotEmpty() }
             val kind = m.optString("associatedMessageType").takeIf { it.isNotEmpty() }
@@ -418,4 +547,34 @@ object OpenBubblesImport {
     }
 
     private const val TAG = "OpenBubblesImport"
+}
+
+/**
+ * Stops a reader at a byte count.
+ *
+ * The export is a JSON block followed by raw attachment bytes in the same
+ * file. A JSON parser handed the underlying stream would read past the end of
+ * its document into the attachment data; this ends the stream exactly where
+ * the JSON does, so the bytes after it are still there to be read afterwards.
+ */
+private class BoundedInputStream(
+    private val inner: java.io.InputStream,
+    private var remaining: Long,
+) : java.io.InputStream() {
+    override fun read(): Int {
+        if (remaining <= 0) return -1
+        val value = inner.read()
+        if (value >= 0) remaining--
+        return value
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        if (remaining <= 0) return -1
+        val count = inner.read(buffer, offset, minOf(length.toLong(), remaining).toInt())
+        if (count > 0) remaining -= count
+        return count
+    }
+
+    /** Deliberately does not close the underlying stream - it is read on. */
+    override fun close() = Unit
 }

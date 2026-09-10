@@ -155,6 +155,8 @@ fun ConversationScreen(
     onEdit: (String, String) -> Unit = { _, _ -> },
     onDelete: (String) -> Unit = {},
     onMarkRead: () -> Unit = {},
+    /** Re-sends a failed message. */
+    onRetry: (String) -> Unit = {},
     onShareLocation: () -> Unit = {},
     onSetBookmarked: (String, Boolean) -> Unit = { _, _ -> },
     onSetMessagePinned: (String, Boolean) -> Unit = { _, _ -> },
@@ -418,6 +420,7 @@ fun ConversationScreen(
                     ),
                 ) {
                     MessageBubble(
+                        onRetry = onRetry,
                         row = row,
                         onCustomBackground = background.brush != null,
                         backgroundIsDark = background.brush != null && background.isDark,

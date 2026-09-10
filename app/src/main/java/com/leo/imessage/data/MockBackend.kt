@@ -178,6 +178,10 @@ class MockBackend : MessagingBackend {
         }
     }
 
+    override suspend fun retry(messageId: String) {
+        updateMessage(messageId) { it.copy(deliveryState = DeliveryState.DELIVERED) }
+    }
+
     override suspend fun startChat(handles: List<String>): String {
         val contacts = handles.map { Handles.contact(it) }
         val chatId = Handles.chatId(handles, if (handles.size > 1) UUID.randomUUID().toString() else null)

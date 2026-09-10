@@ -27,6 +27,13 @@ data class AccountSummary(
     val lastSend: String? = null,
     /** True when the registration covers every service this build needs. */
     val servicesComplete: Boolean = true,
+    /**
+     * Set when saved messages couldn't be read.
+     *
+     * Every conversation vanishing with no explanation is the most alarming
+     * thing this app can do, so it says so rather than opening empty.
+     */
+    val historyProblem: String? = null,
 )
 
 /** Where the setup flow currently is. */
@@ -162,10 +169,16 @@ class AccountManager(context: Context) {
             }
             becomeReady()
             true
-        } catch (e: CoreException) {
+        } catch (e: Throwable) {
+            // Throwable, not CoreException. Anything else - an Error, a
+            // binding-layer failure, a panic surfacing from Rust - used to
+            // leave the state at Restoring, which draws a bare spinner with
+            // no way out. On the launch path that is an app you cannot even
+            // get into Settings to sign out of.
             Log.e(TAG, "couldn't reconnect", e)
             _state.value = AccountState.Failed(
-                e.friendlyMessage(),
+                (e as? CoreException)?.friendlyMessage()
+                    ?: "Couldn't reconnect: ${e::class.java.simpleName}: ${e.message}",
                 if (relayHost == null) AccountState.NeedsRelay else AccountState.NeedsSignIn,
             )
             false
@@ -186,8 +199,8 @@ class AccountManager(context: Context) {
             relayCode = code.trim()
             if (core.isRegistered()) becomeReady()
             else _state.value = AccountState.NeedsSignIn
-        } catch (e: CoreException) {
-            _state.value = AccountState.Failed(e.friendlyMessage(), AccountState.NeedsRelay)
+        } catch (e: Throwable) {
+            _state.value = AccountState.Failed(e.readable(), AccountState.NeedsRelay)
         }
     }
 
@@ -195,8 +208,8 @@ class AccountManager(context: Context) {
     suspend fun signIn(email: String, password: String) = withContext(Dispatchers.IO) {
         try {
             advance(core.login(email.trim(), password), AccountState.NeedsSignIn)
-        } catch (e: CoreException) {
-            _state.value = AccountState.Failed(e.friendlyMessage(), AccountState.NeedsSignIn)
+        } catch (e: Throwable) {
+            _state.value = AccountState.Failed(e.readable(), AccountState.NeedsSignIn)
         }
     }
 
@@ -205,8 +218,8 @@ class AccountManager(context: Context) {
         val previous = _state.value
         try {
             advance(core.submitDeviceCode(code.trim()), previous)
-        } catch (e: CoreException) {
-            _state.value = AccountState.Failed(e.friendlyMessage(), previous)
+        } catch (e: Throwable) {
+            _state.value = AccountState.Failed(e.readable(), previous)
         }
     }
 
@@ -214,8 +227,8 @@ class AccountManager(context: Context) {
         val previous = _state.value
         try {
             advance(core.requestSmsCode(phoneId), previous)
-        } catch (e: CoreException) {
-            _state.value = AccountState.Failed(e.friendlyMessage(), previous)
+        } catch (e: Throwable) {
+            _state.value = AccountState.Failed(e.readable(), previous)
         }
     }
 
@@ -247,6 +260,7 @@ class AccountManager(context: Context) {
             otherHandles = handles.drop(1),
             relay = relayHost,
             lastSend = backend.lastSendReport,
+            historyProblem = store.loadFailure,
             servicesComplete = runCatching { !core.needsServiceRefresh() }.getOrDefault(true),
         )
     }
@@ -339,6 +353,17 @@ class AccountManager(context: Context) {
  * anything unrecognised is passed through rather than swallowed, because a
  * vague "something went wrong" is worse than an odd but specific one.
  */
+/**
+ * Any failure, phrased for a person.
+ *
+ * Not every failure is a CoreException - the binding layer and the Rust side
+ * can both produce something else - and one that isn't must still say
+ * something, or the screen it lands on has nothing to show.
+ */
+private fun Throwable.readable(): String =
+    (this as? CoreException)?.friendlyMessage()
+        ?: "${this::class.java.simpleName}: ${message ?: "something went wrong"}"
+
 private fun CoreException.friendlyMessage(): String {
     // UniFFI builds the exception message out of the error variant's fields,
     // so it arrives as "reason=..." rather than as the sentence itself.
