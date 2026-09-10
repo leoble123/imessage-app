@@ -58,20 +58,47 @@ fun ComposeScreen(
     onStartNew: (String) -> Unit = {},
     /** Set when the last attempt failed - e.g. the handle isn't on iMessage. */
     error: String? = null,
+    /**
+     * The phone's address book.
+     *
+     * Without it this screen can only offer people you've already messaged,
+     * which on a fresh install is nobody.
+     */
+    addressBook: List<com.leo.imessage.data.Contacts.SavedContact> = emptyList(),
 ) {
     val palette = LocalPalette.current
     val hazeState = remember { HazeState() }
     var to by remember { mutableStateOf("") }
 
-    val contacts = remember(chats) {
+    // People you've already messaged, so tapping them reopens that thread
+    // rather than starting a parallel one.
+    val known = remember(chats) {
         chats.flatMap { chat -> chat.participants.map { it to chat } }
             .distinctBy { it.first.id }
     }
+    val knownHandles = remember(known) { known.map { it.first.handle }.toSet() }
+
+    // Everyone else from the address book. Filtered against the above so a
+    // person doesn't appear twice under two spellings of the same number.
+    val fromBook = remember(addressBook, knownHandles) {
+        addressBook.filterNot { it.handle in knownHandles }
+    }
+    val contacts = known
     val filtered = remember(contacts, to) {
         if (to.isBlank()) contacts
         else contacts.filter { (c, _) ->
             c.displayName.contains(to, ignoreCase = true) ||
                 c.handle.contains(to, ignoreCase = true)
+        }
+    }
+    val filteredBook = remember(fromBook, to) {
+        if (to.isBlank()) fromBook
+        else fromBook.filter {
+            it.name.contains(to, ignoreCase = true) ||
+                it.handle.contains(to, ignoreCase = true) ||
+                // Also match how the number is written in the book, so typing
+                // "555 123" finds a contact saved as "(555) 123-4567".
+                Handles.display(it.handle).contains(to, ignoreCase = true)
         }
     }
 
@@ -139,6 +166,54 @@ fun ComposeScreen(
                 }
             }
 
+            if (filteredBook.isNotEmpty()) {
+                item(key = "contacts-header") {
+                    Text(
+                        if (filtered.isEmpty()) "Contacts" else "All Contacts",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = palette.secondaryLabel,
+                        modifier = Modifier.padding(
+                            start = 16.dp, end = 16.dp, top = 18.dp, bottom = 6.dp,
+                        ),
+                    )
+                }
+                items(filteredBook, key = { "book:" + it.handle }) { saved ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onStartNew(saved.handle) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Avatar(
+                            com.leo.imessage.data.Handles.contact(saved.handle, saved.name),
+                            40.dp,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                saved.name,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = palette.label,
+                            )
+                            Text(
+                                listOfNotNull(saved.label, Handles.display(saved.handle))
+                                    .joinToString(" · "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = palette.secondaryLabel,
+                            )
+                        }
+                    }
+                    Box(
+                        Modifier
+                            .padding(start = 68.dp)
+                            .fillMaxWidth()
+                            .height(0.5.dp)
+                            .background(palette.separator)
+                    )
+                }
+            }
+
             items(filtered, key = { it.first.id }) { (contact, chat) ->
                 Row(
                     Modifier
@@ -156,7 +231,9 @@ fun ComposeScreen(
                             color = palette.label,
                         )
                         Text(
-                            contact.handle,
+                            // Raw handles carry a mailto:/tel: scheme that is
+                            // meaningless to read.
+                            Handles.display(contact.handle),
                             style = MaterialTheme.typography.bodySmall,
                             color = palette.secondaryLabel,
                         )

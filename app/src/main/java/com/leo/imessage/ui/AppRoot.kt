@@ -54,6 +54,8 @@ fun AppRoot(
     /** Shown in Settings. Null when the app is running on sample data. */
     accountSummary: com.leo.imessage.data.AccountSummary? = null,
     onSignOut: () -> Unit = {},
+    /** The phone's address book, for the New Message screen. */
+    addressBook: List<com.leo.imessage.data.Contacts.SavedContact> = emptyList(),
 ) {
     val chats by backend.chats.collectAsState(initial = remember { backend.chatsNow() })
     val settings = com.leo.imessage.ui.theme.LocalSettings.current
@@ -421,6 +423,7 @@ fun AppRoot(
                         }
                     },
                     error = composeError,
+                    addressBook = addressBook,
                 )
             }
         }

@@ -76,6 +76,13 @@ class AccountManager(context: Context) {
         MessageStore(File(appContext.filesDir, "history.json"))
     }
 
+    /** The address book. Public so the New Message screen can list it. */
+    val contacts: Contacts by lazy { Contacts(appContext) }
+
+    /** The live backend, when there is one. */
+    val backend: RustBackend?
+        get() = (_state.value as? AccountState.Ready)?.backend as? RustBackend
+
     private val _state = MutableStateFlow<AccountState>(
         if (relayHost.isNullOrBlank()) AccountState.NeedsRelay else AccountState.NeedsSignIn
     )
@@ -217,9 +224,24 @@ class AccountManager(context: Context) {
     }
 
     private suspend fun becomeReady() {
-        val backend = RustBackend(core, store)
+        // Contacts are read before the backend starts so the first render
+        // already has names - loading them afterwards makes every thread title
+        // visibly change from a number to a name a moment after it appears.
+        contacts.load()
+        val backend = RustBackend(core, store, contacts)
         backend.start()
         _state.value = AccountState.Ready(backend)
+    }
+
+    /**
+     * Re-reads the address book and re-titles existing threads.
+     *
+     * Called after the contacts permission is granted, which happens *after*
+     * the backend is already running and chats are already on screen.
+     */
+    suspend fun reloadContacts() = withContext(Dispatchers.IO) {
+        contacts.load()
+        backend?.refreshContactNames()
     }
 
     /** Lets the setup screen retry from wherever it failed. */

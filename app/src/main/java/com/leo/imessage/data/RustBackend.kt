@@ -34,6 +34,11 @@ import java.util.UUID
 class RustBackend(
     private val core: ImessageCore,
     private val store: MessageStore,
+    /**
+     * The address book, so threads are titled with names instead of numbers.
+     * Optional so the backend still works before permission is granted.
+     */
+    private val contacts: Contacts? = null,
 ) : MessagingBackend {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -52,6 +57,37 @@ class RustBackend(
 
     /** This account's own addresses and numbers, for Settings to show. */
     fun handles(): List<String> = myHandles
+
+    /**
+     * A contact for a handle, named from the address book when it's in there.
+     *
+     * Everything that builds a participant goes through here - otherwise half
+     * the app shows "Priya" and the other half "+15555550142", which looks
+     * like two different people.
+     */
+    private fun contactFor(handle: String): Contact =
+        Handles.contact(handle, contacts?.nameFor(handle))
+
+    /** Re-titles existing chats after contacts load or permission is granted. */
+    suspend fun refreshContactNames() {
+        val source = contacts ?: return
+        if (!source.loaded) return
+        mutate { chats, messages ->
+            chats.map { chat ->
+                val named = chat.participants.map { contactFor(it.handle) }
+                val title = if (chat.id.startsWith("group:") && chat.displayName.isNotBlank() &&
+                    chat.participants.none { it.displayName == chat.displayName }
+                ) {
+                    // A group's own name is not derived from participants, so
+                    // it must not be overwritten by them.
+                    chat.displayName
+                } else {
+                    named.joinToString(", ") { it.displayName }
+                }
+                chat.copy(participants = named, displayName = title)
+            } to messages
+        }
+    }
 
     override val chats: Flow<List<Chat>> = _chats.asStateFlow().map(::sortChats)
 
@@ -264,20 +300,12 @@ class RustBackend(
         val targets = handles.map(Handles::normalize).distinct()
         require(targets.isNotEmpty()) { "No one to message." }
 
-        val sender = myHandle
-        if (sender != null) {
-            // Ask IDS who can actually receive iMessage before creating the
-            // thread. A chat opened against an unreachable handle looks
-            // completely normal until the first message fails.
-            val reachable = runCatching { core.validateTargets(targets, sender) }
-                .getOrDefault(targets)
-            if (reachable.isEmpty()) {
-                throw IllegalArgumentException(
-                    if (targets.size == 1) "${Handles.display(targets.first())} isn't on iMessage."
-                    else "None of those are on iMessage."
-                )
-            }
-        }
+        // No pre-flight gate here, deliberately. This used to refuse to open a
+        // chat when the IDS lookup came back empty, which turned every
+        // false negative into "that person isn't on iMessage" and made it
+        // impossible to message anyone at all. Real Messages lets you address
+        // whoever you like and settles delivery afterwards; a lookup is a hint
+        // about bubble colour, never a reason to block a conversation.
 
         // A group needs a GUID minted here; a one-to-one chat is identified by
         // the other participant, so it gets none.
@@ -285,7 +313,7 @@ class RustBackend(
         val chatId = Handles.chatId(targets, guid)
         _chats.value.firstOrNull { it.id == chatId }?.let { return chatId }
 
-        val participants = targets.map { Handles.contact(it) }
+        val participants = targets.map { contactFor(it) }
         mutate { chats, messages ->
             chats + Chat(
                 id = chatId,
@@ -539,7 +567,7 @@ class RustBackend(
                 chat.copy(
                     participants = kind.participants
                         .filterNot { it in myHandles }
-                        .map { Handles.contact(it) }
+                        .map { contactFor(it) }
                 )
             }
 
@@ -569,7 +597,7 @@ class RustBackend(
         if (_chats.value.any { it.id == chatId }) return
         val participants = event.conversation.participants
             .filterNot { it in myHandles }
-            .map { Handles.contact(it) }
+            .map { contactFor(it) }
         mutate { chats, messages ->
             chats + Chat(
                 id = chatId,

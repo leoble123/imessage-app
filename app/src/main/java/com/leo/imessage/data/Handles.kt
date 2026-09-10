@@ -1,5 +1,7 @@
 package com.leo.imessage.data
 
+import android.telephony.PhoneNumberUtils
+
 /**
  * Translating between iMessage handles and the app's chat identity.
  *
@@ -14,23 +16,63 @@ package com.leo.imessage.data
  */
 object Handles {
 
-    /** Apple prefixes phone numbers with `tel:` and addresses with `mailto:`. */
+    /**
+     * The region used to expand a local phone number, e.g. "US".
+     *
+     * Set once from the SIM at startup. A number typed the way people actually
+     * type it - "555 123 4567" - has no country in it, and Apple only ever
+     * answers to full international form, so something has to supply the
+     * missing part.
+     */
+    @Volatile
+    var defaultRegion: String = "US"
+
+    /**
+     * Puts a handle into the form Apple uses: `mailto:` for addresses,
+     * `tel:` plus an E.164 number for phones.
+     *
+     * Getting this wrong doesn't fail loudly - IDS simply reports no keys for
+     * the handle, which reads as "this person isn't on iMessage" even when
+     * they are. That was the bug: a number typed as "5551234567" became
+     * `tel:5551234567`, and one typed as "(555) 123-4567" got no prefix at
+     * all, so every lookup but the user's own address came back empty.
+     */
     fun normalize(handle: String): String {
         val trimmed = handle.trim()
-        return when {
-            trimmed.startsWith("tel:") || trimmed.startsWith("mailto:") -> trimmed
-            trimmed.contains('@') -> "mailto:$trimmed"
-            // A leading + or an all-digits string is a phone number. Anything
-            // else is left alone rather than guessed at - sending to a
-            // mis-prefixed handle fails in a way that's hard to read.
-            trimmed.startsWith("+") || trimmed.all { it.isDigit() } -> "tel:$trimmed"
-            else -> trimmed
+        if (trimmed.isEmpty()) return trimmed
+        if (trimmed.startsWith("tel:") || trimmed.startsWith("mailto:")) return trimmed
+        if (trimmed.contains('@')) return "mailto:$trimmed"
+
+        // Anything that's mostly digits is treated as a number, so the spaces,
+        // dashes and brackets people paste in don't defeat it.
+        val digits = trimmed.count { it.isDigit() }
+        if (digits >= 7 && trimmed.all { it.isDigit() || it in "+()- ." }) {
+            // Android's own formatter knows every country's rules; the
+            // alternative is a hand-rolled table that is wrong somewhere.
+            val e164 = runCatching {
+                PhoneNumberUtils.formatNumberToE164(trimmed, defaultRegion)
+            }.getOrNull()
+            if (e164 != null) return "tel:$e164"
+
+            // Fall back to a reasonable guess rather than sending something
+            // Apple certainly won't match.
+            val bare = trimmed.filter { it.isDigit() }
+            return when {
+                trimmed.startsWith("+") -> "tel:+$bare"
+                bare.length > 10 -> "tel:+$bare"
+                else -> "tel:+1$bare"
+            }
         }
+        return trimmed
     }
 
-    /** Strips the scheme for display. */
-    fun display(handle: String): String =
-        handle.removePrefix("tel:").removePrefix("mailto:")
+    /** Strips the scheme for display, and prettifies numbers. */
+    fun display(handle: String): String {
+        val bare = handle.removePrefix("tel:").removePrefix("mailto:")
+        if (!bare.startsWith("+")) return bare
+        return runCatching { PhoneNumberUtils.formatNumber(bare, defaultRegion) }
+            .getOrNull() ?: bare
+    }
 
     /**
      * The key for a conversation.

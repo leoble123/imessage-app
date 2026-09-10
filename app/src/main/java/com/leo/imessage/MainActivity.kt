@@ -46,7 +46,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         requestHighestRefreshRate()
         com.leo.imessage.notify.Notifier.ensureChannel(this)
-        requestNotificationPermission()
+        // Numbers get typed the way people say them - "555 123 4567" - with no
+        // country in them, and Apple only answers to full international form.
+        // The SIM is the only reliable source for the missing part.
+        com.leo.imessage.data.Handles.defaultRegion = detectRegion()
+        requestPermissions()
 
         // Reconnect with the saved relay and registration, if there are any,
         // so a relaunch goes straight to the conversation list.
@@ -82,6 +86,7 @@ class MainActivity : ComponentActivity() {
                             openChatRequest = pendingChatId.value,
                             onChatRequestHandled = { pendingChatId.value = null },
                             accountSummary = account.summary(),
+                            addressBook = account.contacts.all(),
                             onSignOut = {
                                 lifecycleScope.launch {
                                     account.signOut()
@@ -129,14 +134,54 @@ class MainActivity : ComponentActivity() {
         requestHighestRefreshRate()
     }
 
-    /** Android 13+ makes notifications an opt-in the user has to grant. */
-    private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        val granted = checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
-            android.content.pm.PackageManager.PERMISSION_GRANTED
-        if (!granted) {
-            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
+    /**
+     * Asks for the two permissions the app can't do its job without.
+     *
+     * Contacts is the one that matters most: without it every conversation is
+     * titled with a raw phone number. Notifications is Android 13+ only.
+     */
+    private fun requestPermissions() {
+        val wanted = buildList {
+            if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                add(android.Manifest.permission.READ_CONTACTS)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                add(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
         }
+        if (wanted.isNotEmpty()) requestPermissions(wanted.toTypedArray(), 1)
+    }
+
+    @Deprecated("Superseded by the Activity Result APIs, which this screen doesn't use.")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray,
+    ) {
+        @Suppress("DEPRECATION")
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        val gotContacts = permissions.indexOf(android.Manifest.permission.READ_CONTACTS)
+            .takeIf { it >= 0 }
+            ?.let { grantResults.getOrNull(it) == android.content.pm.PackageManager.PERMISSION_GRANTED }
+            ?: false
+        // The backend is already running and threads are already on screen by
+        // the time this comes back, so they have to be re-titled rather than
+        // just picked up on next launch.
+        if (gotContacts) lifecycleScope.launch { account.reloadContacts() }
+    }
+
+    /** The SIM's country, falling back to the device locale. */
+    private fun detectRegion(): String {
+        val telephony = getSystemService(android.telephony.TelephonyManager::class.java)
+        val fromSim = telephony?.networkCountryIso?.takeIf { it.isNotBlank() }
+            ?: telephony?.simCountryIso?.takeIf { it.isNotBlank() }
+        return (fromSim ?: resources.configuration.locales[0].country).uppercase()
+            .ifBlank { "US" }
     }
 
     /**
