@@ -149,3 +149,40 @@ fun avatarGradientFor(seed: String): Brush {
     val (a, b) = pairs[idx]
     return Brush.linearGradient(listOf(a, b))
 }
+
+/**
+ * A conversation's own bubble colours, derived from who it's with.
+ *
+ * iMessage is blue, grey, and nothing else - which is fine for one thread
+ * and monotonous across twenty. Hashing the chat's identifier into a hue
+ * gives each conversation a stable colour of its own: the same person is
+ * always the same colour, so you can tell which thread you're in before
+ * you've read a single word, and nobody has to pick anything.
+ */
+fun colorfulBubbleFor(seed: String, dark: Boolean): List<Color> {
+    val palettes = if (dark) {
+        listOf(
+            listOf(Color(0xFF3B82F6), Color(0xFF1D4ED8)),   // azure
+            listOf(Color(0xFF8B5CF6), Color(0xFF5B21B6)),   // violet
+            listOf(Color(0xFFEC4899), Color(0xFF9D174D)),   // rose
+            listOf(Color(0xFF10B981), Color(0xFF065F46)),   // jade
+            listOf(Color(0xFFF59E0B), Color(0xFFB45309)),   // amber
+            listOf(Color(0xFF06B6D4), Color(0xFF0E7490)),   // cyan
+            listOf(Color(0xFFF43F5E), Color(0xFF9F1239)),   // coral
+            listOf(Color(0xFF6366F1), Color(0xFF3730A3)),   // indigo
+        )
+    } else {
+        listOf(
+            listOf(Color(0xFF4C9BFF), Color(0xFF1668E3)),
+            listOf(Color(0xFFA478FF), Color(0xFF6D33D6)),
+            listOf(Color(0xFFFF6FB0), Color(0xFFD62A75)),
+            listOf(Color(0xFF34D9A0), Color(0xFF0E9A6C)),
+            listOf(Color(0xFFFFBB4D), Color(0xFFE08300)),
+            listOf(Color(0xFF3ECEE4), Color(0xFF1195AE)),
+            listOf(Color(0xFFFF7A7A), Color(0xFFDB3A3A)),
+            listOf(Color(0xFF7C86FF), Color(0xFF4148D6)),
+        )
+    }
+    val index = ((seed.hashCode() % palettes.size) + palettes.size) % palettes.size
+    return palettes[index]
+}

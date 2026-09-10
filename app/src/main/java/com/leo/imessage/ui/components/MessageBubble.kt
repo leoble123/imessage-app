@@ -66,6 +66,10 @@ fun MessageBubble(
     onCustomBackground: Boolean = false,
     /** Whether that background is dark, so the glass and text adapt to it. */
     backgroundIsDark: Boolean = false,
+    /** Identifies the conversation, for per-chat bubble colour. */
+    colorSeed: String = "",
+    onReply: () -> Unit = {},
+    onShowInfo: () -> Unit = {},
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
     /**
@@ -341,9 +345,20 @@ fun MessageBubble(
                                             tryAwaitRelease()
                                             pressed = false
                                         },
-                                        // Double-tap opens tapbacks, the same
-                                        // shortcut iOS has.
-                                        onDoubleTap = { onLongPress() },
+                                        // Double-tap does whatever Settings
+                                        // says - iOS's tapback shortcut by
+                                        // default, but reply is the one most
+                                        // people actually reach for.
+                                        onDoubleTap = {
+                                            when (settings.doubleTapAction) {
+                                                com.leo.imessage.ui.theme.DoubleTapAction.TAPBACK ->
+                                                    onLongPress()
+                                                com.leo.imessage.ui.theme.DoubleTapAction.REPLY ->
+                                                    onReply()
+                                                com.leo.imessage.ui.theme.DoubleTapAction.DETAILS ->
+                                                    onShowInfo()
+                                            }
+                                        },
                                         onLongPress = {
                                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                             onLongPress()

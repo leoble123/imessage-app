@@ -7,6 +7,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -72,9 +73,40 @@ fun iMessageTheme(
     val darkTheme = when (settings.themeMode) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.LIGHT -> false
-        ThemeMode.DARK -> true
+        ThemeMode.DARK, ThemeMode.OLED -> true
     }
-    val palette = if (darkTheme) AppPalette.Dark else AppPalette.Light
+    val base = if (darkTheme) AppPalette.Dark else AppPalette.Light
+
+    // OLED isn't just "darker" - it's true #000, which on these panels means
+    // the pixels are switched off entirely. That only works if the surfaces
+    // above it lift enough to still separate, so they move too rather than
+    // leaving controls floating on a void.
+    val oled = settings.themeMode == ThemeMode.OLED
+    val accent = androidx.compose.ui.graphics.Color(
+        if (darkTheme) settings.accentColor.dark else settings.accentColor.light
+    )
+    val palette = remember(base, oled, accent) {
+        base.copy(
+            accent = accent,
+            background = if (oled) androidx.compose.ui.graphics.Color.Black else base.background,
+            groupedBackground = if (oled) androidx.compose.ui.graphics.Color.Black
+                else base.groupedBackground,
+            surface = if (oled) androidx.compose.ui.graphics.Color(0xFF0B0B0D) else base.surface,
+            surfaceElevated = if (oled) androidx.compose.ui.graphics.Color(0xFF141417)
+                else base.surfaceElevated,
+            // The outgoing bubble follows the accent, so picking a colour
+            // actually changes the thing you look at most.
+            outgoingBubbleColors = listOf(
+                accent.copy(alpha = 1f),
+                androidx.compose.ui.graphics.lerp(
+                    accent,
+                    androidx.compose.ui.graphics.Color.Black,
+                    0.22f,
+                ),
+            ),
+            outgoingBubbleFlat = accent,
+        )
+    }
 
     // Reduce Motion still wins outright; the profile shapes everything else.
     Motion.responseScale = if (settings.lowPowerAnimations) 0.45f

@@ -48,6 +48,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun AppRoot(backend: MessagingBackend) {
     val chats by backend.chats.collectAsState(initial = remember { backend.chatsNow() })
+    val settings = com.leo.imessage.ui.theme.LocalSettings.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     var openChatId by remember { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(false) }
     var showCompose by remember { mutableStateOf(false) }
@@ -55,7 +57,10 @@ fun AppRoot(backend: MessagingBackend) {
     // A photo opened from the details screen's Photos strip.
     var detailsViewing by remember { mutableStateOf<com.leo.imessage.data.Attachment?>(null) }
     // Per-chat background choice, kept for the session.
-    val backgrounds = remember { mutableStateMapOf<String, String>() }
+    val store = remember(context) { com.leo.imessage.ui.theme.SettingsStore(context) }
+    val backgrounds = remember {
+        mutableStateMapOf<String, String>().apply { putAll(store.backgrounds()) }
+    }
     // Unsent text per conversation, so leaving a thread mid-sentence and
     // coming back finds the sentence still there.
     val drafts = remember { mutableStateMapOf<String, String>() }
@@ -64,8 +69,24 @@ fun AppRoot(backend: MessagingBackend) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val haptics = com.leo.imessage.ui.components.rememberHaptics()
-    val context = androidx.compose.ui.platform.LocalContext.current
     val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
+
+    // Notify on anything that arrives while you're not looking at it.
+    // Keyed on the newest inbound message id rather than on the chat list, so
+    // a pin or a mute doesn't re-announce a message you already saw.
+    val newest = chats.mapNotNull { it.lastMessage }.maxByOrNull { it.timestamp }
+    LaunchedEffect(newest?.id, settings.notificationsEnabled) {
+        val message = newest ?: return@LaunchedEffect
+        if (!settings.notificationsEnabled || message.isFromMe) return@LaunchedEffect
+        if (message.chatId == openChatId) return@LaunchedEffect
+        chats.firstOrNull { it.id == message.chatId }?.let { chat ->
+            com.leo.imessage.notify.Notifier.post(context, chat, message)
+        }
+    }
+
+    LaunchedEffect(openChatId) {
+        openChatId?.let { com.leo.imessage.notify.Notifier.clear(context, it) }
+    }
 
     // 0 = list fully shown, 1 = conversation fully shown.
     val progress = remember { Animatable(0f) }
@@ -127,8 +148,15 @@ fun AppRoot(backend: MessagingBackend) {
             }
         }
 
+        // The chat stays on screen for the whole exit animation. Falling back
+        // to chats.firstOrNull() here is what caused the flash on the way
+        // out: the moment you hit back, openChat went null and the screen
+        // sliding away re-rendered as somebody else's conversation.
+        var lastOpenChat by remember { mutableStateOf<Chat?>(null) }
+        LaunchedEffect(openChat?.id) { if (openChat != null) lastOpenChat = openChat }
+
         if (openChat != null || progress.value > 0f) {
-            val chat = openChat ?: chats.firstOrNull()
+            val chat = openChat ?: lastOpenChat
             if (chat != null) {
                 val messages by remember(chat.id) { backend.messages(chat.id) }
                     .collectAsState(initial = remember(chat.id) { backend.messagesNow(chat.id) })
@@ -137,10 +165,25 @@ fun AppRoot(backend: MessagingBackend) {
                     Modifier
                         .fillMaxSize()
                         .graphicsLayer {
-                            translationX = screenWidthPx * (1f - progress.value)
-                            // A soft shadow along the leading edge, the way a
-                            // pushed UIKit view casts onto the one beneath.
-                            shadowElevation = 18f * progress.value
+                            val p = progress.value
+                            translationX = screenWidthPx * (1f - p)
+                            shadowElevation = 18f * p
+
+                            // Liquid-glass push: the screen arrives slightly
+                            // small with rounded corners and swells flat as it
+                            // lands, so it reads as a droplet pulling into
+                            // shape rather than a card sliding across. The
+                            // corner radius is what sells it - a hard-edged
+                            // rectangle sliding in is a slide no matter what
+                            // else it does.
+                            val settle = p * p * (3f - 2f * p)
+                            val scale = 0.94f + 0.06f * settle
+                            scaleX = scale
+                            scaleY = scale
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(
+                                (34.dp.toPx() * (1f - settle))
+                            )
+                            clip = true
                         }
                 ) {
                     ConversationScreen(
@@ -226,7 +269,10 @@ fun AppRoot(backend: MessagingBackend) {
                 com.leo.imessage.ui.screens.ChatDetailsScreen(
                     chat = openChat,
                     selectedBackgroundId = backgrounds[openChat.id] ?: "none",
-                    onSelectBackground = { backgrounds[openChat.id] = it },
+                    onSelectBackground = {
+                        backgrounds[openChat.id] = it
+                        store.putBackgrounds(backgrounds.toMap())
+                    },
                     onBack = { showDetails = false },
                     onSetMuted = { scope.launch { backend.setMuted(openChat.id, it) } },
                     onSetPinned = { scope.launch { backend.setPinned(openChat.id, it) } },

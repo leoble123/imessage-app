@@ -27,6 +27,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.border
+import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -93,6 +95,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                             com.leo.imessage.ui.theme.ThemeMode.SYSTEM to "System",
                             com.leo.imessage.ui.theme.ThemeMode.LIGHT to "Light",
                             com.leo.imessage.ui.theme.ThemeMode.DARK to "Dark",
+                            com.leo.imessage.ui.theme.ThemeMode.OLED to "OLED",
                         ),
                         selected = settings.themeMode,
                         onSelect = { settings.themeMode = it },
@@ -150,6 +153,74 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SettingsDivider()
                 SettingsToggle("Swipe for Timestamps", settings.showTimestampsOnSwipe) {
                     settings.showTimestampsOnSwipe = it
+                }
+                SettingsDivider()
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        "Accent Color",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = palette.label,
+                        modifier = Modifier.padding(bottom = 11.dp),
+                    )
+                    androidx.compose.foundation.lazy.LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(com.leo.imessage.ui.theme.AccentColor.entries.toList()) { option ->
+                            val chosen = settings.accentColor == option
+                            val swatch = androidx.compose.ui.graphics.Color(
+                                if (palette.isDark) option.dark else option.light
+                            )
+                            Box(
+                                Modifier
+                                    .size(38.dp)
+                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                    .background(swatch)
+                                    .border(
+                                        width = if (chosen) 3.dp else 0.dp,
+                                        color = palette.label.copy(alpha = if (chosen) 0.9f else 0f),
+                                        shape = androidx.compose.foundation.shape.CircleShape,
+                                    )
+                                    .clickable { settings.accentColor = option },
+                            )
+                        }
+                    }
+                }
+                SettingsDivider()
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        "Density",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = palette.label,
+                        modifier = Modifier.padding(bottom = 9.dp),
+                    )
+                    com.leo.imessage.ui.components.SegmentedControl(
+                        options = com.leo.imessage.ui.theme.Density.entries.map { it to it.label },
+                        selected = settings.density,
+                        onSelect = { settings.density = it },
+                    )
+                }
+                SettingsDivider()
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        "Double-Tap a Bubble",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = palette.label,
+                        modifier = Modifier.padding(bottom = 9.dp),
+                    )
+                    com.leo.imessage.ui.components.SegmentedControl(
+                        options = com.leo.imessage.ui.theme.DoubleTapAction.entries
+                            .map { it to it.label },
+                        selected = settings.doubleTapAction,
+                        onSelect = { settings.doubleTapAction = it },
+                    )
+                }
+                SettingsDivider()
+                SettingsToggle("Colorful Bubbles", settings.colorfulBubbles) {
+                    settings.colorfulBubbles = it
+                }
+                SettingsDivider()
+                SettingsToggle("Notifications", settings.notificationsEnabled) {
+                    settings.notificationsEnabled = it
                 }
                 SettingsDivider()
                 SettingsToggle("Play Message Effects", settings.playEffects) {

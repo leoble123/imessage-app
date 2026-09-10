@@ -80,8 +80,10 @@ dependencies {
     // Real backdrop blur - Compose has no native backdrop-filter.
     implementation("dev.chrisbanes.haze:haze:1.2.2")
 
-    // UniFFI's Kotlin bindings call into the Rust core through JNA.
-    implementation("net.java.dev.jna:jna:5.15.0@aar")
+    // UniFFI's Kotlin bindings call into the Rust core through JNA. Add this
+    // back alongside the first working libimessage_core.so - until then it is
+    // a download the app has no use for.
+    // implementation("net.java.dev.jna:jna:5.15.0@aar")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

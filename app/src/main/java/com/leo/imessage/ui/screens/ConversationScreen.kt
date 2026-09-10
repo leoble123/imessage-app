@@ -399,6 +399,13 @@ fun ConversationScreen(
                         row = row,
                         onCustomBackground = background.brush != null,
                         backgroundIsDark = background.brush != null && background.isDark,
+                        colorSeed = chat.id,
+                        onReply = {
+                            replyingTo = row.message
+                            composerFocus.requestFocus()
+                            keyboard?.show()
+                        },
+                        onShowInfo = { infoFor = row.message },
                         sender = chat.participants.firstOrNull { it.id == row.message.senderId },
                         senderName = senderName,
                         onLongPress = { showMenuFor(row) },

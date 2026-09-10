@@ -16,12 +16,18 @@ class MainActivity : ComponentActivity() {
     // wired in; every screen is written against the MessagingBackend
     // interface, so nothing above this line changes when that happens.
     private val backend by lazy { MockBackend() }
-    private val settings = com.leo.imessage.ui.theme.AppSettings()
+    private val settings by lazy {
+        com.leo.imessage.ui.theme.AppSettings(
+            com.leo.imessage.ui.theme.SettingsStore(this)
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         requestHighestRefreshRate()
+        com.leo.imessage.notify.Notifier.ensureChannel(this)
+        requestNotificationPermission()
         setContent {
             iMessageTheme(settings) {
                 AppRoot(backend)
@@ -34,6 +40,16 @@ class MainActivity : ComponentActivity() {
         // Some launchers/OEM power paths reset the mode when the window is
         // re-shown, so re-assert it rather than only asking once.
         requestHighestRefreshRate()
+    }
+
+    /** Android 13+ makes notifications an opt-in the user has to grant. */
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
+        }
     }
 
     /**
