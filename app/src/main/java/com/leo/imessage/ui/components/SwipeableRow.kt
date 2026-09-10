@@ -22,6 +22,15 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.leo.imessage.ui.theme.Motion
 import kotlinx.coroutines.launch
@@ -31,6 +40,8 @@ import kotlin.math.roundToInt
 data class SwipeAction(
     val label: String,
     val color: Color,
+    /** A single glyph drawn above the label, the way iOS does it. */
+    val glyph: String = "",
     val onClick: () -> Unit,
 )
 
@@ -66,54 +77,29 @@ fun SwipeableRow(
     val passedThreshold = remember { booleanArrayOf(false) }
 
     Box(modifier = modifier) {
-        // Leading rail, revealed by dragging the row to the right.
+        // matchParentSize, never fillMaxHeight: fillMaxHeight resolves against
+        // the incoming constraint, and inside anything loosely bounded - a
+        // preview card, a menu - that constraint is the whole screen. That's
+        // how the action rails turned into full-height rainbow columns.
+        // matchParentSize measures against the row itself, which is the only
+        // height that was ever meant.
         Row(
             modifier = Modifier
-                .align(Alignment.CenterStart)
-                .fillMaxHeight(),
+                .matchParentSize()
+                .wrapContentWidth(Alignment.Start),
         ) {
             leadingActions.forEach { action ->
-                Box(
-                    Modifier
-                        .width(actionWidth)
-                        .fillMaxHeight()
-                        .background(action.color),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = action.label,
-                        color = Color.White,
-                        textAlign = TextAlign.Center,
-                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                    )
-                }
+                SwipeActionCell(action, actionWidth)
             }
         }
 
-        // Trailing rail, revealed as the row slides away from it.
         Row(
             modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .fillMaxHeight(),
+                .matchParentSize()
+                .wrapContentWidth(Alignment.End),
         ) {
             trailingActions.forEach { action ->
-                Box(
-                    Modifier
-                        .width(actionWidth)
-                        .fillMaxHeight()
-                        .background(action.color)
-                        .pointerInput(action) {
-                            detectHorizontalDragGestures { _, _ -> }
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = action.label,
-                        color = Color.White,
-                        textAlign = TextAlign.Center,
-                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                    )
-                }
+                SwipeActionCell(action, actionWidth)
             }
         }
 
@@ -175,6 +161,50 @@ fun SwipeableRow(
                 }
         ) {
             content()
+        }
+    }
+}
+
+/**
+ * One action in a swipe rail.
+ *
+ * Glyph over label, centred, on a rounded card inset from the row edges -
+ * iOS stopped using edge-to-edge colour slabs years ago, and the inset is
+ * what stops a row of them reading as a stripe of raw paint.
+ */
+@Composable
+private fun SwipeActionCell(action: SwipeAction, width: androidx.compose.ui.unit.Dp) {
+    Box(
+        Modifier
+            .width(width)
+            .fillMaxHeight()
+            .padding(vertical = 4.dp, horizontal = 3.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(action.color)
+            .pointerInput(action) {
+                detectHorizontalDragGestures { _, _ -> }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            if (action.glyph.isNotEmpty()) {
+                Text(
+                    text = action.glyph,
+                    color = Color.White,
+                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                )
+                Spacer(Modifier.height(3.dp))
+            }
+            Text(
+                text = action.label,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                lineHeight = 13.sp,
+                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+            )
         }
     }
 }

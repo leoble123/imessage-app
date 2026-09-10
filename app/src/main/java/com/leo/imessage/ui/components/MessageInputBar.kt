@@ -85,6 +85,9 @@ fun MessageInputBar(
     /** True while the attachment tray is showing, so "+" reads as a close. */
     trayOpen: Boolean = false,
     onToggleTray: () -> Unit = {},
+    /** The message this reply is aimed at, shown as a banner above the field. */
+    replyingTo: com.leo.imessage.data.Message? = null,
+    onCancelReply: () -> Unit = {},
     /** Text kept for this conversation while you were elsewhere. */
     draft: String = "",
     draftKey: String = "",
@@ -145,6 +148,8 @@ fun MessageInputBar(
                 if (canSend) commit(effect)
             },
             onDismiss = { showEffects = false },
+            hazeState = hazeState,
+            darkBase = darkBase,
         )
     }
 
@@ -200,6 +205,48 @@ fun MessageInputBar(
                             onCancelEdit()
                         }
                         .padding(horizontal = 4.dp),
+                )
+            }
+        }
+        if (replyingTo != null) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 10.dp, top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .width(2.5.dp)
+                        .height(30.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(palette.accent)
+                )
+                Spacer(Modifier.width(9.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Replying to",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = palette.accent,
+                    )
+                    Text(
+                        replyingTo.text.ifBlank { "Attachment" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = palette.secondaryLabel,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    "\u00d7",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = palette.tertiaryLabel,
+                    modifier = Modifier
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { onCancelReply() }
+                        .padding(horizontal = 8.dp),
                 )
             }
         }
@@ -506,6 +553,8 @@ private fun MicIcon(color: Color, modifier: Modifier = Modifier) {
 fun EffectPicker(
     onPick: (MessageEffect) -> Unit,
     onDismiss: () -> Unit,
+    hazeState: HazeState? = null,
+    darkBase: Boolean? = null,
 ) {
     val palette = LocalPalette.current
     val options = listOf(
@@ -516,22 +565,33 @@ fun EffectPicker(
         MessageEffect.NONE to "Send without effect",
     )
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.45f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-            ) { onDismiss() },
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            Modifier
+    val progress = rememberPanelProgress(true) ?: return
+
+    Box(Modifier.fillMaxSize()) {
+        GlassScrim(
+            progress = { progress.value },
+            hazeState = hazeState,
+            darkBase = darkBase,
+            onDismiss = onDismiss,
+        )
+
+        GlassSheet(
+            shape = RoundedCornerShape(18.dp),
+            modifier = Modifier
+                .align(Alignment.Center)
                 .padding(horizontal = 32.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(palette.surfaceElevated),
+                .graphicsLayer {
+                    val p = progress.value
+                    alpha = p
+                    val sc = 0.9f + 0.1f * p
+                    scaleX = sc
+                    scaleY = sc
+                },
+            hazeState = hazeState,
+            darkBase = darkBase,
+            tintAlpha = 0.62f,
         ) {
+        Column {
             options.forEachIndexed { i, (effect, label) ->
                 Text(
                     text = label,
@@ -551,6 +611,7 @@ fun EffectPicker(
                     )
                 }
             }
+        }
         }
     }
 }

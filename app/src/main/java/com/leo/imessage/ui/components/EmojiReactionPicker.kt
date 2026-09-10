@@ -73,11 +73,9 @@ fun TapbackRail(
     var expanded by remember { mutableStateOf(false) }
 
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        GlassSheet(shape = CircleShape, tintAlpha = 0.6f) {
         Row(
-            Modifier
-                .clip(CircleShape)
-                .background(palette.surfaceElevated)
-                .padding(horizontal = 8.dp, vertical = 7.dp),
+            Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -100,19 +98,19 @@ fun TapbackRail(
                 )
             }
         }
+        }
 
         AnimatedVisibility(
             visible = expanded,
             enter = fadeIn(Motion.fade(240)),
             exit = fadeOut(Motion.fade(200)),
         ) {
-            Box(
-                Modifier
-                    .padding(top = 8.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(palette.surfaceElevated)
-                    .padding(8.dp)
+            GlassSheet(
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.padding(top = 8.dp),
+                tintAlpha = 0.6f,
             ) {
+            Box(Modifier.padding(8.dp)) {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(8),
                     modifier = Modifier.heightIn(max = 200.dp).fillMaxWidth(),
@@ -132,6 +130,7 @@ fun TapbackRail(
                         }
                     }
                 }
+            }
             }
         }
     }

@@ -188,6 +188,11 @@ fun ConversationScreen(
     // why it came up underneath the text field.
     var showTray by remember { mutableStateOf(false) }
     var trayRecording by remember { mutableStateOf(false) }
+    // Swiping a bubble arms a reply on the composer. It used to throw you
+    // into the full thread view, which is the wrong trade: replying is the
+    // common case and reading a thread is the rare one, so the gesture
+    // should do the common thing and leave the thread behind the link.
+    var replyingTo by remember { mutableStateOf<Message?>(null) }
     var staged by remember { mutableStateOf<List<com.leo.imessage.data.Attachment>>(emptyList()) }
     var stagedEffect by remember { mutableStateOf(com.leo.imessage.data.MessageEffect.NONE) }
     // Remembered so the tray can take the keyboard's exact place.
@@ -197,12 +202,13 @@ fun ConversationScreen(
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     androidx.activity.compose.BackHandler(
         enabled = threadRoot != null || menuFor != null || viewing != null ||
-            infoFor != null || showTray
+            infoFor != null || showTray || replyingTo != null
     ) {
         when {
             viewing != null -> viewing = null
             infoFor != null -> infoFor = null
             showTray -> showTray = false
+            replyingTo != null -> replyingTo = null
             menuFor != null -> menuFor = null
             else -> threadRoot = null
         }
@@ -332,7 +338,11 @@ fun ConversationScreen(
 
                 com.leo.imessage.ui.components.SwipeToReply(
                     outgoing = row.message.isFromMe,
-                    onReply = { threadRoot = threadFor(row.message) },
+                    onReply = {
+                        replyingTo = row.message
+                        composerFocus.requestFocus()
+                        keyboard?.show()
+                    },
                     modifier = Modifier.padding(
                         top = if (row.groupPosition == GroupPosition.SINGLE ||
                             row.groupPosition == GroupPosition.FIRST
@@ -376,7 +386,8 @@ fun ConversationScreen(
 
         MessageInputBar(
                 onSend = { text, effect, attachments ->
-                    onSend(text, effect, null, attachments)
+                    onSend(text, effect, replyingTo?.id, attachments)
+                    replyingTo = null
                     staged = emptyList()
                     stagedEffect = com.leo.imessage.data.MessageEffect.NONE
                     showTray = false
@@ -390,6 +401,8 @@ fun ConversationScreen(
                     editingMessage?.let { onEdit(it.id, newText) }
                     editingMessage = null
                 },
+                replyingTo = replyingTo,
+                onCancelReply = { replyingTo = null },
                 draft = draft,
                 draftKey = chat.id,
                 onDraftChange = onDraftChange,
@@ -423,7 +436,8 @@ fun ConversationScreen(
                     },
             )
 
-            if (showTray) {
+            val trayProgress = com.leo.imessage.ui.components.rememberPanelProgress(showTray)
+            if (trayProgress != null) {
                 com.leo.imessage.ui.components.AttachmentTray(
                     onAttach = { added -> staged = staged + added },
                     onPickEffect = { effect -> stagedEffect = effect },
@@ -433,6 +447,9 @@ fun ConversationScreen(
                     },
                     onShareLocation = { onShareLocation() },
                     startRecording = trayRecording,
+                    hazeState = hazeState,
+                    darkBase = if (background.brush != null) background.isDark else null,
+                    progress = { trayProgress.value },
                 )
             }
 
@@ -475,6 +492,8 @@ fun ConversationScreen(
                 message = message,
                 chat = chat,
                 onDismiss = { infoFor = null },
+                hazeState = hazeState,
+                darkBase = if (background.brush != null) background.isDark else null,
             )
         }
 
@@ -505,6 +524,8 @@ fun ConversationScreen(
         val focused = menuFor
         com.leo.imessage.ui.components.MessageContextMenu(
             visible = focused != null,
+            hazeState = hazeState,
+            darkBase = if (background.brush != null) background.isDark else null,
             onDismiss = { menuFor = null },
             onTapback = { kind ->
                 focused?.let { onTapback(it.message.id, kind) }
@@ -517,7 +538,9 @@ fun ConversationScreen(
             actions = buildList {
                 add(
                     com.leo.imessage.ui.components.MenuAction("Reply") {
-                        focused?.let { threadRoot = threadFor(it.message) }
+                        replyingTo = focused?.message
+                        composerFocus.requestFocus()
+                        keyboard?.show()
                     }
                 )
                 add(

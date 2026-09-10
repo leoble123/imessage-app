@@ -84,14 +84,16 @@ fun AttachmentTray(
     onShareLocation: () -> Unit = {},
     /** Opens straight into the recorder, for the composer's mic button. */
     startRecording: Boolean = false,
+    hazeState: dev.chrisbanes.haze.HazeState? = null,
+    darkBase: Boolean? = null,
+    /** 0..1, owned by the caller so the tray can animate *out* as well as in. */
+    progress: () -> Float = { 1f },
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val palette = LocalPalette.current
     val haptics = com.leo.imessage.ui.components.rememberHaptics()
 
-    val appear = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { appear.animateTo(1f, Motion.gentle()) }
 
     var recording by remember { mutableStateOf(false) }
     var askedForMic by remember { mutableStateOf(false) }
@@ -168,18 +170,19 @@ fun AttachmentTray(
                 onDismiss()
             },
             onDismiss = { showEffects = false },
+            hazeState = hazeState,
+            darkBase = darkBase,
         )
     }
 
-    Box(
-        modifier
-            .fillMaxSize()
-            .graphicsLayer { alpha = appear.value }
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-            ) { onDismiss() },
-    ) {
+    Box(modifier.fillMaxSize()) {
+        GlassScrim(
+            progress = { progress() * 0.9f },
+            hazeState = hazeState,
+            darkBase = darkBase,
+            onDismiss = onDismiss,
+        )
+
         Column(
             Modifier
                 .align(Alignment.BottomStart)
@@ -187,24 +190,31 @@ fun AttachmentTray(
                 .graphicsLayer {
                     // Grows out of the "+" it came from rather than sliding
                     // in from nowhere - the button is the anchor, so the menu
-                    // has to look like it unfolded from that corner.
-                    val a = appear.value
+                    // has to look like it unfolded from that corner. Driven by
+                    // the caller's spring, which means it also unfolds *back*
+                    // into the button on the way out instead of blinking off.
+                    val a = progress()
                     alpha = a
-                    val sc = 0.86f + 0.14f * a
+                    val sc = 0.82f + 0.18f * a
                     scaleX = sc
                     scaleY = sc
                     transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 1f)
-                    translationY = 26.dp.toPx() * (1f - a)
-                },
+                    translationY = 30.dp.toPx() * (1f - a)
+                }
+                // While a picker is up the menu steps aside instead of
+                // sitting underneath it competing for the same space.
+                .graphicsLayer { alpha = if (showEffects) 0f else 1f },
             horizontalAlignment = Alignment.Start,
         ) {
             if (recording) {
-                Column(
-                    Modifier
-                        .clip(RoundedCornerShape(26.dp))
-                        .background(palette.surfaceElevated)
-                        .width(280.dp),
+                GlassSheet(
+                    shape = RoundedCornerShape(26.dp),
+                    modifier = Modifier.width(280.dp),
+                    hazeState = hazeState,
+                    darkBase = darkBase,
+                    tintAlpha = 0.62f,
                 ) {
+                    Column {
                     AudioRecorderPanel(
                         onCancel = { recording = false },
                         onFinished = { attachment ->
@@ -213,41 +223,44 @@ fun AttachmentTray(
                             onDismiss()
                         },
                     )
+                    }
                 }
             } else {
-                Column(
-                    Modifier
-                        .clip(RoundedCornerShape(26.dp))
-                        .background(palette.surfaceElevated)
-                        .padding(vertical = 8.dp)
-                        .width(258.dp),
+                GlassSheet(
+                    shape = RoundedCornerShape(26.dp),
+                    modifier = Modifier.width(258.dp),
+                    hazeState = hazeState,
+                    darkBase = darkBase,
+                    tintAlpha = 0.6f,
                 ) {
-                    TrayRow("Camera", 0, { appear.value }) {
+                    Column(Modifier.padding(vertical = 8.dp)) {
+                    TrayRow("Camera", 0, { progress() }) {
                         val capture = MediaTools.newCaptureTarget(context, "jpg")
                         pendingCapture = capture
                         takePicture.launch(capture.second)
                     }
-                    TrayRow("Photos", 1, { appear.value }) {
+                    TrayRow("Photos", 1, { progress() }) {
                         pickMedia.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
                         )
                     }
-                    TrayRow("Gallery", 2, { appear.value }) {
+                    TrayRow("Gallery", 2, { progress() }) {
                         pickFromGallery.launch(openGalleryIntent())
                     }
-                    TrayRow("Audio", 3, { appear.value }) {
+                    TrayRow("Audio", 3, { progress() }) {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
                     }
-                    TrayRow("Location", 4, { appear.value }) {
+                    TrayRow("Location", 4, { progress() }) {
                         onShareLocation()
                         onDismiss()
                     }
-                    TrayRow("Files", 5, { appear.value }) {
+                    TrayRow("Files", 5, { progress() }) {
                         pickDocument.launch(arrayOf("*/*"))
                     }
-                    TrayRow("Effects", 6, { appear.value }) {
+                    TrayRow("Effects", 6, { progress() }) {
                         showEffects = true
+                    }
                     }
                 }
 
@@ -256,22 +269,25 @@ fun AttachmentTray(
                 // Close sits below the menu, where the "+" is - so the thing
                 // that opened it and the thing that shuts it are the same
                 // target under your thumb.
-                Box(
-                    Modifier
+                GlassSheet(
+                    shape = CircleShape,
+                    modifier = Modifier
                         .size(46.dp)
-                        .clip(CircleShape)
-                        .background(palette.surfaceElevated)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
                         ) { onDismiss() },
-                    contentAlignment = Alignment.Center,
+                    hazeState = hazeState,
+                    darkBase = darkBase,
+                    tintAlpha = 0.6f,
                 ) {
-                    Text(
-                        "\u2715",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = palette.secondaryLabel,
-                    )
+                    Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            "\u2715",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = palette.secondaryLabel,
+                        )
+                    }
                 }
             }
         }

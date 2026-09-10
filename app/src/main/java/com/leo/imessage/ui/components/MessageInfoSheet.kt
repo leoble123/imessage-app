@@ -55,6 +55,8 @@ fun MessageInfoSheet(
     message: Message,
     chat: Chat,
     onDismiss: () -> Unit,
+    hazeState: dev.chrisbanes.haze.HazeState? = null,
+    darkBase: Boolean? = null,
 ) {
     val palette = LocalPalette.current
     val appear = remember { Animatable(0f) }
@@ -71,23 +73,27 @@ fun MessageInfoSheet(
             .format(Date(message.timestamp))
     }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .graphicsLayer { alpha = appear.value }
-            .background(Color.Black.copy(alpha = 0.4f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-            ) { onDismiss() },
-        contentAlignment = Alignment.BottomCenter,
-    ) {
+    Box(Modifier.fillMaxSize()) {
+        GlassScrim(
+            progress = { appear.value },
+            hazeState = hazeState,
+            darkBase = darkBase,
+            onDismiss = onDismiss,
+        )
+
+        GlassSheet(
+            shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .graphicsLayer { translationY = 360.dp.toPx() * (1f - appear.value) },
+            hazeState = hazeState,
+            darkBase = darkBase,
+            tintAlpha = 0.68f,
+        ) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .graphicsLayer { translationY = 360.dp.toPx() * (1f - appear.value) }
-                .clip(RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .background(palette.surface)
                 .navigationBarsPadding()
                 .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 22.dp),
         ) {
@@ -166,6 +172,7 @@ fun MessageInfoSheet(
                     )
                 }
             }
+        }
         }
     }
 }

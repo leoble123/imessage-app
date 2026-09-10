@@ -293,7 +293,7 @@ private fun SettingEditor(
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.4f))
+            .background(Color.Black.copy(alpha = 0.34f))
             .clickable(
                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                 indication = null,
@@ -301,13 +301,12 @@ private fun SettingEditor(
             .imePadding(),
         contentAlignment = Alignment.Center,
     ) {
-        Column(
-            Modifier
-                .padding(horizontal = 30.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(palette.surfaceElevated)
-                .padding(20.dp),
+        com.leo.imessage.ui.components.GlassSheet(
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.padding(horizontal = 30.dp),
+            tintAlpha = 0.68f,
         ) {
+        Column(Modifier.padding(20.dp)) {
             Text(
                 field.title,
                 style = MaterialTheme.typography.titleMedium,
@@ -359,6 +358,7 @@ private fun SettingEditor(
                         .padding(8.dp),
                 )
             }
+        }
         }
     }
 }

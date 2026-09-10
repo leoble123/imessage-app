@@ -31,6 +31,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.leo.imessage.data.TapbackKind
 import com.leo.imessage.ui.theme.LocalPalette
@@ -53,89 +57,66 @@ fun MessageContextMenu(
     onTapback: (TapbackKind) -> Unit,
     onEmojiTapback: (String) -> Unit,
     actions: List<MenuAction>,
+    hazeState: dev.chrisbanes.haze.HazeState? = null,
+    darkBase: Boolean? = null,
     focusedContent: @Composable () -> Unit,
 ) {
     val palette = LocalPalette.current
+    val progress = rememberPanelProgress(visible) ?: return
 
-    // Both held as State and read inside draw-phase lambdas: unwrapping them
-    // here would recompose the whole menu - scrim, rail, bubble and every
-    // action row - on every frame of the spring.
-    val scrim = animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = Motion.standard(),
-        label = "ctxScrim",
-    )
-    val pop = animateFloatAsState(
-        targetValue = if (visible) 1f else 0.9f,
-        animationSpec = Motion.bouncy(),
-        label = "ctxPop",
-    )
+    Box(Modifier.fillMaxSize()) {
+        GlassScrim(
+            progress = { progress.value },
+            hazeState = hazeState,
+            darkBase = darkBase,
+            onDismiss = onDismiss,
+        )
 
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(Motion.fade(250)),
-        exit = fadeOut(Motion.fade(210)),
-    ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .drawBehind {
-                    drawRect(Color.Black.copy(alpha = 0.42f * scrim.value))
-                }
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                ) { onDismiss() },
-            contentAlignment = Alignment.Center,
+        Column(
+            horizontalAlignment = Alignment.End,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .padding(horizontal = 20.dp)
+                .graphicsLayer {
+                    val p = progress.value
+                    alpha = p
+                    // Lifts toward you as it arrives, and sinks back on the
+                    // way out - the menu never simply blinks off.
+                    val s = 0.9f + 0.1f * p
+                    scaleX = s
+                    scaleY = s
+                    translationY = 20.dp.toPx() * (1f - p)
+                },
         ) {
-            Column(
-                horizontalAlignment = Alignment.End,
-                modifier = Modifier
-                    .padding(horizontal = 20.dp)
-                    .graphicsLayer {
-                        val s = pop.value
-                        scaleX = s
-                        scaleY = s
-                    },
+            TapbackRail(
+                onPickClassic = onTapback,
+                onPickEmoji = onEmojiTapback,
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            focusedContent()
+
+            Spacer(Modifier.height(12.dp))
+
+            GlassSheet(
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.width(252.dp),
+                hazeState = hazeState,
+                darkBase = darkBase,
+                tintAlpha = 0.62f,
             ) {
-                TapbackRail(
-                    onPickClassic = onTapback,
-                    onPickEmoji = onEmojiTapback,
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                focusedContent()
-
-                Spacer(Modifier.height(12.dp))
-
-                Column(
-                    Modifier
-                        .width(250.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(palette.surfaceElevated),
-                ) {
+                Column {
                     actions.forEachIndexed { i, action ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    action.onClick()
-                                    onDismiss()
-                                }
-                                .padding(horizontal = 16.dp, vertical = 13.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = action.label,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (action.destructive) palette.destructive else palette.label,
-                            )
+                        MenuActionRow(action) {
+                            action.onClick()
+                            onDismiss()
                         }
                         if (i != actions.lastIndex) {
                             Box(
                                 Modifier
                                     .fillMaxWidth()
+                                    .padding(start = 16.dp)
                                     .height(0.5.dp)
                                     .background(palette.separator)
                             )
@@ -147,3 +128,33 @@ fun MessageContextMenu(
     }
 }
 
+@Composable
+private fun MenuActionRow(action: MenuAction, onClick: () -> Unit) {
+    val palette = LocalPalette.current
+    var pressed by remember { mutableStateOf(false) }
+    val scale = pressScale(pressed, pressedScale = 0.97f)
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .scaleFrom(scale)
+            .pointerInput(action.label) {
+                detectTapGestures(
+                    onPress = {
+                        pressed = true
+                        tryAwaitRelease()
+                        pressed = false
+                    },
+                    onTap = { onClick() },
+                )
+            }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = action.label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (action.destructive) palette.destructive else palette.label,
+        )
+    }
+}

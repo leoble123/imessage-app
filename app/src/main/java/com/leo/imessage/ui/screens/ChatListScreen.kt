@@ -335,9 +335,10 @@ fun ChatListScreen(
                         destructive = true,
                     ) { onDeleteChat(chat.id) },
                 ),
+                hazeState = hazeState,
                 preview = {
                     Box(Modifier.width(320.dp)) {
-                        ChatRow(chat = chat, onOpen = {})
+                        ChatRow(chat = chat, onOpen = {}, swipeEnabled = false)
                     }
                 },
             )
@@ -406,6 +407,8 @@ private fun ChatRow(
     onMarkUnread: (String) -> Unit = {},
     onLongPress: () -> Unit = {},
     draft: String? = null,
+    /** Off inside a preview card, where rails have nothing to slide out of. */
+    swipeEnabled: Boolean = true,
 ) {
     val palette = LocalPalette.current
     val rowHaptics = com.leo.imessage.ui.components.rememberHaptics()
@@ -421,18 +424,28 @@ private fun ChatRow(
     )
 
     SwipeableRow(
-        leadingActions = listOf(
+        leadingActions = if (!swipeEnabled) emptyList() else listOf(
             SwipeAction(
-                if (chat.isPinned) "Unpin" else "Pin",
-                AppleColors.Orange,
+                label = if (chat.isPinned) "Unpin" else "Pin",
+                color = AppleColors.Orange,
+                glyph = "\u2691",
             ) { onSetPinned(chat.id, !chat.isPinned) },
         ),
-        trailingActions = listOf(
-            SwipeAction("Delete", AppleColors.Red) { onDeleteChat(chat.id) },
-            SwipeAction("Mark\nUnread", AppleColors.Blue) { onMarkUnread(chat.id) },
+        trailingActions = if (!swipeEnabled) emptyList() else listOf(
             SwipeAction(
-                if (chat.isMuted) "Unhide\nAlerts" else "Hide\nAlerts",
-                AppleColors.Indigo,
+                label = "Delete",
+                color = AppleColors.Red,
+                glyph = "\uD83D\uDDD1",
+            ) { onDeleteChat(chat.id) },
+            SwipeAction(
+                label = "Unread",
+                color = AppleColors.Blue,
+                glyph = "\u25CF",
+            ) { onMarkUnread(chat.id) },
+            SwipeAction(
+                label = if (chat.isMuted) "Alerts" else "Mute",
+                color = AppleColors.Indigo,
+                glyph = if (chat.isMuted) "\uD83D\uDD14" else "\uD83D\uDD15",
             ) { onSetMuted(chat.id, !chat.isMuted) },
         ),
     ) {
