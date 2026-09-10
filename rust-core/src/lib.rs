@@ -31,7 +31,7 @@ use rustpush::{
     authenticate_apple, login_apple_delegates, register, APSConnection,
     APSConnectionResource, ConversationData, IDSNGMIdentity, IDSUser, IMClient,
     LoginDelegate, Message, MessageInst, MessageType, NormalMessage, OSConfig, ReactMessage,
-    ReactMessageType, Reaction, RelayConfig, UnsendMessage, EditMessage, MessageParts,
+    ReactMessageType, Reaction, RelayConfig, UnsendMessage, EditMessage, MessageParts, PushError,
     MessagePart, IndexedMessagePart, MADRID_SERVICE,
 };
 use tokio::sync::Mutex;
@@ -143,7 +143,7 @@ impl ImessageCore {
         // surfacing later as an opaque registration failure.
         let version = RelayConfig::get_versions(&host, &code, &token)
             .await
-            .map_err(|e| CoreError::new(format!("couldn't reach the relay: {e}")))?;
+            .map_err(relay_error)?;
 
         let saved: Option<SavedState> = read_plist(&self.paths.registration());
 
@@ -721,6 +721,32 @@ fn parse_reaction(name: &str) -> Result<Reaction, CoreError> {
 
 /// Apple's SRP exchange is defined over SHA-256 of the password, so this is
 /// what gets sent - the plaintext password never leaves `login`.
+/// Says which of the several very different relay failures actually happened.
+///
+/// These were previously all flattened into "couldn't reach the relay", which
+/// is only true for one of them - a wrong pairing code and a stopped server
+/// produced identical text, so the message actively misled instead of helping.
+fn relay_error(e: PushError) -> CoreError {
+    CoreError::new(match &e {
+        // The relay answered. It just didn't like the request - almost always
+        // a pairing code that doesn't match the one the server was started with.
+        PushError::RelayError(401, _) | PushError::RelayError(403, _) =>
+            "The relay is running, but rejected that pairing code. It has to match \
+             the RELAY_CODE the server was started with."
+                .to_string(),
+        PushError::RelayError(status, body) => {
+            let detail = body.chars().take(200).collect::<String>();
+            format!("The relay answered with HTTP {status}. {detail}")
+        }
+        // Its own 404 for this endpoint - reachable, but not this API.
+        PushError::DeviceNotFound =>
+            "Reached the server, but it has no registration relay at that address."
+                .to_string(),
+        // Anything else really is a connection problem.
+        other => format!("Couldn't reach the relay: {other}"),
+    })
+}
+
 fn hash_password(password: &str) -> Vec<u8> {
     use sha2::{Digest, Sha256};
     Sha256::digest(password.as_bytes()).to_vec()
@@ -736,6 +762,6 @@ pub async fn probe_relay(
 ) -> Result<String, CoreError> {
     let versions = RelayConfig::get_versions(&host, &code, &token)
         .await
-        .map_err(|e| CoreError::new(format!("couldn't reach the relay: {e}")))?;
+        .map_err(relay_error)?;
     serde_json::to_string(&versions).map_err(CoreError::new)
 }

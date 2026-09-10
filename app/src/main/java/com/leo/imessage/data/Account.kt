@@ -246,14 +246,16 @@ class AccountManager(context: Context) {
 private fun CoreException.friendlyMessage(): String {
     val raw = message ?: return "Something went wrong."
     return when {
-        raw.contains("couldn't reach the relay", ignoreCase = true) ->
-            "Couldn't reach the relay. Check the address and that it's running."
-        raw.contains("401") || raw.contains("Unauthorized", ignoreCase = true) ->
-            "The relay rejected that pairing code."
-        raw.contains("-20101") || raw.contains("password", ignoreCase = true) ->
-            "Apple didn't accept that Apple ID or password."
-        raw.contains("-21669") ->
-            "Too many attempts. Wait a few minutes before trying again."
+        // Apple's own numbered failures. These are checked first and matched
+        // narrowly - an earlier version tested for the word "password"
+        // anywhere in the text, which swallowed unrelated errors that merely
+        // mentioned it.
+        raw.contains("-20101") -> "Apple didn't accept that Apple ID or password."
+        raw.contains("-21669") -> "Too many attempts. Wait a few minutes and try again."
+        raw.contains("-22406") -> "Apple wants you to finish signing in at appleid.apple.com first."
+        // The relay messages are already written for a person by the Rust
+        // side, which is the only place that can tell the failures apart, so
+        // they pass through untouched rather than being flattened here.
         else -> raw
     }
 }
