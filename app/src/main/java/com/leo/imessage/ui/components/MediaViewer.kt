@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,6 +33,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -94,7 +96,7 @@ fun MediaViewer(
                 val pull = (abs(dismissDrag.value) / 700f).coerceIn(0f, 1f)
                 alpha = appear.value * (1f - pull * 0.55f)
             }
-            .background(Color.Black.copy(alpha = 0.97f))
+            .background(Color.Black)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -201,36 +203,45 @@ fun MediaViewer(
                 }
         )
 
+        // Chrome floats as dark glass discs rather than words pinned to the
+        // corners: over a photo, plain text has no guaranteed contrast, and
+        // whatever colour you pick is wrong against half the pictures
+        // someone will open. A disc brings its own background with it.
         Row(
             Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
+                .align(Alignment.TopStart)
                 .statusBarsPadding()
-                .padding(horizontal = 18.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(start = 14.dp, top = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ViewerAction("Done") { onDismiss() }
-            Text(
-                text = attachment.fileName,
-                style = MaterialTheme.typography.labelLarge,
-                color = Color.White.copy(alpha = 0.7f),
-            )
+            ViewerButton(glyph = "\u2715", label = "Close") { onDismiss() }
         }
+
+        Text(
+            text = attachment.fileName,
+            style = MaterialTheme.typography.labelLarge,
+            color = Color.White.copy(alpha = 0.62f),
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 22.dp, start = 80.dp, end = 80.dp),
+        )
 
         Row(
             Modifier
                 .align(Alignment.BottomCenter)
-                .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(bottom = 26.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            ViewerAction("Share") {
+            ViewerButton(glyph = "\u2191", label = "Share") {
                 uri?.let { MediaTools.share(context, it, attachment.mimeType) }
             }
-            ViewerAction("Save") {
-                val target = uri ?: return@ViewerAction
+            ViewerButton(glyph = "\u2913", label = "Save") {
+                val target = uri ?: return@ViewerButton
                 scope.launch {
                     val ok = MediaTools.saveToGallery(
                         context = context,
@@ -238,7 +249,7 @@ fun MediaViewer(
                         mimeType = attachment.mimeType,
                         name = attachment.fileName,
                     )
-                    savedNotice = if (ok) "Saved" else "Couldn't save"
+                    savedNotice = if (ok) "Saved to Photos" else "Couldn't save"
                 }
             }
         }
@@ -251,25 +262,25 @@ fun MediaViewer(
                 modifier = Modifier
                     .align(Alignment.Center)
                     .background(
-                        Color.Black.copy(alpha = 0.65f),
-                        androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                        Color.White.copy(alpha = 0.16f),
+                        androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                     )
-                    .padding(horizontal = 18.dp, vertical = 12.dp),
+                    .padding(horizontal = 20.dp, vertical = 13.dp),
             )
         }
     }
 }
 
 @Composable
-private fun ViewerAction(label: String, onClick: () -> Unit) {
+private fun ViewerButton(glyph: String, label: String, onClick: () -> Unit) {
     var pressed by remember { mutableStateOf(false) }
-    val scale = pressScale(pressed, pressedScale = 0.9f)
-    Text(
-        text = label,
-        style = MaterialTheme.typography.titleSmall,
-        color = Color(0xFF3B9BFF),
-        modifier = Modifier
+    val scale = pressScale(pressed, pressedScale = 0.88f)
+    Box(
+        Modifier
+            .size(46.dp)
             .scaleFrom(scale)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(Color.White.copy(alpha = 0.14f))
             .pointerInput(label) {
                 detectTapGestures(
                     onPress = {
@@ -279,9 +290,15 @@ private fun ViewerAction(label: String, onClick: () -> Unit) {
                     },
                     onTap = { onClick() },
                 )
-            }
-            .padding(6.dp),
-    )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = glyph,
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White,
+        )
+    }
 }
 
 @Composable

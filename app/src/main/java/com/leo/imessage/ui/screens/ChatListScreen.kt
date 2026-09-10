@@ -70,6 +70,7 @@ fun ChatListScreen(
     onDeleteChat: (String) -> Unit = {},
     onMarkUnread: (String) -> Unit = {},
     onSetArchived: (String, Boolean) -> Unit = { _, _ -> },
+    drafts: Map<String, String> = emptyMap(),
 ) {
     val palette = LocalPalette.current
     val listState = rememberLazyListState()
@@ -185,6 +186,7 @@ fun ChatListScreen(
                     onDeleteChat = onDeleteChat,
                     onMarkUnread = onMarkUnread,
                     onLongPress = { actionsFor = chat },
+                    draft = drafts[chat.id],
                 )
             }
         }
@@ -403,6 +405,7 @@ private fun ChatRow(
     onDeleteChat: (String) -> Unit = {},
     onMarkUnread: (String) -> Unit = {},
     onLongPress: () -> Unit = {},
+    draft: String? = null,
 ) {
     val palette = LocalPalette.current
     val rowHaptics = com.leo.imessage.ui.components.rememberHaptics()
@@ -527,10 +530,14 @@ private fun ChatRow(
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = if (chat.isTyping) "typing…"
-                        else chat.lastMessage?.previewText().orEmpty(),
+                    text = when {
+                        chat.isTyping -> "typing…"
+                        !draft.isNullOrBlank() -> "Draft: $draft"
+                        else -> chat.lastMessage?.previewText().orEmpty()
+                    },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = palette.secondaryLabel,
+                    color = if (!draft.isNullOrBlank() && !chat.isTyping) palette.destructive
+                        else palette.secondaryLabel,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )

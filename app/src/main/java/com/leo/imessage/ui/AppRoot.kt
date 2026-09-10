@@ -56,6 +56,9 @@ fun AppRoot(backend: MessagingBackend) {
     var detailsViewing by remember { mutableStateOf<com.leo.imessage.data.Attachment?>(null) }
     // Per-chat background choice, kept for the session.
     val backgrounds = remember { mutableStateMapOf<String, String>() }
+    // Unsent text per conversation, so leaving a thread mid-sentence and
+    // coming back finds the sentence still there.
+    val drafts = remember { mutableStateMapOf<String, String>() }
     val openChat = chats.firstOrNull { it.id == openChatId }
 
     val scope = rememberCoroutineScope()
@@ -95,6 +98,7 @@ fun AppRoot(backend: MessagingBackend) {
         ) {
             ChatListScreen(
                 chats = chats,
+                drafts = drafts,
                 onOpenChat = { chat -> openChatId = chat.id },
                 onOpenSettings = { showSettings = true },
                 onCompose = { showCompose = true },
@@ -158,6 +162,15 @@ fun AppRoot(backend: MessagingBackend) {
                             scope.launch { backend.unsend(messageId) }
                         },
                         onMarkRead = { scope.launch { backend.markRead(chat.id) } },
+                        onShareLocation = {
+                            scope.launch {
+                                val link = com.leo.imessage.media.currentLocationLink(context)
+                                backend.send(
+                                    chatId = chat.id,
+                                    text = link ?: "Couldn't get a location fix",
+                                )
+                            }
+                        },
                         onOpenDetails = { showDetails = true },
                         onDelete = { messageId -> scope.launch { backend.delete(messageId) } },
                         onFaceTime = {
@@ -185,6 +198,11 @@ fun AppRoot(backend: MessagingBackend) {
                             scope.launch { backend.edit(messageId, newText) }
                         },
                         backgroundId = backgrounds[chat.id] ?: "none",
+                        draft = drafts[chat.id].orEmpty(),
+                        onDraftChange = { text ->
+                            if (text.isBlank()) drafts.remove(chat.id)
+                            else drafts[chat.id] = text
+                        },
                     )
                 }
             }

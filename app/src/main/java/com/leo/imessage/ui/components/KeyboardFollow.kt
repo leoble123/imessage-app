@@ -1,17 +1,20 @@
 package com.leo.imessage.ui.components
 
-import android.os.Build
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.imeNestedScroll
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.unit.dp
 
 /**
  * Keeps the transcript pinned to the keyboard as it opens and closes.
@@ -44,22 +47,45 @@ fun ScrollWithKeyboard(listState: LazyListState) {
 }
 
 /**
- * Drag the transcript to pull the keyboard in and push it away.
+ * Dragging the transcript downward puts the keyboard away.
  *
- * iOS lets you flick the conversation down to dismiss the keyboard and drag
- * back up to bring it in, with the keyboard tracking your finger the whole
- * way rather than snapping at the end of the gesture. Android exposes the
- * same thing through the IME animation-control API, which
- * [imeNestedScroll] drives - the scroll container hands unconsumed drag to
- * the IME instead of over-scrolling into nothing.
+ * The obvious implementation is [imeNestedScroll], which hands leftover
+ * scroll to the IME in both directions - and that is exactly wrong here: the
+ * moment you reach the bottom of a thread, the overscroll it can no longer
+ * absorb goes straight into summoning a keyboard nobody asked for. Scrolling
+ * to the end of a conversation is the most ordinary thing you can do in a
+ * messaging app and it should not open anything.
  *
- * Pairs with [ScrollWithKeyboard]: that keeps content pinned as the inset
- * changes, this decides when the inset changes. Together the transcript
- * holds still on screen while the keyboard slides under your finger.
- *
- * Requires the animation-control API (API 30+); below that the modifier is
- * simply not applied and the keyboard keeps its default behaviour.
+ * So this is one-way on purpose. Only a deliberate downward drag dismisses;
+ * the keyboard is opened by tapping the field or flicking up on the composer,
+ * both of which are things you have to mean.
  */
-@OptIn(ExperimentalLayoutApi::class)
-fun Modifier.dragToToggleKeyboard(): Modifier =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) this.imeNestedScroll() else this
+@Composable
+fun rememberKeyboardDismissConnection(): NestedScrollConnection {
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    val density = LocalDensity.current
+
+    return remember(keyboard, focusManager, density) {
+        val thresholdPx = with(density) { 18.dp.toPx() }
+        object : NestedScrollConnection {
+            private var travel = 0f
+
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source != NestedScrollSource.UserInput) return Offset.Zero
+                // Downward finger movement is positive y here.
+                if (available.y > 0) {
+                    travel += available.y
+                    if (travel > thresholdPx) {
+                        travel = 0f
+                        keyboard?.hide()
+                        focusManager.clearFocus()
+                    }
+                } else {
+                    travel = 0f
+                }
+                return Offset.Zero
+            }
+        }
+    }
+}

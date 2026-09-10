@@ -80,8 +80,10 @@ fun AttachmentTray(
     onAttach: (List<Attachment>) -> Unit,
     onPickEffect: (MessageEffect) -> Unit,
     onDismiss: () -> Unit,
-    /** Height the keyboard last occupied, so the panel takes its place. */
-    panelHeight: androidx.compose.ui.unit.Dp = 300.dp,
+    /** Attaches the user's current position as a shareable map link. */
+    onShareLocation: () -> Unit = {},
+    /** Opens straight into the recorder, for the composer's mic button. */
+    startRecording: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -92,9 +94,11 @@ fun AttachmentTray(
     LaunchedEffect(Unit) { appear.animateTo(1f, Motion.gentle()) }
 
     var recording by remember { mutableStateOf(false) }
+    var askedForMic by remember { mutableStateOf(false) }
     var showEffects by remember { mutableStateOf(false) }
 
     BackHandler { onDismiss() }
+
 
     fun deliver(uris: List<Uri>) {
         if (uris.isEmpty()) return
@@ -149,6 +153,13 @@ fun AttachmentTray(
         ActivityResultContracts.RequestPermission()
     ) { granted -> recording = granted }
 
+    LaunchedEffect(startRecording) {
+        if (startRecording && !askedForMic) {
+            askedForMic = true
+            requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
     if (showEffects) {
         EffectPicker(
             onPick = { effect ->
@@ -160,77 +171,177 @@ fun AttachmentTray(
         )
     }
 
-    Column(
+    Box(
         modifier
-            .fillMaxWidth()
-            .height(panelHeight)
-            .graphicsLayer {
-                translationY = panelHeight.toPx() * (1f - appear.value)
-                alpha = 0.4f + 0.6f * appear.value
-            }
-            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-            .background(palette.surface)
-            // A flick down anywhere on the panel puts it away, the same
-            // gesture that dismisses the keyboard it replaced.
-            .verticalFlick(onUp = {}, onDown = onDismiss)
-            .padding(top = 10.dp, bottom = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .fillMaxSize()
+            .graphicsLayer { alpha = appear.value }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) { onDismiss() },
     ) {
-        run {
-            Box(
-                Modifier
-                    .width(38.dp)
-                    .height(5.dp)
-                    .clip(CircleShape)
-                    .background(palette.tertiaryLabel)
-            )
-
+        Column(
+            Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 14.dp, bottom = 14.dp, end = 60.dp)
+                .graphicsLayer {
+                    // Grows out of the "+" it came from rather than sliding
+                    // in from nowhere - the button is the anchor, so the menu
+                    // has to look like it unfolded from that corner.
+                    val a = appear.value
+                    alpha = a
+                    val sc = 0.86f + 0.14f * a
+                    scaleX = sc
+                    scaleY = sc
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 1f)
+                    translationY = 26.dp.toPx() * (1f - a)
+                },
+            horizontalAlignment = Alignment.Start,
+        ) {
             if (recording) {
-                AudioRecorderPanel(
-                    onCancel = { recording = false },
-                    onFinished = { attachment ->
-                        recording = false
-                        onAttach(listOf(attachment))
-                        onDismiss()
-                    },
-                )
-            } else {
-                androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                    columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                Column(
+                    Modifier
+                        .clip(RoundedCornerShape(26.dp))
+                        .background(palette.surfaceElevated)
+                        .width(280.dp),
                 ) {
-                    item { TrayTile("Photos", 0, { appear.value }) {
-                        pickMedia.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
-                        )
-                    } }
-                    item { TrayTile("Gallery", 1, { appear.value }) {
-                        pickFromGallery.launch(openGalleryIntent())
-                    } }
-                    item { TrayTile("Camera", 2, { appear.value }) {
+                    AudioRecorderPanel(
+                        onCancel = { recording = false },
+                        onFinished = { attachment ->
+                            recording = false
+                            onAttach(listOf(attachment))
+                            onDismiss()
+                        },
+                    )
+                }
+            } else {
+                Column(
+                    Modifier
+                        .clip(RoundedCornerShape(26.dp))
+                        .background(palette.surfaceElevated)
+                        .padding(vertical = 8.dp)
+                        .width(258.dp),
+                ) {
+                    TrayRow("Camera", 0, { appear.value }) {
                         val capture = MediaTools.newCaptureTarget(context, "jpg")
                         pendingCapture = capture
                         takePicture.launch(capture.second)
-                    } }
-                    item { TrayTile("Files", 3, { appear.value }) {
-                        pickDocument.launch(arrayOf("*/*"))
-                    } }
-                    item { TrayTile("Audio", 4, { appear.value }) {
+                    }
+                    TrayRow("Photos", 1, { appear.value }) {
+                        pickMedia.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+                        )
+                    }
+                    TrayRow("Gallery", 2, { appear.value }) {
+                        pickFromGallery.launch(openGalleryIntent())
+                    }
+                    TrayRow("Audio", 3, { appear.value }) {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
-                    } }
-                    item { TrayTile("Effects", 5, { appear.value }) {
+                    }
+                    TrayRow("Location", 4, { appear.value }) {
+                        onShareLocation()
+                        onDismiss()
+                    }
+                    TrayRow("Files", 5, { appear.value }) {
+                        pickDocument.launch(arrayOf("*/*"))
+                    }
+                    TrayRow("Effects", 6, { appear.value }) {
                         showEffects = true
-                    } }
+                    }
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                // Close sits below the menu, where the "+" is - so the thing
+                // that opened it and the thing that shuts it are the same
+                // target under your thumb.
+                Box(
+                    Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(palette.surfaceElevated)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { onDismiss() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "\u2715",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = palette.secondaryLabel,
+                    )
                 }
             }
         }
     }
+}
+
+/** One row of the attachment menu: a coloured disc and a label. */
+@Composable
+private fun TrayRow(
+    label: String,
+    index: Int,
+    appear: () -> Float,
+    onClick: () -> Unit,
+) {
+    val palette = LocalPalette.current
+    var pressed by remember { mutableStateOf(false) }
+    val scale = pressScale(pressed, pressedScale = 0.96f)
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                // Rows arrive bottom-up, each trailing the one below it, so
+                // the menu unrolls from the button instead of appearing whole.
+                val stagger = (index * 0.05f)
+                val a = ((appear() - stagger) / (1f - stagger)).coerceIn(0f, 1f)
+                alpha = a
+                translationX = -14.dp.toPx() * (1f - a)
+            }
+            .scaleFrom(scale)
+            .pointerInput(label) {
+                detectTapGestures(
+                    onPress = {
+                        pressed = true
+                        tryAwaitRelease()
+                        pressed = false
+                    },
+                    onTap = { onClick() },
+                )
+            }
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(trayTint(label)),
+            contentAlignment = Alignment.Center,
+        ) {
+            TrayGlyph(label, Color.White)
+        }
+        Spacer(Modifier.width(14.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = palette.label,
+        )
+    }
+}
+
+/** Each row's disc colour, matching how iOS colour-codes its own menu. */
+private fun trayTint(label: String): Color = when (label) {
+    "Camera" -> Color(0xFF6E6E73)
+    "Photos" -> Color(0xFF2FA8FF)
+    "Gallery" -> Color(0xFF9B5CF6)
+    "Audio" -> Color(0xFFFF5A4E)
+    "Location" -> Color(0xFF34C759)
+    "Files" -> Color(0xFFFFB300)
+    else -> Color(0xFF5E5CE6)
 }
 
 /**
@@ -252,60 +363,6 @@ private fun openGalleryIntent(): android.content.Intent =
         )
         putExtra(android.content.Intent.EXTRA_ALLOW_MULTIPLE, true)
     }
-
-@Composable
-private fun TrayTile(
-    label: String,
-    index: Int,
-    appear: () -> Float,
-    onClick: () -> Unit,
-) {
-    val palette = LocalPalette.current
-    var pressed by remember { mutableStateOf(false) }
-    val scale = pressScale(pressed, pressedScale = 0.88f)
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(84.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(LocalPalette.current.fieldBackground)
-            .graphicsLayer {
-                // Staggered: each tile trails the one before it, so the row
-                // unfurls rather than arriving as a single block.
-                val delayed = ((appear() - index * 0.06f) / (1f - index * 0.06f))
-                    .coerceIn(0f, 1f)
-                alpha = delayed
-                translationY = 22.dp.toPx() * (1f - delayed)
-            }
-            .pointerInput(label) {
-                detectTapGestures(
-                    onPress = {
-                        pressed = true
-                        tryAwaitRelease()
-                        pressed = false
-                    },
-                    onTap = { onClick() },
-                )
-            },
-    ) {
-        Box(
-            Modifier.scaleFrom(scale),
-            contentAlignment = Alignment.Center,
-        ) {
-            TrayGlyph(label, palette.accent)
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = palette.secondaryLabel,
-            textAlign = TextAlign.Center,
-        )
-    }
-}
 
 /** Hand-drawn glyphs, so the tray doesn't pull in an icon font. */
 @Composable
@@ -397,6 +454,16 @@ private fun TrayGlyph(label: String, color: Color) {
                     size = androidx.compose.ui.geometry.Size(w * 0.64f, h * 0.44f),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = StrokeCap.Round),
                 )
+            }
+            "Location" -> {
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(w * 0.5f, h * 0.94f)
+                    cubicTo(w * 0.08f, h * 0.52f, w * 0.12f, h * 0.06f, w * 0.5f, h * 0.06f)
+                    cubicTo(w * 0.88f, h * 0.06f, w * 0.92f, h * 0.52f, w * 0.5f, h * 0.94f)
+                    close()
+                }
+                drawPath(path, color, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+                drawCircle(color, radius = w * 0.12f, center = Offset(w * 0.5f, h * 0.38f))
             }
             else -> {
                 // Effects: a small burst.

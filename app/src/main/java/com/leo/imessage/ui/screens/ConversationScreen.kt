@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.layout.ime
@@ -61,7 +62,6 @@ import com.leo.imessage.data.Message
 import com.leo.imessage.data.MessageRow
 import com.leo.imessage.ui.components.Avatar
 import com.leo.imessage.ui.components.GlassSurface
-import com.leo.imessage.ui.components.dragToToggleKeyboard
 import com.leo.imessage.ui.components.glassSource
 import dev.chrisbanes.haze.HazeState
 import com.leo.imessage.ui.components.GroupAvatar
@@ -155,6 +155,9 @@ fun ConversationScreen(
     onEdit: (String, String) -> Unit = { _, _ -> },
     onDelete: (String) -> Unit = {},
     onMarkRead: () -> Unit = {},
+    onShareLocation: () -> Unit = {},
+    draft: String = "",
+    onDraftChange: (String) -> Unit = {},
     onFaceTime: () -> Unit = {},
     backgroundId: String = "none",
 ) {
@@ -184,6 +187,7 @@ fun ConversationScreen(
     // from inside the bar it was clipped by the bar's own bounds, which is
     // why it came up underneath the text field.
     var showTray by remember { mutableStateOf(false) }
+    var trayRecording by remember { mutableStateOf(false) }
     var staged by remember { mutableStateOf<List<com.leo.imessage.data.Attachment>>(emptyList()) }
     var stagedEffect by remember { mutableStateOf(com.leo.imessage.data.MessageEffect.NONE) }
     // Remembered so the tray can take the keyboard's exact place.
@@ -251,6 +255,8 @@ fun ConversationScreen(
     // Nothing may ever end up behind the keyboard: the transcript rides up
     // with it frame for frame instead of being clipped by it.
     com.leo.imessage.ui.components.ScrollWithKeyboard(listState)
+    val dismissKeyboardOnDrag =
+        com.leo.imessage.ui.components.rememberKeyboardDismissConnection()
 
     val background = com.leo.imessage.ui.theme.backgroundById(backgroundId)
     // Both shells float over the transcript now, so the list has to reserve
@@ -281,7 +287,7 @@ fun ConversationScreen(
                     // The wallpaper behind is a sibling and keeps the full
                     // screen, so nothing about the background moves.
                     .imePadding()
-                .dragToToggleKeyboard()
+                    .nestedScroll(dismissKeyboardOnDrag)
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures(
                         onDragEnd = {
@@ -300,9 +306,7 @@ fun ConversationScreen(
                 },
             contentPadding = PaddingValues(
                 top = navBarHeight + 6.dp,
-                // The tray takes the keyboard's space, so it owes the
-                // transcript the same room the keyboard would have.
-                bottom = composerHeight + (if (showTray) keyboardHeight else 0.dp) + 8.dp,
+                bottom = composerHeight + 8.dp,
                 start = 12.dp,
                 end = 12.dp,
             ),
@@ -386,14 +390,24 @@ fun ConversationScreen(
                     editingMessage?.let { onEdit(it.id, newText) }
                     editingMessage = null
                 },
+                draft = draft,
+                draftKey = chat.id,
+                onDraftChange = onDraftChange,
                 trayOpen = showTray,
                 onToggleTray = {
                     if (showTray) {
                         showTray = false
+                        trayRecording = false
                     } else {
                         keyboard?.hide()
+                        trayRecording = false
                         showTray = true
                     }
+                },
+                onRecordAudio = {
+                    keyboard?.hide()
+                    trayRecording = true
+                    showTray = true
                 },
                 staged = staged,
                 onRemoveStaged = { att -> staged = staged.filterNot { it.id == att.id } },
@@ -403,25 +417,22 @@ fun ConversationScreen(
                 },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = if (showTray) keyboardHeight else 0.dp)
                     .imePadding()
                     .onSizeChanged {
                         composerHeight = with(density) { it.height.toDp() }
                     },
             )
 
-            // Sits where the keyboard was, under the composer.
-            androidx.compose.animation.AnimatedVisibility(
-                visible = showTray,
-                enter = androidx.compose.animation.fadeIn(Motion.fade(120)),
-                exit = androidx.compose.animation.fadeOut(Motion.fade(160)),
-                modifier = Modifier.align(Alignment.BottomCenter),
-            ) {
+            if (showTray) {
                 com.leo.imessage.ui.components.AttachmentTray(
                     onAttach = { added -> staged = staged + added },
                     onPickEffect = { effect -> stagedEffect = effect },
-                    onDismiss = { showTray = false },
-                    panelHeight = keyboardHeight,
+                    onDismiss = {
+                        showTray = false
+                        trayRecording = false
+                    },
+                    onShareLocation = { onShareLocation() },
+                    startRecording = trayRecording,
                 )
             }
 

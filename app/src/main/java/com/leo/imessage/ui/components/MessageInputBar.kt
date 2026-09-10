@@ -85,6 +85,12 @@ fun MessageInputBar(
     /** True while the attachment tray is showing, so "+" reads as a close. */
     trayOpen: Boolean = false,
     onToggleTray: () -> Unit = {},
+    /** Text kept for this conversation while you were elsewhere. */
+    draft: String = "",
+    draftKey: String = "",
+    onDraftChange: (String) -> Unit = {},
+    /** Tapping the mic hands off to the recorder rather than sending. */
+    onRecordAudio: () -> Unit = {},
     /** Attachments staged by the tray, hoisted so the tray can outlive this. */
     staged: List<com.leo.imessage.data.Attachment> = emptyList(),
     onRemoveStaged: (com.leo.imessage.data.Attachment) -> Unit = {},
@@ -94,7 +100,9 @@ fun MessageInputBar(
     val palette = LocalPalette.current
     val settings = com.leo.imessage.ui.theme.LocalSettings.current
     val haptics = com.leo.imessage.ui.components.rememberHaptics()
-    var text by remember { mutableStateOf("") }
+    // Keyed on the conversation, so switching threads loads that thread's
+    // draft rather than carrying the last one across.
+    var text by remember(draftKey) { mutableStateOf(draft) }
     val ownFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val focus = focusRequester ?: ownFocus
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
@@ -127,6 +135,7 @@ fun MessageInputBar(
         if (!canSend) return
         onSend(text.trim(), effect, pending)
         text = ""
+        onDraftChange("")
     }
 
     if (showEffects) {
@@ -264,7 +273,10 @@ fun MessageInputBar(
                     }
                     BasicTextField(
                         value = text,
-                        onValueChange = { text = it },
+                        onValueChange = {
+                            text = it
+                            onDraftChange(it)
+                        },
                         modifier = Modifier.fillMaxWidth().focusRequester(focus),
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = palette.label),
                         cursorBrush = SolidColor(palette.accent),
@@ -294,18 +306,48 @@ fun MessageInputBar(
 
                 Spacer(Modifier.width(4.dp))
 
-                // Mic sits in the field until there's something to send,
-                // then the send button takes its place. Both stay composed
-                // and cross-dissolve through graphicsLayer, so the handover
-                // is one continuous motion rather than two pops - and costs
-                // no recomposition while it runs.
+                // Mic and send occupy the same spot and cross-dissolve
+                // between them, but there is only ever ONE hit target and it
+                // decides what to do from `canSend`. Layering two live
+                // buttons and hiding one with alpha is what made the mic
+                // fire the send button underneath it - an alpha of zero
+                // hides a control from your eyes, not from your finger.
                 val sendAppear = animateFloatAsState(
                     targetValue = if (canSend) 1f else 0f,
                     animationSpec = Motion.fluid(),
                     label = "sendAppear",
                 )
+                var actionPressed by remember { mutableStateOf(false) }
+                val actionScale = pressScale(actionPressed, pressedScale = 0.86f)
+
                 Box(
-                    Modifier.size(28.dp),
+                    Modifier
+                        .size(30.dp)
+                        .scaleFrom(actionScale)
+                        .pointerInput(canSend, editing?.id) {
+                            detectTapGestures(
+                                onPress = {
+                                    actionPressed = true
+                                    tryAwaitRelease()
+                                    actionPressed = false
+                                },
+                                onTap = {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    when {
+                                        editing != null -> {
+                                            onCommitEdit(text.trim())
+                                            text = ""
+                                        }
+                                        canSend -> commit(pendingEffect)
+                                        else -> onRecordAudio()
+                                    }
+                                },
+                                onLongPress = {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    if (canSend) showEffects = true else onRecordAudio()
+                                },
+                            )
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     MicIcon(
@@ -321,30 +363,25 @@ fun MessageInputBar(
                             },
                     )
                     Box(
-                        Modifier.graphicsLayer {
-                            val a = sendAppear.value.coerceIn(0f, 1f)
-                            alpha = a
-                            val sc = 0.7f + 0.3f * a
-                            scaleX = sc
-                            scaleY = sc
-                            // Lifts into place as it arrives.
-                            translationY = 4.dp.toPx() * (1f - a)
-                        }
+                        Modifier
+                            .size(28.dp)
+                            .graphicsLayer {
+                                val a = sendAppear.value.coerceIn(0f, 1f)
+                                alpha = a
+                                val sc = 0.7f + 0.3f * a
+                                scaleX = sc
+                                scaleY = sc
+                                translationY = 4.dp.toPx() * (1f - a)
+                            }
+                            .clip(CircleShape)
+                            .background(palette.accent),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        SendButton(
-                            onSend = {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                if (editing != null) {
-                                    onCommitEdit(text.trim())
-                                    text = ""
-                                } else {
-                                    commit(pendingEffect)
-                                }
-                            },
-                            onLongPress = {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                showEffects = true
-                            },
+                        Icon(
+                            Icons.Filled.ArrowUpward,
+                            contentDescription = "Send",
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }

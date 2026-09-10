@@ -263,3 +263,41 @@ object MediaTools {
         MediaKind.FILE -> "File"
     }
 }
+
+/**
+ * The user's current position as a maps link, or null.
+ *
+ * Sent as a link rather than a proprietary attachment on purpose: a location
+ * has to be openable by whoever receives it, and every platform in the world
+ * knows what to do with a maps URL. A bespoke location bubble would look
+ * better in this app and be useless everywhere else.
+ *
+ * Returns null rather than throwing when permission is missing or no fix is
+ * cached - the caller says so plainly instead of sending a broken pin.
+ */
+suspend fun currentLocationLink(context: android.content.Context): String? =
+    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val fine = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val coarse = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!fine && !coarse) return@withContext null
+
+        runCatching {
+            val manager = context.getSystemService(android.content.Context.LOCATION_SERVICE)
+                as android.location.LocationManager
+            val providers = manager.getProviders(true)
+            val best = providers
+                .mapNotNull { provider ->
+                    @Suppress("MissingPermission")
+                    manager.getLastKnownLocation(provider)
+                }
+                .maxByOrNull { it.time }
+                ?: return@runCatching null
+            "https://maps.google.com/?q=%.6f,%.6f".format(best.latitude, best.longitude)
+        }.getOrNull()
+    }
