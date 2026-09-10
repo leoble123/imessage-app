@@ -85,6 +85,8 @@ fun MessageBubble(
     /** Set on a lone reply, to render the dimmed original above it. */
     replyParent: Message? = null,
     replyParentSender: String? = null,
+    /** Tapping a photo, video or file opens it full screen. */
+    onOpenAttachment: (com.leo.imessage.data.Attachment) -> Unit = {},
     onOpenThread: () -> Unit = {},
 ) {
     val palette = LocalPalette.current
@@ -184,108 +186,135 @@ fun MessageBubble(
         Box(
             contentAlignment = if (outgoing) Alignment.TopEnd else Alignment.TopStart,
         ) {
-            if (msg.isUnsent) {
-                UnsentBubble(msg)
-            } else if (msg.attachments.isNotEmpty() && msg.text.isBlank()) {
-                Column(horizontalAlignment = if (outgoing) Alignment.End else Alignment.Start) {
-                    msg.attachments.forEach { att ->
-                        if (att.isImage) {
-                            PhotoAttachment(
-                                att,
-                                Modifier
-                                    .padding(bottom = 3.dp)
-                                    .bubbleEffect(msg.effect, msg.id + att.id),
-                            )
-                        } else {
-                            FileAttachment(att, Modifier.padding(bottom = 3.dp))
-                        }
-                    }
+            val shape = BubbleShape(outgoing, row.groupPosition)
+            val style = settings.bubbleStyle
+            val glass = style == com.leo.imessage.ui.theme.BubbleStyle.GLASS
+            val overBackground = glass && onCustomBackground
+            val transmission = when {
+                !glass -> 1f
+                overBackground && backgroundIsDark -> GlassAlpha.OUTGOING_ON_DARK_BACKGROUND
+                overBackground -> GlassAlpha.OUTGOING_ON_LIGHT_BACKGROUND
+                else -> GlassAlpha.OUTGOING
+            }
+            val fill: Brush = when {
+                !outgoing -> if (glass) {
+                    incomingGlassFill(
+                        grey = palette.incomingBubble,
+                        overBackground = overBackground,
+                        backgroundIsDark = backgroundIsDark,
+                    )
+                } else {
+                    glassFill(palette.incomingBubble, 1f)
                 }
-            } else {
-                val shape = BubbleShape(outgoing, row.groupPosition)
-                val style = settings.bubbleStyle
-                val glass = style == com.leo.imessage.ui.theme.BubbleStyle.GLASS
-                val overBackground = glass && onCustomBackground
-                val transmission = when {
-                    !glass -> 1f
-                    overBackground && backgroundIsDark -> GlassAlpha.OUTGOING_ON_DARK_BACKGROUND
-                    overBackground -> GlassAlpha.OUTGOING_ON_LIGHT_BACKGROUND
-                    else -> GlassAlpha.OUTGOING
-                }
-                val fill: Brush = when {
-                    !outgoing -> if (glass) {
-                        incomingGlassFill(
-                            grey = palette.incomingBubble,
-                            overBackground = overBackground,
-                            backgroundIsDark = backgroundIsDark,
-                        )
-                    } else {
-                        glassFill(palette.incomingBubble, 1f)
-                    }
-                    style == com.leo.imessage.ui.theme.BubbleStyle.FLAT ->
-                        glassFill(
-                            if (msg.service == Service.SMS) palette.smsBubbleFlat
-                            else palette.outgoingBubbleFlat,
-                            transmission,
-                        )
-                    else -> glassFill(
-                        if (msg.service == Service.SMS) palette.smsBubbleColors
-                        else palette.outgoingBubbleColors,
+                style == com.leo.imessage.ui.theme.BubbleStyle.FLAT ->
+                    glassFill(
+                        if (msg.service == Service.SMS) palette.smsBubbleFlat
+                        else palette.outgoingBubbleFlat,
                         transmission,
                     )
-                }
-                // Over a chosen background the incoming bubble is a clear
-                // pane, so its text has to follow the background rather than
-                // the app's theme or it can end up black on black.
-                val incomingTextColor = when {
-                    !overBackground -> palette.incomingText
-                    backgroundIsDark -> Color.White
-                    else -> Color.Black
-                }
+                else -> glassFill(
+                    if (msg.service == Service.SMS) palette.smsBubbleColors
+                    else palette.outgoingBubbleColors,
+                    transmission,
+                )
+            }
+            // Over a chosen background the incoming bubble is a clear pane,
+            // so its text has to follow the background rather than the app's
+            // theme or it can end up black on black.
+            val incomingTextColor = when {
+                !overBackground -> palette.incomingText
+                backgroundIsDark -> Color.White
+                else -> Color.Black
+            }
+            val playedEffect = if (settings.playEffects) msg.effect
+                else com.leo.imessage.data.MessageEffect.NONE
+            val glassDark = when {
+                outgoing -> true
+                overBackground -> backgroundIsDark
+                else -> palette.isDark
+            }
 
-                Box(
-                    modifier = Modifier
-                        .bubbleEffect(
-                            if (settings.playEffects) msg.effect
-                            else com.leo.imessage.data.MessageEffect.NONE,
-                            msg.id,
-                        )
-                        .graphicsLayer {
-                            val s = pressScale.value
-                            scaleX = s
-                            scaleY = s
-                        }
-                        .widthIn(max = 290.dp)
-                        .liquidGlass(
-                            shape = shape,
-                            fill = fill,
-                            dark = when {
-                                outgoing -> true
-                                overBackground -> backgroundIsDark
-                                else -> palette.isDark
-                            },
-                            enabled = glass,
-                        )
-                        .pointerInput(msg.id) {
-                            detectTapGestures(
-                                onPress = {
-                                    pressed = true
-                                    tryAwaitRelease()
-                                    pressed = false
-                                },
-                                onLongPress = {
-                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    onLongPress()
-                                },
+            if (msg.isUnsent) {
+                UnsentBubble(msg)
+            } else {
+                Column(horizontalAlignment = if (outgoing) Alignment.End else Alignment.Start) {
+                    // Attachments stack above any caption, the way a photo
+                    // with a message under it arrives on iOS.
+                    msg.attachments.forEach { att ->
+                        when (att.kind) {
+                            com.leo.imessage.data.MediaKind.IMAGE,
+                            com.leo.imessage.data.MediaKind.VIDEO -> PhotoAttachment(
+                                attachment = att,
+                                modifier = Modifier
+                                    .padding(bottom = 3.dp)
+                                    .bubbleEffect(playedEffect, msg.id + att.id),
+                                onOpen = { onOpenAttachment(att) },
+                                onLongPress = onLongPress,
+                            )
+
+                            com.leo.imessage.data.MediaKind.AUDIO -> Box(
+                                Modifier
+                                    .padding(bottom = 3.dp)
+                                    .liquidGlass(shape, fill, glassDark, glass)
+                                    .pointerInput(msg.id) {
+                                        detectTapGestures(
+                                            onLongPress = {
+                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                onLongPress()
+                                            },
+                                        )
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                AudioAttachment(att, outgoing)
+                            }
+
+                            com.leo.imessage.data.MediaKind.FILE -> FileAttachment(
+                                attachment = att,
+                                modifier = Modifier.padding(bottom = 3.dp),
+                                onLongPress = onLongPress,
                             )
                         }
-                        .padding(horizontal = 14.dp, vertical = 9.dp),
-                ) {
-                    Text(
-                        text = msg.text,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (outgoing) palette.outgoingText else incomingTextColor,
-                    )
+                    }
+
+                    if (msg.text.isNotBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .bubbleEffect(playedEffect, msg.id)
+                                .graphicsLayer {
+                                    val s = pressScale.value
+                                    scaleX = s
+                                    scaleY = s
+                                }
+                                .widthIn(max = 290.dp)
+                                .liquidGlass(
+                                    shape = shape,
+                                    fill = fill,
+                                    dark = glassDark,
+                                    enabled = glass,
+                                )
+                                .pointerInput(msg.id) {
+                                    detectTapGestures(
+                                        onPress = {
+                                            pressed = true
+                                            tryAwaitRelease()
+                                            pressed = false
+                                        },
+                                        onLongPress = {
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onLongPress()
+                                        },
+                                    )
+                                }
+                                .padding(horizontal = 14.dp, vertical = 9.dp),
+                        ) {
+                            Text(
+                                text = msg.text,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (outgoing) palette.outgoingText else incomingTextColor,
+                            )
+                        }
+                    }
                 }
             }
 

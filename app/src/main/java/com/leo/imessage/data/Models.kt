@@ -37,13 +37,38 @@ data class Tapback(
     val emoji: String? = null,
 )
 
+/** What a bubble should do with an attachment, derived from its MIME type. */
+enum class MediaKind { IMAGE, VIDEO, AUDIO, FILE }
+
 @Immutable
 data class Attachment(
     val id: String,
     val fileName: String,
     val mimeType: String,
-    val isImage: Boolean = mimeType.startsWith("image/"),
-)
+    /**
+     * Where the bytes actually live - a content:// or file:// URI.
+     *
+     * Null for the seeded sample attachments, which have no file behind them
+     * and render as placeholders. Anything you attach yourself carries a real
+     * URI and is loaded, played, opened and saved for real.
+     */
+    val uri: String? = null,
+    val durationMs: Long? = null,
+    val sizeBytes: Long? = null,
+) {
+    val kind: MediaKind
+        get() = when {
+            mimeType.startsWith("image/") -> MediaKind.IMAGE
+            mimeType.startsWith("video/") -> MediaKind.VIDEO
+            mimeType.startsWith("audio/") -> MediaKind.AUDIO
+            else -> MediaKind.FILE
+        }
+
+    val isImage: Boolean get() = kind == MediaKind.IMAGE
+
+    /** Image and video both render as a tappable thumbnail. */
+    val isVisual: Boolean get() = kind == MediaKind.IMAGE || kind == MediaKind.VIDEO
+}
 
 @Immutable
 data class Message(

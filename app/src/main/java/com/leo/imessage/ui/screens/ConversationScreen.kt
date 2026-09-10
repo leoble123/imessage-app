@@ -59,6 +59,7 @@ import com.leo.imessage.data.Message
 import com.leo.imessage.data.MessageRow
 import com.leo.imessage.ui.components.Avatar
 import com.leo.imessage.ui.components.GlassSurface
+import com.leo.imessage.ui.components.dragToToggleKeyboard
 import com.leo.imessage.ui.components.glassSource
 import dev.chrisbanes.haze.HazeState
 import com.leo.imessage.ui.components.GroupAvatar
@@ -80,34 +81,40 @@ fun buildRows(messages: List<Message>, isGroup: Boolean): List<MessageRow> {
     val groupWindowMs = 60_000L * 3
     val headerGapMs = 60_000L * 45
 
-    // Replies are hoisted out of the transcript and shown only inside their
-    // thread, exactly as Messages does it - the original grows a "N Replies"
-    // link instead of the conversation filling up with duplicated quotes.
+    // Nothing is ever hidden from the transcript. Messages itself hoists
+    // replies out into their thread, but a message you just sent silently
+    // vanishing from the conversation is worse than a little duplication -
+    // so replies stay where they were sent, each carrying a dimmed copy of
+    // what it answers, and the original additionally grows a link into the
+    // thread once there's more than one.
     val replyCounts = messages.groupingBy { it.replyToId }.eachCount()
-    // A lone reply keeps its place in the transcript and carries a dimmed
-    // copy of what it answers; two or more collapse into a thread and only
-    // the original stays, marked with a count.
-    fun threaded(id: String?) = (replyCounts[id] ?: 0) >= 2
-    val transcript = messages.filter { it.replyToId == null || !threaded(it.replyToId) }
 
-    val lastReceiptIndex = transcript.indexOfLast { it.isFromMe }
+    val lastReceiptIndex = messages.indexOfLast { it.isFromMe }
 
-    return transcript.mapIndexed { i, msg ->
-        val prev = transcript.getOrNull(i - 1)
-        val next = transcript.getOrNull(i + 1)
+    return messages.mapIndexed { i, msg ->
+        val prev = messages.getOrNull(i - 1)
+        val next = messages.getOrNull(i + 1)
+
+        // A reply always stands alone: it has a quote stacked above it, and
+        // a quote wedged into the middle of a run would break the run's
+        // silhouette anyway.
+        val isReply = msg.replyToId != null
+        val hasThreadLink = (replyCounts[msg.id] ?: 0) >= 2
 
         val samePrev = prev != null &&
             prev.isFromMe == msg.isFromMe &&
             prev.senderId == msg.senderId &&
             msg.timestamp - prev.timestamp < groupWindowMs &&
             !prev.isUnsent && !msg.isUnsent &&
-            !threaded(prev.id)
+            !isReply &&
+            (replyCounts[prev.id] ?: 0) < 2
         val sameNext = next != null &&
             next.isFromMe == msg.isFromMe &&
             next.senderId == msg.senderId &&
             next.timestamp - msg.timestamp < groupWindowMs &&
             !next.isUnsent && !msg.isUnsent &&
-            !threaded(msg.id)
+            next.replyToId == null &&
+            !hasThreadLink
 
         val position = when {
             !samePrev && !sameNext -> GroupPosition.SINGLE
@@ -123,7 +130,7 @@ fun buildRows(messages: List<Message>, isGroup: Boolean): List<MessageRow> {
             showSenderName = isGroup && !msg.isFromMe && !samePrev,
             showDeliveryReceipt = i == lastReceiptIndex,
             showAvatar = isGroup && !msg.isFromMe && !sameNext,
-            replyCount = if (threaded(msg.id)) replyCounts[msg.id] ?: 0 else 0,
+            replyCount = if (hasThreadLink) replyCounts[msg.id] ?: 0 else 0,
         )
     }
 }
@@ -133,12 +140,19 @@ fun ConversationScreen(
     chat: Chat,
     messages: List<Message>,
     onBack: () -> Unit,
-    onSend: (String, com.leo.imessage.data.MessageEffect, String?) -> Unit,
+    onSend: (
+        String,
+        com.leo.imessage.data.MessageEffect,
+        String?,
+        List<com.leo.imessage.data.Attachment>,
+    ) -> Unit,
     onTapback: (String, com.leo.imessage.data.TapbackKind) -> Unit = { _, _ -> },
     onEmojiTapback: (String, String) -> Unit = { _, _ -> },
     onUnsend: (String) -> Unit = {},
     onOpenDetails: () -> Unit = {},
     onEdit: (String, String) -> Unit = { _, _ -> },
+    onDelete: (String) -> Unit = {},
+    onFaceTime: () -> Unit = {},
     backgroundId: String = "none",
 ) {
     val palette = LocalPalette.current
@@ -158,10 +172,16 @@ fun ConversationScreen(
     var editingMessage by remember { mutableStateOf<Message?>(null) }
     // The message whose reply chain is being viewed, if any.
     var threadRoot by remember { mutableStateOf<Message?>(null) }
+    // The attachment currently open full screen, if any.
+    var viewing by remember { mutableStateOf<com.leo.imessage.data.Attachment?>(null) }
     val composerFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-    androidx.activity.compose.BackHandler(enabled = threadRoot != null || menuFor != null) {
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    androidx.activity.compose.BackHandler(
+        enabled = threadRoot != null || menuFor != null || viewing != null
+    ) {
         when {
+            viewing != null -> viewing = null
             menuFor != null -> menuFor = null
             else -> threadRoot = null
         }
@@ -209,6 +229,7 @@ fun ConversationScreen(
                 .weight(1f)
                 .fillMaxWidth()
                 .glassSource(hazeState)
+                .dragToToggleKeyboard()
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures(
                         onDragEnd = {
@@ -247,6 +268,7 @@ fun ConversationScreen(
                     ?.substringBefore(' ')
 
                 com.leo.imessage.ui.components.SwipeToReply(
+                    outgoing = row.message.isFromMe,
                     onReply = { threadRoot = threadFor(row.message) },
                     modifier = Modifier.padding(
                         top = if (row.groupPosition == GroupPosition.SINGLE ||
@@ -274,6 +296,7 @@ fun ConversationScreen(
                                     ?.substringBefore(' ')
                             },
                         onOpenThread = { threadRoot = threadFor(row.message) },
+                        onOpenAttachment = { viewing = it },
                     )
                 }
             }
@@ -288,7 +311,7 @@ fun ConversationScreen(
         }
 
             MessageInputBar(
-                onSend = { text, effect -> onSend(text, effect, null) },
+                onSend = { text, effect, attachments -> onSend(text, effect, null, attachments) },
                 hazeState = hazeState,
                 darkBase = if (background.brush != null) background.isDark else null,
                 editing = editingMessage,
@@ -307,6 +330,7 @@ fun ConversationScreen(
             darkBase = if (background.brush != null) background.isDark else null,
             onBack = onBack,
             onOpenDetails = onOpenDetails,
+            onFaceTime = onFaceTime,
             modifier = Modifier.align(Alignment.TopCenter),
         )
 
@@ -321,7 +345,16 @@ fun ConversationScreen(
                 hazeState = hazeState,
                 darkBase = if (background.brush != null) background.isDark else null,
                 onDismiss = { threadRoot = null },
-                onSendReply = { text, effect -> onSend(text, effect, root.id) },
+                onSendReply = { text, effect, attachments ->
+                    onSend(text, effect, root.id, attachments)
+                },
+            )
+        }
+
+        viewing?.let { attachment ->
+            com.leo.imessage.ui.components.MediaViewer(
+                attachment = attachment,
+                onDismiss = { viewing = null },
             )
         }
 
@@ -343,7 +376,18 @@ fun ConversationScreen(
                         focused?.let { threadRoot = threadFor(it.message) }
                     }
                 )
-                add(com.leo.imessage.ui.components.MenuAction("Copy") {})
+                add(
+                    com.leo.imessage.ui.components.MenuAction("Copy") {
+                        focused?.message?.let { m ->
+                            val payload = m.text.ifBlank {
+                                m.attachments.firstOrNull()?.fileName.orEmpty()
+                            }
+                            if (payload.isNotBlank()) {
+                                clipboard.setText(androidx.compose.ui.text.AnnotatedString(payload))
+                            }
+                        }
+                    }
+                )
                 if (focused?.message?.isFromMe == true && focused.message.isUnsent.not()) {
                     add(
                         com.leo.imessage.ui.components.MenuAction("Edit") {
@@ -358,7 +402,11 @@ fun ConversationScreen(
                         }
                     )
                 }
-                add(com.leo.imessage.ui.components.MenuAction("Delete", destructive = true) {})
+                add(
+                    com.leo.imessage.ui.components.MenuAction("Delete", destructive = true) {
+                        focused?.let { onDelete(it.message.id) }
+                    }
+                )
             },
             focusedContent = {
                 if (focused != null) {

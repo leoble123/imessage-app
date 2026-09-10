@@ -34,6 +34,12 @@ class AppSettings {
     var compactChatList by mutableStateOf(false)
     var sendWithReturn by mutableStateOf(false)
     var lowPowerAnimations by mutableStateOf(false)
+
+    // Account details. Nothing consumes these yet - the rustpush core will -
+    // but they're real editable values rather than decorative rows.
+    var appleAccount by mutableStateOf("")
+    var relayServer by mutableStateOf("")
+    var phoneNumber by mutableStateOf("")
 }
 
 val LocalSettings = staticCompositionLocalOf { AppSettings() }

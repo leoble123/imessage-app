@@ -19,6 +19,14 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +49,8 @@ fun SettingsScreen(onBack: () -> Unit) {
     val palette = LocalPalette.current
     val hazeState = remember { HazeState() }
     val settings = com.leo.imessage.ui.theme.LocalSettings.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var editing by remember { mutableStateOf<EditableSetting?>(null) }
 
     Box(Modifier.fillMaxSize().background(palette.groupedBackground)) {
         Column(
@@ -51,11 +61,23 @@ fun SettingsScreen(onBack: () -> Unit) {
                 .padding(top = 100.dp, bottom = 40.dp),
         ) {
             ListSection(header = "Account") {
-                SettingsRow("Apple Account", value = "Not signed in")
+                SettingsRow(
+                    "Apple Account",
+                    value = settings.appleAccount.ifBlank { "Not signed in" },
+                    onClick = { editing = EditableSetting.APPLE_ACCOUNT },
+                )
                 SettingsDivider()
-                SettingsRow("Relay Server", value = "Not set")
+                SettingsRow(
+                    "Relay Server",
+                    value = settings.relayServer.ifBlank { "Not set" },
+                    onClick = { editing = EditableSetting.RELAY_SERVER },
+                )
                 SettingsDivider()
-                SettingsRow("Phone Number", value = "Not linked")
+                SettingsRow(
+                    "Phone Number",
+                    value = settings.phoneNumber.ifBlank { "Not linked" },
+                    onClick = { editing = EditableSetting.PHONE_NUMBER },
+                )
             }
 
             ListSection(header = "Appearance") {
@@ -115,8 +137,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SettingsToggle("Send with Return Key", settings.sendWithReturn) {
                     settings.sendWithReturn = it
                 }
-                SettingsDivider()
-                SettingsRow("Blocked Contacts", value = "0")
+
             }
 
             ListSection(
@@ -149,9 +170,17 @@ fun SettingsScreen(onBack: () -> Unit) {
                     settings.showUnreadBadges = it
                 }
                 SettingsDivider()
-                SettingsRow("Notification Sound", value = "Default")
+                SettingsRow(
+                    "Notification Sound",
+                    value = "System",
+                    onClick = { openNotificationSettings(context) },
+                )
                 SettingsDivider()
-                SettingsRow("Focus Filters", value = "Off")
+                SettingsRow(
+                    "Focus Filters",
+                    value = "System",
+                    onClick = { openNotificationSettings(context) },
+                )
             }
 
             ListSection(
@@ -162,7 +191,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SettingsDivider()
                 SettingsRow("Backend", value = "Mock", showChevron = false)
                 SettingsDivider()
-                SettingsRow("Export Logs")
+                SettingsRow(
+                    "Export Diagnostics",
+                    onClick = { shareDiagnostics(context, settings) },
+                )
             }
         }
 
@@ -204,5 +236,172 @@ fun SettingsScreen(onBack: () -> Unit) {
                 )
             }
         }
+
+        editing?.let { field ->
+            SettingEditor(
+                field = field,
+                initial = when (field) {
+                    EditableSetting.APPLE_ACCOUNT -> settings.appleAccount
+                    EditableSetting.RELAY_SERVER -> settings.relayServer
+                    EditableSetting.PHONE_NUMBER -> settings.phoneNumber
+                },
+                onCommit = { value ->
+                    when (field) {
+                        EditableSetting.APPLE_ACCOUNT -> settings.appleAccount = value
+                        EditableSetting.RELAY_SERVER -> settings.relayServer = value
+                        EditableSetting.PHONE_NUMBER -> settings.phoneNumber = value
+                    }
+                },
+                onDismiss = { editing = null },
+            )
+        }
+    }
+}
+
+/** The account fields that open a text editor when tapped. */
+enum class EditableSetting(val title: String, val hint: String) {
+    APPLE_ACCOUNT("Apple Account", "you@icloud.com"),
+    RELAY_SERVER("Relay Server", "http://host:5005"),
+    PHONE_NUMBER("Phone Number", "+15555550123"),
+}
+
+/**
+ * A small editor for the account fields.
+ *
+ * These have nothing behind them until the rustpush core lands, but a row
+ * that opens nothing at all is worse than one that stores what you type -
+ * this way the values are real, and there's somewhere for the backend to
+ * read them from when it arrives.
+ */
+@Composable
+private fun SettingEditor(
+    field: EditableSetting,
+    initial: String,
+    onCommit: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val palette = LocalPalette.current
+    var value by remember(field) { mutableStateOf(initial) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+
+    androidx.activity.compose.BackHandler { onDismiss() }
+    LaunchedEffect(field) {
+        androidx.compose.runtime.withFrameNanos {}
+        runCatching { focus.requestFocus() }
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.4f))
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+            ) { onDismiss() }
+            .imePadding(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier
+                .padding(horizontal = 30.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(palette.surfaceElevated)
+                .padding(20.dp),
+        ) {
+            Text(
+                field.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = palette.label,
+            )
+            Spacer(Modifier.height(14.dp))
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(palette.fieldBackground)
+                    .padding(horizontal = 12.dp, vertical = 11.dp),
+            ) {
+                if (value.isEmpty()) {
+                    Text(
+                        field.hint,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = palette.tertiaryLabel,
+                    )
+                }
+                androidx.compose.foundation.text.BasicTextField(
+                    value = value,
+                    onValueChange = { value = it },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = palette.label),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(palette.accent),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focus),
+                )
+            }
+            Spacer(Modifier.height(18.dp))
+            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "Cancel",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = palette.secondaryLabel,
+                    modifier = Modifier.clickable { onDismiss() }.padding(8.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "Save",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = palette.accent,
+                    modifier = Modifier
+                        .clickable {
+                            onCommit(value.trim())
+                            onDismiss()
+                        }
+                        .padding(8.dp),
+                )
+            }
+        }
+    }
+}
+
+/** Hands notification behaviour to the system, which actually owns it. */
+private fun openNotificationSettings(context: android.content.Context) {
+    runCatching {
+        val intent = android.content.Intent(
+            android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS
+        ).apply {
+            putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
+}
+
+/** Shares the current configuration as text, for when something misbehaves. */
+private fun shareDiagnostics(
+    context: android.content.Context,
+    settings: com.leo.imessage.ui.theme.AppSettings,
+) {
+    val report = buildString {
+        appendLine("Messages diagnostics")
+        appendLine("App version: 0.1.0")
+        appendLine("Backend: Mock")
+        appendLine("Android: ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})")
+        appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+        appendLine("Theme: ${settings.themeMode}")
+        appendLine("Bubble style: ${settings.bubbleStyle}")
+        appendLine("Reduce motion: ${settings.lowPowerAnimations}")
+        appendLine("Relay server: ${settings.relayServer.ifBlank { "not set" }}")
+    }
+    runCatching {
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(android.content.Intent.EXTRA_SUBJECT, "Messages diagnostics")
+            putExtra(android.content.Intent.EXTRA_TEXT, report)
+        }
+        context.startActivity(
+            android.content.Intent.createChooser(intent, "Export Diagnostics").apply {
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
     }
 }

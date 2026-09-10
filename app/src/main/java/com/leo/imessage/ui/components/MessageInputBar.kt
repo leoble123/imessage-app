@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -69,10 +70,9 @@ import dev.chrisbanes.haze.HazeState
  */
 @Composable
 fun MessageInputBar(
-    onSend: (String, MessageEffect) -> Unit,
+    onSend: (String, MessageEffect, List<com.leo.imessage.data.Attachment>) -> Unit,
     hazeState: HazeState,
     modifier: Modifier = Modifier,
-    onAttach: () -> Unit = {},
     darkBase: Boolean? = null,
     editing: com.leo.imessage.data.Message? = null,
     onCancelEdit: () -> Unit = {},
@@ -106,16 +106,37 @@ fun MessageInputBar(
         if (editing != null) text = editing.text
     }
     var showEffects by remember { mutableStateOf(false) }
-    val canSend = text.isNotBlank()
+    var showTray by remember { mutableStateOf(false) }
+    // Staged attachments and effect, so you can line up a photo, type a
+    // caption and pick an effect before anything is sent - rather than each
+    // choice firing off a message of its own.
+    var pending by remember { mutableStateOf<List<com.leo.imessage.data.Attachment>>(emptyList()) }
+    var pendingEffect by remember { mutableStateOf(MessageEffect.NONE) }
+    val canSend = text.isNotBlank() || pending.isNotEmpty()
+
+    fun commit(effect: MessageEffect) {
+        if (!canSend) return
+        onSend(text.trim(), effect, pending)
+        text = ""
+        pending = emptyList()
+        pendingEffect = MessageEffect.NONE
+    }
 
     if (showEffects) {
         EffectPicker(
             onPick = { effect ->
-                onSend(text.trim(), effect)
-                text = ""
                 showEffects = false
+                if (canSend) commit(effect) else pendingEffect = effect
             },
             onDismiss = { showEffects = false },
+        )
+    }
+
+    if (showTray) {
+        AttachmentTray(
+            onAttach = { added -> pending = pending + added },
+            onPickEffect = { effect -> pendingEffect = effect },
+            onDismiss = { showTray = false },
         )
     }
 
@@ -160,13 +181,27 @@ fun MessageInputBar(
                 )
             }
         }
+        if (pending.isNotEmpty() || pendingEffect != MessageEffect.NONE) {
+            StagedRow(
+                attachments = pending,
+                effect = pendingEffect,
+                onRemove = { att -> pending = pending.filterNot { it.id == att.id } },
+                onClearEffect = { pendingEffect = MessageEffect.NONE },
+            )
+        }
         Row(
             Modifier
                 .fillMaxWidth()
                 .padding(start = 10.dp, end = 10.dp, top = 7.dp, bottom = 7.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
-            PlusButton(onClick = onAttach)
+            PlusButton(
+                expanded = showTray,
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    showTray = true
+                },
+            )
 
             Spacer(Modifier.width(8.dp))
 
@@ -246,10 +281,10 @@ fun MessageInputBar(
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 if (editing != null) {
                                     onCommitEdit(text.trim())
+                                    text = ""
                                 } else {
-                                    onSend(text.trim(), MessageEffect.NONE)
+                                    commit(pendingEffect)
                                 }
-                                text = ""
                             },
                             onLongPress = {
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -265,14 +300,22 @@ fun MessageInputBar(
 }
 
 @Composable
-private fun PlusButton(onClick: () -> Unit) {
+private fun PlusButton(expanded: Boolean, onClick: () -> Unit) {
     val palette = LocalPalette.current
     var pressed by remember { mutableStateOf(false) }
     val scale = pressScale(pressed, pressedScale = 0.88f, spec = Motion.bouncy(), label = "plusPress")
+    // Turns into a close affordance while the tray is up, so the same
+    // target both opens and shuts it.
+    val turn = animateFloatAsState(
+        targetValue = if (expanded) 1f else 0f,
+        animationSpec = Motion.fluid(),
+        label = "plusTurn",
+    )
     Box(
         Modifier
             .size(32.dp)
             .scaleFrom(scale)
+            .graphicsLayer { rotationZ = 45f * turn.value }
             .clip(CircleShape)
             .background(palette.fieldBackground)
             .pointerInput(Unit) {
@@ -360,7 +403,7 @@ private fun MicIcon(color: Color, modifier: Modifier = Modifier) {
 
 /** Send-effect chooser, reached by long-pressing send. */
 @Composable
-private fun EffectPicker(
+fun EffectPicker(
     onPick: (MessageEffect) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -405,6 +448,105 @@ private fun EffectPicker(
                             .fillMaxWidth()
                             .height(0.5.dp)
                             .background(palette.separator)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * What's queued up but not sent yet.
+ *
+ * Attachments show as removable thumbnails and the chosen effect as a chip,
+ * because a staged effect with nothing on screen to show for it is a message
+ * that arrives with a screen animation you don't remember asking for.
+ */
+@Composable
+private fun StagedRow(
+    attachments: List<com.leo.imessage.data.Attachment>,
+    effect: MessageEffect,
+    onRemove: (com.leo.imessage.data.Attachment) -> Unit,
+    onClearEffect: () -> Unit,
+) {
+    val palette = LocalPalette.current
+    androidx.compose.foundation.lazy.LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 12.dp, top = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (effect != MessageEffect.NONE) {
+            item(key = "effect") {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(palette.accent.copy(alpha = 0.16f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { onClearEffect() }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Sent with ${effect.name.lowercase().replace('_', ' ')
+                            .replaceFirstChar { it.uppercase() }}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = palette.accent,
+                    )
+                    Text(
+                        "  \u00d7",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = palette.accent,
+                    )
+                }
+            }
+        }
+
+        items(attachments, key = { it.id }) { att ->
+            Box {
+                val thumb = rememberThumbnail(att.uri, att.kind, maxPx = 220)
+                Box(
+                    Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(palette.fieldBackground),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (thumb != null) {
+                        androidx.compose.foundation.Image(
+                            bitmap = thumb,
+                            contentDescription = att.fileName,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier.matchParentSize(),
+                        )
+                    } else {
+                        Text(
+                            text = com.leo.imessage.media.MediaTools.iconLabelFor(att.kind),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = palette.secondaryLabel,
+                        )
+                    }
+                }
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(2.dp)
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { onRemove(att) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "\u00d7",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
                     )
                 }
             }

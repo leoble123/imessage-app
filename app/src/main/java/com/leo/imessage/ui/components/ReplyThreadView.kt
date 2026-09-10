@@ -58,7 +58,7 @@ fun ReplyThreadView(
     hazeState: HazeState,
     darkBase: Boolean?,
     onDismiss: () -> Unit,
-    onSendReply: (String, MessageEffect) -> Unit,
+    onSendReply: (String, MessageEffect, List<com.leo.imessage.data.Attachment>) -> Unit,
 ) {
     val palette = LocalPalette.current
     val dark = darkBase ?: palette.isDark
@@ -176,7 +176,7 @@ fun ReplyThreadView(
             }
 
             MessageInputBar(
-                onSend = { text, effect -> onSendReply(text, effect) },
+                onSend = { text, effect, attachments -> onSendReply(text, effect, attachments) },
                 hazeState = hazeState,
                 darkBase = darkBase,
                 placeholder = "Reply",

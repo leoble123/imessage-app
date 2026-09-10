@@ -32,7 +32,11 @@ interface MessagingBackend {
         text: String,
         effect: MessageEffect = MessageEffect.NONE,
         replyToId: String? = null,
+        attachments: List<Attachment> = emptyList(),
     )
+
+    /** Removes a message locally, the way Messages' Delete action does. */
+    suspend fun delete(messageId: String)
 
     /** Edits a message you sent, keeping the prior text in its history. */
     suspend fun edit(messageId: String, newText: String)
@@ -43,6 +47,13 @@ interface MessagingBackend {
 
     /** Retracts a message you sent, keeping the text for one-tap reveal. */
     suspend fun unsend(messageId: String)
+
+    suspend fun setPinned(chatId: String, pinned: Boolean)
+
+    suspend fun setMuted(chatId: String, muted: Boolean)
+
+    /** Removes a conversation and everything in it. */
+    suspend fun deleteChat(chatId: String)
 
     suspend fun markRead(chatId: String)
 

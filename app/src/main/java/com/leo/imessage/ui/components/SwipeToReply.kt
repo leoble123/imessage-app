@@ -22,16 +22,25 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 /**
- * Drag a bubble to the right to reply to it.
+ * Drag a bubble toward the middle of the screen to reply to it.
  *
- * The reply arrow fades and scales in as you pull, the row rubber-bands past
- * the trigger point rather than sliding freely, and a haptic fires exactly at
- * the threshold - so you can feel the commit without watching the screen.
+ * The direction is mirrored for your own messages, and that isn't a detail:
+ * a right-aligned bubble dragged rightward slides *off* the screen while the
+ * arrow appears way over on the far left, so the gesture reads as happening
+ * to some other message. Dragging each bubble away from its own edge means
+ * the arrow always surfaces in the space the bubble just vacated, right next
+ * to it, whichever side it started on.
+ *
+ * The arrow fades and scales in as you pull, the row rubber-bands past the
+ * trigger point rather than sliding freely, and a haptic fires exactly at the
+ * threshold - so you can feel the commit without watching the screen.
  */
 @Composable
 fun SwipeToReply(
     onReply: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Your own messages sit at the trailing edge and mirror the gesture. */
+    outgoing: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val palette = LocalPalette.current
@@ -42,6 +51,8 @@ fun SwipeToReply(
     val armed = remember { booleanArrayOf(false) }
 
     val triggerPx = with(androidx.compose.ui.platform.LocalDensity.current) { 64.dp.toPx() }
+    // +1 drags right (incoming, anchored left), -1 drags left (outgoing).
+    val dir = if (outgoing) -1f else 1f
 
     Box(modifier) {
         // The drag offset is only ever read inside graphicsLayer blocks.
@@ -51,7 +62,7 @@ fun SwipeToReply(
         // from tracking the finger cleanly.
         Box(
             Modifier
-                .align(Alignment.CenterStart)
+                .align(if (outgoing) Alignment.CenterEnd else Alignment.CenterStart)
                 .size(30.dp)
                 .graphicsLayer {
                     val p = (offset.value / triggerPx).coerceIn(0f, 1f)
@@ -61,12 +72,18 @@ fun SwipeToReply(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            ReplyArrow(color = palette.secondaryLabel, modifier = Modifier.size(19.dp))
+            ReplyArrow(
+                color = palette.secondaryLabel,
+                modifier = Modifier
+                    .size(19.dp)
+                    // The arrow points back the way the bubble came from.
+                    .graphicsLayer { scaleX = dir },
+            )
         }
 
         Box(
             Modifier
-                .graphicsLayer { translationX = offset.value }
+                .graphicsLayer { translationX = offset.value * dir }
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures(
                         onDragEnd = {
@@ -85,7 +102,7 @@ fun SwipeToReply(
                     ) { change, dragAmount ->
                         // Only rightward drags reply; past the trigger the pull
                         // gets heavy so it never feels like the row came loose.
-                        val raw = offset.value + dragAmount
+                        val raw = offset.value + dragAmount * dir
                         val next = when {
                             raw <= 0f -> 0f
                             raw > triggerPx -> triggerPx + (raw - triggerPx) * 0.35f

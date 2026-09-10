@@ -1,6 +1,8 @@
 package com.leo.imessage.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,23 +64,36 @@ fun ChatListScreen(
     onOpenChat: (Chat) -> Unit,
     onOpenSettings: () -> Unit = {},
     onCompose: () -> Unit = {},
+    onSetPinned: (String, Boolean) -> Unit = { _, _ -> },
+    onSetMuted: (String, Boolean) -> Unit = { _, _ -> },
+    onDeleteChat: (String) -> Unit = {},
 ) {
     val palette = LocalPalette.current
     val listState = rememberLazyListState()
     val hazeState = remember { HazeState() }
     var query by remember { mutableStateOf("") }
+    var unreadOnly by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
+    val selected = remember { androidx.compose.runtime.mutableStateListOf<String>() }
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val density = androidx.compose.ui.platform.LocalDensity.current
     var topBarHeight by remember { androidx.compose.runtime.mutableStateOf(0.dp) }
     var bottomBarHeight by remember { androidx.compose.runtime.mutableStateOf(0.dp) }
 
-    val visibleChats = remember(chats, query) {
-        if (query.isBlank()) chats
-        else chats.filter { chat ->
-            chat.displayName.contains(query, ignoreCase = true) ||
-                chat.lastMessage?.text?.contains(query, ignoreCase = true) == true ||
-                chat.participants.any { it.handle.contains(query, ignoreCase = true) }
-        }
+    val visibleChats = remember(chats, query, unreadOnly) {
+        chats
+            .filter { !unreadOnly || it.unreadCount > 0 }
+            .filter { chat ->
+                query.isBlank() ||
+                    chat.displayName.contains(query, ignoreCase = true) ||
+                    chat.lastMessage?.text?.contains(query, ignoreCase = true) == true ||
+                    chat.participants.any { it.handle.contains(query, ignoreCase = true) }
+            }
     }
+
+    // Leaving edit mode must not leave a stale selection behind to act on.
+    androidx.compose.runtime.LaunchedEffect(editing) { if (!editing) selected.clear() }
+    androidx.activity.compose.BackHandler(enabled = editing) { editing = false }
 
     // The large title collapses into the compact bar as content scrolls under
     // it, the way a UIKit large-title nav bar does.
@@ -116,7 +131,16 @@ fun ChatListScreen(
             }
 
             items(pinned, key = { it.id }) { chat ->
-                ChatRow(chat, onOpenChat)
+                ChatRow(
+                    chat = chat,
+                    onOpen = onOpenChat,
+                    editing = editing,
+                    isSelected = chat.id in selected,
+                    onToggleSelected = { toggleSelection(selected, chat.id) },
+                    onSetPinned = onSetPinned,
+                    onSetMuted = onSetMuted,
+                    onDeleteChat = onDeleteChat,
+                )
             }
             if (pinned.isNotEmpty() && rest.isNotEmpty()) {
                 item(key = "pinned-sep") {
@@ -130,7 +154,16 @@ fun ChatListScreen(
                 }
             }
             items(rest, key = { it.id }) { chat ->
-                ChatRow(chat, onOpenChat)
+                ChatRow(
+                    chat = chat,
+                    onOpen = onOpenChat,
+                    editing = editing,
+                    isSelected = chat.id in selected,
+                    onToggleSelected = { toggleSelection(selected, chat.id) },
+                    onSetPinned = onSetPinned,
+                    onSetMuted = onSetMuted,
+                    onDeleteChat = onDeleteChat,
+                )
             }
         }
 
@@ -190,18 +223,46 @@ fun ChatListScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "Edit",
+                        text = if (editing) "Done" else "Edit",
                         style = MaterialTheme.typography.bodyLarge,
                         color = palette.accent,
-                        modifier = Modifier.clickable { onOpenSettings() },
+                        modifier = Modifier.clickable {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            editing = !editing
+                        },
                     )
                     Spacer(Modifier.weight(1f))
-                    Icon(
-                        Icons.Filled.FilterList,
-                        contentDescription = "Filter",
-                        tint = palette.accent,
-                        modifier = Modifier.size(22.dp),
-                    )
+                    if (editing && selected.isNotEmpty()) {
+                        Text(
+                            text = "Delete (${selected.size})",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = palette.destructive,
+                            modifier = Modifier.clickable {
+                                selected.toList().forEach(onDeleteChat)
+                                selected.clear()
+                                editing = false
+                            },
+                        )
+                    } else {
+                        // Unread filter, matching Messages' Filters control.
+                        Text(
+                            text = if (unreadOnly) "Unread" else "",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = palette.accent,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        Icon(
+                            Icons.Filled.FilterList,
+                            contentDescription = "Filter unread",
+                            tint = if (unreadOnly) palette.accent else palette.secondaryLabel,
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clickable {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    unreadOnly = !unreadOnly
+                                },
+                        )
+                    }
                 }
                 Text(
                     text = "Messages",
@@ -263,7 +324,16 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
 }
 
 @Composable
-private fun ChatRow(chat: Chat, onOpen: (Chat) -> Unit) {
+private fun ChatRow(
+    chat: Chat,
+    onOpen: (Chat) -> Unit,
+    editing: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelected: () -> Unit = {},
+    onSetPinned: (String, Boolean) -> Unit = { _, _ -> },
+    onSetMuted: (String, Boolean) -> Unit = { _, _ -> },
+    onDeleteChat: (String) -> Unit = {},
+) {
     val palette = LocalPalette.current
 
     // iOS highlights a row the instant you touch it and clears the moment you
@@ -277,9 +347,18 @@ private fun ChatRow(chat: Chat, onOpen: (Chat) -> Unit) {
     )
 
     SwipeableRow(
+        leadingActions = listOf(
+            SwipeAction(
+                if (chat.isPinned) "Unpin" else "Pin",
+                AppleColors.Orange,
+            ) { onSetPinned(chat.id, !chat.isPinned) },
+        ),
         trailingActions = listOf(
-            SwipeAction("Delete", AppleColors.Red) {},
-            SwipeAction(if (chat.isMuted) "Unhide\nAlerts" else "Hide\nAlerts", AppleColors.Indigo) {},
+            SwipeAction("Delete", AppleColors.Red) { onDeleteChat(chat.id) },
+            SwipeAction(
+                if (chat.isMuted) "Unhide\nAlerts" else "Hide\nAlerts",
+                AppleColors.Indigo,
+            ) { onSetMuted(chat.id, !chat.isMuted) },
         ),
     ) {
         Row(
@@ -292,12 +371,41 @@ private fun ChatRow(chat: Chat, onOpen: (Chat) -> Unit) {
                             tryAwaitRelease()
                             pressed = false
                         },
-                        onTap = { onOpen(chat) },
+                        onTap = { if (editing) onToggleSelected() else onOpen(chat) },
                     )
                 }
                 .padding(start = 16.dp, end = 16.dp, top = 9.dp, bottom = 9.dp),
             verticalAlignment = Alignment.Top,
         ) {
+            // The selection circle slides the row over rather than appearing
+            // on top of it, so nothing shifts under your thumb mid-tap.
+            androidx.compose.animation.AnimatedVisibility(visible = editing) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(22.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(
+                                if (isSelected) palette.accent else Color.Transparent
+                            )
+                            .border(
+                                1.5.dp,
+                                if (isSelected) palette.accent else palette.tertiaryLabel,
+                                androidx.compose.foundation.shape.CircleShape,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (isSelected) {
+                            Text(
+                                "\u2713",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                }
+            }
             Box(Modifier.size(14.dp).padding(top = 20.dp)) {
                 if (chat.unreadCount > 0) {
                     Box(
@@ -358,4 +466,12 @@ private fun com.leo.imessage.data.Message.previewText(): String = when {
     isUnsent -> "Message unsent"
     attachments.isNotEmpty() && text.isBlank() -> "📷 Photo"
     else -> text
+}
+
+/** Selection is a plain toggle, kept out of the row so it stays testable. */
+private fun toggleSelection(
+    selected: androidx.compose.runtime.snapshots.SnapshotStateList<String>,
+    id: String,
+) {
+    if (!selected.remove(id)) selected.add(id)
 }

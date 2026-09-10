@@ -51,6 +51,7 @@ fun ConversationNavBar(
     hazeState: HazeState,
     onBack: () -> Unit,
     onOpenDetails: () -> Unit,
+    onFaceTime: () -> Unit = {},
     modifier: Modifier = Modifier,
     darkBase: Boolean? = null,
 ) {
@@ -119,7 +120,7 @@ fun ConversationNavBar(
             }
 
             CircleGlassButton(
-                onClick = {},
+                onClick = onFaceTime,
                 modifier = Modifier.align(Alignment.TopEnd),
             ) {
                 VideoIcon(color = palette.accent, modifier = Modifier.size(19.dp))

@@ -52,6 +52,8 @@ fun AppRoot(backend: MessagingBackend) {
     var showSettings by remember { mutableStateOf(false) }
     var showCompose by remember { mutableStateOf(false) }
     var showDetails by remember { mutableStateOf(false) }
+    // A photo opened from the details screen's Photos strip.
+    var detailsViewing by remember { mutableStateOf<com.leo.imessage.data.Attachment?>(null) }
     // Per-chat background choice, kept for the session.
     val backgrounds = remember { mutableStateMapOf<String, String>() }
     val openChat = chats.firstOrNull { it.id == openChatId }
@@ -59,6 +61,7 @@ fun AppRoot(backend: MessagingBackend) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val haptics = LocalHapticFeedback.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
 
     // 0 = list fully shown, 1 = conversation fully shown.
@@ -68,8 +71,12 @@ fun AppRoot(backend: MessagingBackend) {
         progress.animateTo(if (openChatId != null) 1f else 0f, Motion.standard())
     }
 
-    BackHandler(enabled = openChatId != null || showSettings || showCompose || showDetails) {
+    BackHandler(
+        enabled = openChatId != null || showSettings || showCompose ||
+            showDetails || detailsViewing != null
+    ) {
         when {
+            detailsViewing != null -> detailsViewing = null
             showDetails -> showDetails = false
             showCompose -> showCompose = false
             showSettings -> showSettings = false
@@ -91,6 +98,14 @@ fun AppRoot(backend: MessagingBackend) {
                 onOpenChat = { chat -> openChatId = chat.id },
                 onOpenSettings = { showSettings = true },
                 onCompose = { showCompose = true },
+                onSetPinned = { id, pinned -> scope.launch { backend.setPinned(id, pinned) } },
+                onSetMuted = { id, muted -> scope.launch { backend.setMuted(id, muted) } },
+                onDeleteChat = { id ->
+                    scope.launch {
+                        if (openChatId == id) openChatId = null
+                        backend.deleteChat(id)
+                    }
+                },
             )
             if (progress.value > 0f) {
                 Box(
@@ -121,8 +136,10 @@ fun AppRoot(backend: MessagingBackend) {
                         chat = chat,
                         messages = messages,
                         onBack = { openChatId = null },
-                        onSend = { text, effect, replyToId ->
-                            scope.launch { backend.send(chat.id, text, effect, replyToId) }
+                        onSend = { text, effect, replyToId, attachments ->
+                            scope.launch {
+                                backend.send(chat.id, text, effect, replyToId, attachments)
+                            }
                         },
                         onTapback = { messageId, kind ->
                             scope.launch { backend.setTapback(messageId, kind) }
@@ -134,6 +151,28 @@ fun AppRoot(backend: MessagingBackend) {
                             scope.launch { backend.unsend(messageId) }
                         },
                         onOpenDetails = { showDetails = true },
+                        onDelete = { messageId -> scope.launch { backend.delete(messageId) } },
+                        onFaceTime = {
+                            // No FaceTime on Android, so do the honest
+                            // equivalent: dial the handle if it's a number,
+                            // and otherwise fall back to the details screen
+                            // rather than a button that does nothing.
+                            val handle = chat.participants.firstOrNull()?.handle
+                            val dialable = handle != null &&
+                                handle.any { it.isDigit() } && !handle.contains('@')
+                            if (dialable) {
+                                runCatching {
+                                    context.startActivity(
+                                        android.content.Intent(
+                                            android.content.Intent.ACTION_DIAL,
+                                            android.net.Uri.parse("tel:$handle"),
+                                        )
+                                    )
+                                }
+                            } else {
+                                showDetails = true
+                            }
+                        },
                         onEdit = { messageId, newText ->
                             scope.launch { backend.edit(messageId, newText) }
                         },
@@ -163,8 +202,19 @@ fun AppRoot(backend: MessagingBackend) {
                     selectedBackgroundId = backgrounds[openChat.id] ?: "none",
                     onSelectBackground = { backgrounds[openChat.id] = it },
                     onBack = { showDetails = false },
+                    onSetMuted = { scope.launch { backend.setMuted(openChat.id, it) } },
+                    onSetPinned = { scope.launch { backend.setPinned(openChat.id, it) } },
+                    attachments = backend.messagesNow(openChat.id).flatMap { it.attachments },
+                    onOpenAttachment = { detailsViewing = it },
                 )
             }
+        }
+
+        detailsViewing?.let { attachment ->
+            com.leo.imessage.ui.components.MediaViewer(
+                attachment = attachment,
+                onDismiss = { detailsViewing = null },
+            )
         }
 
         // Settings pushes over everything with the same slide-in.

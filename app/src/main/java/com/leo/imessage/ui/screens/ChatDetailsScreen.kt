@@ -1,6 +1,7 @@
 package com.leo.imessage.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -59,11 +60,15 @@ fun ChatDetailsScreen(
     selectedBackgroundId: String,
     onSelectBackground: (String) -> Unit,
     onBack: () -> Unit,
+    onSetMuted: (Boolean) -> Unit = {},
+    onSetPinned: (Boolean) -> Unit = {},
+    attachments: List<com.leo.imessage.data.Attachment> = emptyList(),
+    onOpenAttachment: (com.leo.imessage.data.Attachment) -> Unit = {},
 ) {
     val palette = LocalPalette.current
     val hazeState = remember { HazeState() }
-    var hideAlerts by remember { mutableStateOf(chat.isMuted) }
-    var readReceipts by remember { mutableStateOf(true) }
+    val settings = com.leo.imessage.ui.theme.LocalSettings.current
+    val photos = remember(attachments) { attachments.filter { it.isVisual } }
 
     Box(Modifier.fillMaxSize().background(palette.groupedBackground)) {
         Column(
@@ -140,13 +145,47 @@ fun ChatDetailsScreen(
             }
 
             ListSection(header = "Conversation") {
-                SettingsToggle("Hide Alerts", hideAlerts) { hideAlerts = it }
+                SettingsToggle("Pin Conversation", chat.isPinned) { onSetPinned(it) }
                 SettingsDivider()
-                SettingsToggle("Send Read Receipts", readReceipts) { readReceipts = it }
+                SettingsToggle("Hide Alerts", chat.isMuted) { onSetMuted(it) }
                 SettingsDivider()
-                SettingsRow("Photos", value = "3")
-                SettingsDivider()
-                SettingsRow("Links", value = "0")
+                SettingsToggle("Send Read Receipts", settings.sendReadReceipts) {
+                    settings.sendReadReceipts = it
+                }
+            }
+
+            if (photos.isNotEmpty()) {
+                ListSection(header = "Photos") {
+                    androidx.compose.foundation.lazy.LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(photos, key = { it.id }) { att ->
+                            val thumb = com.leo.imessage.ui.components.rememberThumbnail(
+                                att.uri, att.kind, maxPx = 300,
+                            )
+                            Box(
+                                Modifier
+                                    .size(76.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(palette.fieldBackground)
+                                    .clickable { onOpenAttachment(att) },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (thumb != null) {
+                                    androidx.compose.foundation.Image(
+                                        bitmap = thumb,
+                                        contentDescription = att.fileName,
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                        modifier = Modifier.matchParentSize(),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

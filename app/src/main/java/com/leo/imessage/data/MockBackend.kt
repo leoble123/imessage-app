@@ -66,11 +66,33 @@ class MockBackend : MessagingBackend {
         }
     }
 
+    override suspend fun setPinned(chatId: String, pinned: Boolean) {
+        _chats.value = _chats.value.map {
+            if (it.id == chatId) it.copy(isPinned = pinned) else it
+        }
+    }
+
+    override suspend fun setMuted(chatId: String, muted: Boolean) {
+        _chats.value = _chats.value.map {
+            if (it.id == chatId) it.copy(isMuted = muted) else it
+        }
+    }
+
+    override suspend fun deleteChat(chatId: String) {
+        _chats.value = _chats.value.filterNot { it.id == chatId }
+        _messages.value = _messages.value.filterNot { it.chatId == chatId }
+    }
+
+    override suspend fun delete(messageId: String) {
+        _messages.value = _messages.value.filterNot { it.id == messageId }
+    }
+
     override suspend fun send(
         chatId: String,
         text: String,
         effect: MessageEffect,
         replyToId: String?,
+        attachments: List<Attachment>,
     ) {
         val msg = Message(
             id = UUID.randomUUID().toString(),
@@ -82,6 +104,7 @@ class MockBackend : MessagingBackend {
             deliveryState = DeliveryState.SENDING,
             effect = effect,
             replyToId = replyToId,
+            attachments = attachments,
         )
         _messages.value = _messages.value + msg
         touchChat(chatId, msg)

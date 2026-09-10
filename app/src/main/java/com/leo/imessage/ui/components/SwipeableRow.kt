@@ -46,6 +46,8 @@ data class SwipeAction(
 fun SwipeableRow(
     trailingActions: List<SwipeAction>,
     modifier: Modifier = Modifier,
+    /** Revealed by swiping the other way - Pin, in Messages' case. */
+    leadingActions: List<SwipeAction> = emptyList(),
     content: @Composable () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -54,7 +56,9 @@ fun SwipeableRow(
 
     val actionWidth = 78.dp
     val railPx = with(density) { (actionWidth * trailingActions.size).toPx() }
+    val leadingRailPx = with(density) { (actionWidth * leadingActions.size).toPx() }
     val fullSwipePx = railPx * 2.1f
+    val leadingFullSwipePx = leadingRailPx * 2.1f
 
     val offset = remember { Animatable(0f) }
     // Plain holder rather than state: this only debounces the haptic, and
@@ -62,7 +66,31 @@ fun SwipeableRow(
     val passedThreshold = remember { booleanArrayOf(false) }
 
     Box(modifier = modifier) {
-        // Action rail, revealed as the row slides away from it.
+        // Leading rail, revealed by dragging the row to the right.
+        Row(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .fillMaxHeight(),
+        ) {
+            leadingActions.forEach { action ->
+                Box(
+                    Modifier
+                        .width(actionWidth)
+                        .fillMaxHeight()
+                        .background(action.color),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = action.label,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+        }
+
+        // Trailing rail, revealed as the row slides away from it.
         Row(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
@@ -98,7 +126,7 @@ fun SwipeableRow(
                         placeable.placeRelative(IntOffset(offset.value.roundToInt(), 0))
                     }
                 }
-                .pointerInput(trailingActions) {
+                .pointerInput(trailingActions, leadingActions) {
                     detectHorizontalDragGestures(
                         onDragEnd = {
                             scope.launch {
@@ -107,7 +135,12 @@ fun SwipeableRow(
                                         trailingActions.firstOrNull()?.onClick?.invoke()
                                         0f
                                     }
+                                    offset.value > leadingFullSwipePx -> {
+                                        leadingActions.firstOrNull()?.onClick?.invoke()
+                                        0f
+                                    }
                                     -offset.value > railPx * 0.5f -> -railPx
+                                    offset.value > leadingRailPx * 0.5f -> leadingRailPx
                                     else -> 0f
                                 }
                                 passedThreshold[0] = false
@@ -120,17 +153,20 @@ fun SwipeableRow(
                     ) { _, dragAmount ->
                         scope.launch {
                             val raw = offset.value + dragAmount
-                            // Rubber-band once dragged past the rail, and once
-                            // past the full-swipe point, so it never feels loose.
-                            val next = if (raw < -railPx) {
-                                -railPx + (raw + railPx) * 0.45f
-                            } else {
-                                raw.coerceAtMost(0f)
+                            // Rubber-band once dragged past either rail, and
+                            // again past the full-swipe point, so the row
+                            // never feels like it came loose.
+                            val next = when {
+                                raw < -railPx -> -railPx + (raw + railPx) * 0.45f
+                                raw > leadingRailPx -> leadingRailPx + (raw - leadingRailPx) * 0.45f
+                                else -> raw
                             }
-                            if (-next > fullSwipePx && !passedThreshold[0]) {
+                            val pastFull = -next > fullSwipePx ||
+                                (leadingActions.isNotEmpty() && next > leadingFullSwipePx)
+                            if (pastFull && !passedThreshold[0]) {
                                 passedThreshold[0] = true
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            } else if (-next < fullSwipePx) {
+                            } else if (!pastFull) {
                                 passedThreshold[0] = false
                             }
                             offset.snapTo(next)
