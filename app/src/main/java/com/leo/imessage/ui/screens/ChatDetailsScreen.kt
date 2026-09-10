@@ -98,7 +98,8 @@ fun ChatDetailsScreen(
                 )
                 if (!chat.isGroup) {
                     Text(
-                        text = chat.participants.first().handle,
+                        // Raw handles carry a mailto:/tel: scheme nobody wants to read.
+                        text = com.leo.imessage.data.Handles.display(chat.participants.first().handle),
                         style = MaterialTheme.typography.bodyMedium,
                         color = palette.secondaryLabel,
                     )
@@ -135,7 +136,7 @@ fun ChatDetailsScreen(
                                 color = palette.label,
                             )
                             Text(
-                                contact.handle,
+                                com.leo.imessage.data.Handles.display(contact.handle),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = palette.secondaryLabel,
                             )

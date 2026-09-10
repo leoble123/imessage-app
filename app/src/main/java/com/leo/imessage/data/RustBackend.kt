@@ -132,6 +132,15 @@ class RustBackend(
      * a second start.
      */
     suspend fun start() {
+        // Clears out conversations left by that bug. They can neither send nor
+        // receive, so there is nothing to preserve - and one sitting in the
+        // list looks like a real thread that has simply stopped working.
+        mutate { chats, messages ->
+            val broken = chats.filter { it.participants.isEmpty() }.map { it.id }.toSet()
+            if (broken.isEmpty()) return@mutate chats to messages
+            Log.i(TAG, "removing ${broken.size} conversation(s) with no participants")
+            chats.filterNot { it.id in broken } to messages.filterNot { it.chatId in broken }
+        }
         core.start(Listener())
         myHandles = runCatching { core.handles() }.getOrNull()?.all.orEmpty()
         myHandle = myHandles.firstOrNull()
@@ -149,6 +158,14 @@ class RustBackend(
         attachments: List<Attachment>,
     ) {
         val chat = _chats.value.firstOrNull { it.id == chatId } ?: return
+        // A conversation with nobody in it can't be sent to. This used to be
+        // reachable: a message addressed only to your own handle had that
+        // handle filtered out as "us", leaving a participant-less thread that
+        // accepted messages and delivered them nowhere.
+        if (chat.sendTargets().isEmpty()) {
+            Log.e(TAG, "refusing to send to a conversation with no participants")
+            return
+        }
         val localId = UUID.randomUUID().toString()
 
         // The bubble appears before the network is touched. Waiting on the
@@ -523,13 +540,8 @@ class RustBackend(
 
     private suspend fun handle(event: IncomingEvent) {
         val fromMe = event.sender != null && event.sender in myHandles
-        val chatId = Handles.chatId(
-            // Our own handle is a participant on the wire but not a person in
-            // the conversation; leaving it in would make every one-to-one chat
-            // look like a two-person group.
-            participants = event.conversation.participants.filterNot { it in myHandles },
-            groupGuid = event.conversation.senderGuid,
-        )
+        val people = participantsOf(event)
+        val chatId = Handles.chatId(people, event.conversation.senderGuid)
 
         when (val kind = event.kind) {
             is EventKind.Text -> {
@@ -632,11 +644,25 @@ class RustBackend(
         }
     }
 
+    /**
+     * Who a conversation is with, from a message's participant list.
+     *
+     * Our own handle is on the wire but isn't a person in the conversation -
+     * leaving it in would make every one-to-one chat look like a two-person
+     * group. The exception is a message to yourself, which carries only your
+     * own handle: filtering there leaves nothing at all, and an empty list
+     * produces a conversation key that matches no real thread, so the message
+     * lands in a phantom chat and never appears where you're looking.
+     */
+    private fun participantsOf(event: IncomingEvent): List<String> {
+        val everyone = event.conversation.participants.map(Handles::normalize).distinct()
+        val others = everyone.filterNot { it in myHandles }
+        return others.ifEmpty { everyone.take(1) }
+    }
+
     private suspend fun ensureChat(chatId: String, event: IncomingEvent) {
         if (_chats.value.any { it.id == chatId }) return
-        val participants = event.conversation.participants
-            .filterNot { it in myHandles }
-            .map { contactFor(it) }
+        val participants = participantsOf(event).map { contactFor(it) }
         mutate { chats, messages ->
             chats + Chat(
                 id = chatId,
