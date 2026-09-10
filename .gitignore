@@ -8,3 +8,7 @@ captures/
 .externalNativeBuild
 .cxx
 target/
+vendor/
+rust-core/target/
+rust-core/.cargo/
+app/src/main/jniLibs/

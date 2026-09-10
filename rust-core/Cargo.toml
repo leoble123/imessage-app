@@ -15,7 +15,16 @@ crate-type = ["cdylib", "staticlib", "lib"]
 # upstream (panic!("Not supported with binary!")). We exclusively use the
 # RelayConfig path instead, which forwards validation-data requests to our
 # own relay server - fully implemented, no stub involved.
-rustpush = { git = "https://github.com/TaeHagen/rustpush", default-features = false }
+# default-features = false drops "macos-validation-data" and the
+# open-absinthe crate behind it, which is an unimplemented stub upstream
+# (panic!("Not supported with binary!")) - the exact wall a self-built client
+# hits when it tries to generate validation data locally.
+#
+# remote-anisette-v3 is the replacement, and the whole reason this can work:
+# it takes the anisette/validation-data problem off the device entirely and
+# asks a relay server for it instead. That's the path OpenBubbles itself
+# uses, and it's what the relay already running on your VM answers.
+rustpush = { path = "../vendor/rustpush", default-features = false, features = ["remote-anisette-v3"] }
 uniffi = { version = "0.28", features = ["tokio"] }
 tokio = { version = "1", features = ["rt-multi-thread"] }
 anyhow = "1.0"

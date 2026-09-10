@@ -42,6 +42,15 @@ android {
         compose = true
     }
 
+    sourceSets {
+        getByName("main") {
+            // The cross-compiled Rust core lands here; UniFFI's generated
+            // Kotlin bindings sit alongside the hand-written sources.
+            jniLibs.srcDirs("src/main/jniLibs")
+            java.srcDirs("src/main/java", "build/generated/uniffi")
+        }
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -70,6 +79,9 @@ dependencies {
 
     // Real backdrop blur - Compose has no native backdrop-filter.
     implementation("dev.chrisbanes.haze:haze:1.2.2")
+
+    // UniFFI's Kotlin bindings call into the Rust core through JNA.
+    implementation("net.java.dev.jna:jna:5.15.0@aar")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
