@@ -62,6 +62,7 @@ import com.leo.imessage.ui.components.GlassSurface
 import com.leo.imessage.ui.components.glassSource
 import dev.chrisbanes.haze.HazeState
 import com.leo.imessage.ui.components.GroupAvatar
+import com.leo.imessage.ui.components.ConversationNavBar
 import com.leo.imessage.ui.components.MessageBubble
 import com.leo.imessage.ui.components.MessageInputBar
 import com.leo.imessage.ui.components.TypingIndicator
@@ -109,6 +110,7 @@ fun buildRows(messages: List<Message>, isGroup: Boolean): List<MessageRow> {
             showTimestampHeader = prev == null || msg.timestamp - prev.timestamp > headerGapMs,
             showSenderName = isGroup && !msg.isFromMe && !samePrev,
             showDeliveryReceipt = i == lastReceiptIndex,
+            showAvatar = isGroup && !msg.isFromMe && !sameNext,
         )
     }
 }
@@ -217,6 +219,7 @@ fun ConversationScreen(
                 ) {
                     MessageBubble(
                         row = row,
+                        sender = chat.participants.firstOrNull { it.id == row.message.senderId },
                         senderName = senderName,
                         onLongPress = { menuFor = row },
                         timestampReveal = stampReveal.value,
@@ -244,54 +247,13 @@ fun ConversationScreen(
             )
         }
 
-        // Nav bar with the contact's avatar, as in Messages.
-        GlassSurface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.TopCenter),
+        ConversationNavBar(
+            chat = chat,
             hazeState = hazeState,
-            hairlineAtBottom = true,
-        ) {
-            Row(
-                Modifier
-                    .statusBarsPadding()
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Row(
-                    Modifier.clickable { onBack() }.padding(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = "Back",
-                        tint = palette.accent,
-                        modifier = Modifier.size(30.dp),
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.clickable { onOpenDetails() },
-                ) {
-                    if (chat.isGroup) {
-                        GroupAvatar(chat.participants, 34.dp)
-                    } else {
-                        Avatar(chat.participants.first(), 34.dp)
-                    }
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = chat.displayName.substringBefore(' '),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = palette.label,
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                Spacer(Modifier.width(38.dp))
-            }
-        }
-
+            onBack = onBack,
+            onOpenDetails = onOpenDetails,
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
 
         val focused = menuFor
         com.leo.imessage.ui.components.MessageContextMenu(

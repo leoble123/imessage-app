@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,6 +21,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Icon
@@ -88,14 +90,10 @@ fun ChatListScreen(
             state = listState,
             modifier = Modifier.fillMaxSize().glassSource(hazeState),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                top = 108.dp,
-                bottom = 24.dp,
+                top = 100.dp,
+                bottom = 88.dp,
             ),
         ) {
-            item(key = "search") {
-                SearchField(query = query, onQueryChange = { query = it })
-            }
-
             val pinned = visibleChats.filter { it.isPinned }
             val rest = visibleChats.filterNot { it.isPinned }
 
@@ -132,6 +130,43 @@ fun ChatListScreen(
             }
         }
 
+        // Search and compose live at the bottom, within thumb reach.
+        GlassSurface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter),
+            hazeState = hazeState,
+            hairlineAtTop = true,
+        ) {
+            Row(
+                Modifier
+                    .navigationBarsPadding()
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f)) {
+                    SearchField(query = query, onQueryChange = { query = it })
+                }
+                Spacer(Modifier.width(10.dp))
+                Box(
+                    Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(palette.fieldBackground)
+                        .clickable { onCompose() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Outlined.Edit,
+                        contentDescription = "New message",
+                        tint = palette.accent,
+                        modifier = Modifier.size(19.dp),
+                    )
+                }
+            }
+        }
+
         // Nav bar
         GlassSurface(
             modifier = Modifier
@@ -156,10 +191,10 @@ fun ChatListScreen(
                     )
                     Spacer(Modifier.weight(1f))
                     Icon(
-                        Icons.Outlined.Edit,
-                        contentDescription = "New message",
+                        Icons.Filled.FilterList,
+                        contentDescription = "Filter",
                         tint = palette.accent,
-                        modifier = Modifier.size(24.dp).clickable { onCompose() },
+                        modifier = Modifier.size(22.dp),
                     )
                 }
                 Text(
@@ -178,9 +213,8 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
     val palette = LocalPalette.current
     Row(
         Modifier
-            .padding(horizontal = 16.dp, vertical = 6.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(palette.fieldBackground)
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

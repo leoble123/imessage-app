@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -56,6 +58,7 @@ private val seenMessages = mutableSetOf<String>()
 fun MessageBubble(
     row: MessageRow,
     senderName: String?,
+    sender: com.leo.imessage.data.Contact? = null,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
     /** 0..1 - how far the swipe-for-timestamps gesture has been dragged. */
@@ -70,6 +73,7 @@ fun MessageBubble(
     // Entry animation: a newly-arrived bubble springs up from the composer.
     // Messages already on screen when the thread opened must not animate, or
     // every scroll turns into a parade of bubbles flying in.
+    val needsGutter = row.showAvatar || row.showSenderName
     val isNew = remember(msg.id) { msg.id !in seenMessages }
     val entry = remember(msg.id) { androidx.compose.animation.core.Animatable(if (isNew) 0f else 1f) }
     LaunchedEffect(msg.id) {
@@ -103,9 +107,21 @@ fun MessageBubble(
                   },
           )
       }
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Bottom,
+      ) {
+        // Avatar gutter for group threads: reserved even when empty, so a run
+        // of bubbles stays aligned instead of stepping in and out.
+        if (row.showSenderName || row.showAvatar || (sender != null && !outgoing && needsGutter)) {
+            Box(Modifier.size(28.dp), contentAlignment = Alignment.BottomCenter) {
+                if (row.showAvatar && sender != null) Avatar(sender, 28.dp)
+            }
+            Spacer(Modifier.width(6.dp))
+        }
       Column(
         modifier = Modifier
-            .fillMaxWidth()
+            .weight(1f)
             .graphicsLayer {
                 translationX = -64.dp.toPx() * timestampReveal
                 // Springs up and scales out from the composer's corner.
@@ -229,6 +245,7 @@ fun MessageBubble(
         if (row.showDeliveryReceipt && outgoing) {
             DeliveryReceipt(msg)
         }
+      }
       }
     }
 }

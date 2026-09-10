@@ -100,4 +100,6 @@ data class MessageRow(
     val showSenderName: Boolean,
     /** Only the final delivered/read message in a thread shows its receipt. */
     val showDeliveryReceipt: Boolean,
+    /** Group threads show the sender's avatar beside the last bubble of a run. */
+    val showAvatar: Boolean = false,
 )
