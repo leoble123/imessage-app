@@ -57,12 +57,13 @@ fun ConversationNavBar(
 ) {
     val palette = LocalPalette.current
 
-    GlassSurface(
+    // No bar. Each control is its own piece of glass floating over the
+    // thread, which is the point of a real backdrop blur: a full-width slab
+    // hides the wallpaper behind an opaque-looking band and throws away the
+    // depth the blur was there to create. Floating them lets the
+    // conversation and the wallpaper run edge to edge underneath.
+    Box(
         modifier = modifier.fillMaxWidth(),
-        hazeState = hazeState,
-        tintAlpha = 0.42f,
-        blurRadius = 40,
-        darkBase = darkBase,
     ) {
         Box(
             Modifier
@@ -72,6 +73,8 @@ fun ConversationNavBar(
         ) {
             CircleGlassButton(
                 onClick = onBack,
+                hazeState = hazeState,
+                darkBase = darkBase,
                 modifier = Modifier.align(Alignment.TopStart),
             ) {
                 Chevron(
@@ -96,11 +99,13 @@ fun ConversationNavBar(
                     Avatar(chat.participants.first(), 42.dp)
                 }
                 Spacer(Modifier.height(3.dp))
+                GlassPill(
+                    modifier = Modifier.clip(RoundedCornerShape(11.dp)),
+                    hazeState = hazeState,
+                    darkBase = darkBase,
+                ) {
                 Row(
-                    Modifier
-                        .clip(RoundedCornerShape(11.dp))
-                        .background(palette.fieldBackground.copy(alpha = 0.75f))
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
@@ -117,10 +122,13 @@ fun ConversationNavBar(
                         modifier = Modifier.size(9.dp),
                     )
                 }
+                }
             }
 
             CircleGlassButton(
                 onClick = onFaceTime,
+                hazeState = hazeState,
+                darkBase = darkBase,
                 modifier = Modifier.align(Alignment.TopEnd),
             ) {
                 VideoIcon(color = palette.accent, modifier = Modifier.size(19.dp))
@@ -133,17 +141,17 @@ fun ConversationNavBar(
 private fun CircleGlassButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    hazeState: HazeState? = null,
+    darkBase: Boolean? = null,
     content: @Composable () -> Unit,
 ) {
-    val palette = LocalPalette.current
     var pressed by remember { mutableStateOf(false) }
     val scale = pressScale(pressed, pressedScale = 0.9f, label = "navButtonPress")
-    Box(
-        modifier
+    GlassPill(
+        modifier = modifier
             .size(34.dp)
             .scaleFrom(scale)
             .clip(CircleShape)
-            .background(palette.fieldBackground.copy(alpha = 0.8f))
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
@@ -154,9 +162,11 @@ private fun CircleGlassButton(
                     onTap = { onClick() },
                 )
             },
-        contentAlignment = Alignment.Center,
-        content = { content() },
-    )
+        hazeState = hazeState,
+        darkBase = darkBase,
+    ) {
+        Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) { content() }
+    }
 }
 
 @Composable

@@ -57,5 +57,8 @@ interface MessagingBackend {
 
     suspend fun markRead(chatId: String)
 
+    /** Puts the unread dot back, the way Messages' Mark as Unread does. */
+    suspend fun markUnread(chatId: String)
+
     suspend fun setTyping(chatId: String, typing: Boolean)
 }

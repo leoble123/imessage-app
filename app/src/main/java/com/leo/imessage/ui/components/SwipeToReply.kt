@@ -44,7 +44,7 @@ fun SwipeToReply(
     content: @Composable () -> Unit,
 ) {
     val palette = LocalPalette.current
-    val haptics = LocalHapticFeedback.current
+    val haptics = com.leo.imessage.ui.components.rememberHaptics()
     val scope = rememberCoroutineScope()
 
     val offset = remember { Animatable(0f) }

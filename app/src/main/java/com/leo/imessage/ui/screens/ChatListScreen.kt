@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -67,6 +68,7 @@ fun ChatListScreen(
     onSetPinned: (String, Boolean) -> Unit = { _, _ -> },
     onSetMuted: (String, Boolean) -> Unit = { _, _ -> },
     onDeleteChat: (String) -> Unit = {},
+    onMarkUnread: (String) -> Unit = {},
 ) {
     val palette = LocalPalette.current
     val listState = rememberLazyListState()
@@ -75,7 +77,7 @@ fun ChatListScreen(
     var unreadOnly by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
     val selected = remember { androidx.compose.runtime.mutableStateListOf<String>() }
-    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val haptics = com.leo.imessage.ui.components.rememberHaptics()
     val density = androidx.compose.ui.platform.LocalDensity.current
     var topBarHeight by remember { androidx.compose.runtime.mutableStateOf(0.dp) }
     var bottomBarHeight by remember { androidx.compose.runtime.mutableStateOf(0.dp) }
@@ -140,6 +142,7 @@ fun ChatListScreen(
                     onSetPinned = onSetPinned,
                     onSetMuted = onSetMuted,
                     onDeleteChat = onDeleteChat,
+                    onMarkUnread = onMarkUnread,
                 )
             }
             if (pinned.isNotEmpty() && rest.isNotEmpty()) {
@@ -163,6 +166,7 @@ fun ChatListScreen(
                     onSetPinned = onSetPinned,
                     onSetMuted = onSetMuted,
                     onDeleteChat = onDeleteChat,
+                    onMarkUnread = onMarkUnread,
                 )
             }
         }
@@ -222,6 +226,15 @@ fun ChatListScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Icon(
+                        androidx.compose.material.icons.Icons.Outlined.Settings,
+                        contentDescription = "Settings",
+                        tint = palette.accent,
+                        modifier = Modifier
+                            .size(23.dp)
+                            .clickable { onOpenSettings() },
+                    )
+                    Spacer(Modifier.width(16.dp))
                     Text(
                         text = if (editing) "Done" else "Edit",
                         style = MaterialTheme.typography.bodyLarge,
@@ -333,6 +346,7 @@ private fun ChatRow(
     onSetPinned: (String, Boolean) -> Unit = { _, _ -> },
     onSetMuted: (String, Boolean) -> Unit = { _, _ -> },
     onDeleteChat: (String) -> Unit = {},
+    onMarkUnread: (String) -> Unit = {},
 ) {
     val palette = LocalPalette.current
 
@@ -355,6 +369,7 @@ private fun ChatRow(
         ),
         trailingActions = listOf(
             SwipeAction("Delete", AppleColors.Red) { onDeleteChat(chat.id) },
+            SwipeAction("Mark\nUnread", AppleColors.Blue) { onMarkUnread(chat.id) },
             SwipeAction(
                 if (chat.isMuted) "Unhide\nAlerts" else "Hide\nAlerts",
                 AppleColors.Indigo,
@@ -451,7 +466,8 @@ private fun ChatRow(
                 }
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = chat.lastMessage?.previewText().orEmpty(),
+                    text = if (chat.isTyping) "typing…"
+                        else chat.lastMessage?.previewText().orEmpty(),
                     style = MaterialTheme.typography.bodyMedium,
                     color = palette.secondaryLabel,
                     maxLines = 2,

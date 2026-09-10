@@ -49,6 +49,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.layout.ime
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.TextStyle
@@ -152,6 +154,7 @@ fun ConversationScreen(
     onOpenDetails: () -> Unit = {},
     onEdit: (String, String) -> Unit = { _, _ -> },
     onDelete: (String) -> Unit = {},
+    onMarkRead: () -> Unit = {},
     onFaceTime: () -> Unit = {},
     backgroundId: String = "none",
 ) {
@@ -174,18 +177,24 @@ fun ConversationScreen(
     var threadRoot by remember { mutableStateOf<Message?>(null) }
     // The attachment currently open full screen, if any.
     var viewing by remember { mutableStateOf<com.leo.imessage.data.Attachment?>(null) }
+    // The message whose details sheet is open, if any.
+    var infoFor by remember { mutableStateOf<Message?>(null) }
     val composerFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     androidx.activity.compose.BackHandler(
-        enabled = threadRoot != null || menuFor != null || viewing != null
+        enabled = threadRoot != null || menuFor != null || viewing != null || infoFor != null
     ) {
         when {
             viewing != null -> viewing = null
+            infoFor != null -> infoFor = null
             menuFor != null -> menuFor = null
             else -> threadRoot = null
         }
     }
+
+    // Opening a thread clears its unread badge.
+    LaunchedEffect(chat.id) { onMarkRead() }
 
     // Swipe the thread left to uncover per-message timestamps.
     val stampReveal = remember { androidx.compose.animation.core.Animatable(0f) }
@@ -210,25 +219,35 @@ fun ConversationScreen(
     com.leo.imessage.ui.components.ScrollWithKeyboard(listState)
 
     val background = com.leo.imessage.ui.theme.backgroundById(backgroundId)
-    Box(
-        Modifier
-            .fillMaxSize()
-            .then(
-                background.brush?.let { Modifier.background(it) }
-                    ?: Modifier.background(palette.background)
-            )
-    ) {
-        Column(
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    // Both shells float over the transcript now, so the list has to reserve
+    // room for them itself rather than being squeezed between two bars.
+    var navBarHeight by remember { mutableStateOf(104.dp) }
+    var composerHeight by remember { mutableStateOf(56.dp) }
+
+    Box(Modifier.fillMaxSize()) {
+        // The wallpaper and the transcript are one blur source together. If
+        // only the messages were sampled, the floating glass would find
+        // nothing behind it in the empty half of the screen and fall back to
+        // flat tint - a dark capsule sitting on a purple wallpaper, which is
+        // exactly the "cheap bar" look the glass is meant to replace.
+        Box(
             Modifier
                 .fillMaxSize()
-                .imePadding()
-        ) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
                 .glassSource(hazeState)
+        ) {
+            com.leo.imessage.ui.components.ChatWallpaper(background)
+
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    // Layout-phase inset, deliberately: reading the IME
+                    // height in composition instead would recompose this
+                    // whole screen on every frame of the keyboard animation.
+                    // The wallpaper behind is a sibling and keeps the full
+                    // screen, so nothing about the background moves.
+                    .imePadding()
                 .dragToToggleKeyboard()
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures(
@@ -246,7 +265,12 @@ fun ConversationScreen(
                         }
                     }
                 },
-            contentPadding = PaddingValues(top = 104.dp, bottom = 8.dp, start = 12.dp, end = 12.dp),
+            contentPadding = PaddingValues(
+                top = navBarHeight + 6.dp,
+                bottom = composerHeight + 8.dp,
+                start = 12.dp,
+                end = 12.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             items(rows, key = { it.message.id }) { row ->
@@ -308,9 +332,10 @@ fun ConversationScreen(
                     }
                 }
             }
+            }
         }
 
-            MessageInputBar(
+        MessageInputBar(
                 onSend = { text, effect, attachments -> onSend(text, effect, null, attachments) },
                 hazeState = hazeState,
                 darkBase = if (background.brush != null) background.isDark else null,
@@ -321,8 +346,13 @@ fun ConversationScreen(
                     editingMessage?.let { onEdit(it.id, newText) }
                     editingMessage = null
                 },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .imePadding()
+                    .onSizeChanged {
+                        composerHeight = with(density) { it.height.toDp() }
+                    },
             )
-        }
 
         ConversationNavBar(
             chat = chat,
@@ -331,8 +361,40 @@ fun ConversationScreen(
             onBack = onBack,
             onOpenDetails = onOpenDetails,
             onFaceTime = onFaceTime,
-            modifier = Modifier.align(Alignment.TopCenter),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .onSizeChanged { navBarHeight = with(density) { it.height.toDp() } },
         )
+
+        // Jump-to-latest, the way Messages shows one once you've scrolled up.
+        val awayFromBottom by remember {
+            androidx.compose.runtime.derivedStateOf {
+                val info = listState.layoutInfo
+                val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+                info.totalItemsCount - last > 3
+            }
+        }
+        com.leo.imessage.ui.components.JumpToLatest(
+            visible = awayFromBottom,
+            hazeState = hazeState,
+            darkBase = if (background.brush != null) background.isDark else null,
+            onClick = {
+                scope.launch {
+                    if (rows.isNotEmpty()) listState.animateScrollToItem(rows.lastIndex)
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 18.dp, bottom = composerHeight + 12.dp),
+        )
+
+        infoFor?.let { message ->
+            com.leo.imessage.ui.components.MessageInfoSheet(
+                message = message,
+                chat = chat,
+                onDismiss = { infoFor = null },
+            )
+        }
 
         // Re-resolved from the live list each frame, so a tapback or an edit
         // made while the thread is open shows up in it.

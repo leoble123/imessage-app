@@ -66,6 +66,12 @@ class MockBackend : MessagingBackend {
         }
     }
 
+    override suspend fun markUnread(chatId: String) {
+        _chats.value = _chats.value.map {
+            if (it.id == chatId) it.copy(unreadCount = maxOf(it.unreadCount, 1)) else it
+        }
+    }
+
     override suspend fun setPinned(chatId: String, pinned: Boolean) {
         _chats.value = _chats.value.map {
             if (it.id == chatId) it.copy(isPinned = pinned) else it

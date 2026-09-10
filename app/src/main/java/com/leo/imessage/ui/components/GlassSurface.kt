@@ -119,18 +119,36 @@ fun GlassPill(
     val state = hazeState ?: LocalHazeState.current
     val base = if (darkBase ?: palette.isDark) Color.Black else Color.White
 
+    val dark = darkBase ?: palette.isDark
+
     Box(
         modifier = modifier.hazeChild(
             state = state,
             style = HazeStyle(
                 backgroundColor = base,
                 tints = listOf(HazeTint(base.copy(alpha = 0.42f))),
-                blurRadius = 24.dp,
+                blurRadius = 26.dp,
                 noiseFactor = 0.05f,
             ),
         ),
-        content = content,
-    )
+    ) {
+        // A floating pane needs its own edge. Pinned to a screen edge a bar
+        // borrows one from the frame; hovering over content it has nothing,
+        // and without a rim it reads as a smudge rather than as glass.
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.White.copy(alpha = if (dark) 0.10f else 0.24f),
+                            Color.White.copy(alpha = 0f),
+                        )
+                    )
+                )
+        )
+        content()
+    }
 }
 
 @Composable

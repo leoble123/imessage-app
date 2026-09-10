@@ -98,7 +98,7 @@ fun SettingsToggle(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     val palette = LocalPalette.current
-    val haptics = LocalHapticFeedback.current
+    val haptics = com.leo.imessage.ui.components.rememberHaptics()
     Row(
         Modifier
             .fillMaxWidth()

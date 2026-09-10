@@ -260,10 +260,20 @@ private fun BackgroundPicker(
                             shape = RoundedCornerShape(10.dp),
                         )
                         .clickable { onSelect(bg.id) },
-                )
+                    contentAlignment = Alignment.Center,
+                ) {
+                    // The swatch runs the real thing, so a dynamic background
+                    // is obviously moving before you commit to it.
+                    if (bg.isDynamic) {
+                        com.leo.imessage.ui.components.ChatWallpaper(
+                            background = bg,
+                            modifier = Modifier.matchParentSize(),
+                        )
+                    }
+                }
                 Spacer(Modifier.height(5.dp))
                 Text(
-                    bg.name,
+                    if (bg.isDynamic) "${bg.name} ✦" else bg.name,
                     style = MaterialTheme.typography.labelSmall,
                     color = if (selected) palette.accent else palette.secondaryLabel,
                 )

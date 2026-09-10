@@ -69,7 +69,7 @@ fun TapbackRail(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalPalette.current
-    val haptics = LocalHapticFeedback.current
+    val haptics = com.leo.imessage.ui.components.rememberHaptics()
     var expanded by remember { mutableStateOf(false) }
 
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {

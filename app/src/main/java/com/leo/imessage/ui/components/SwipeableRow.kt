@@ -52,7 +52,7 @@ fun SwipeableRow(
 ) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    val haptics = LocalHapticFeedback.current
+    val haptics = com.leo.imessage.ui.components.rememberHaptics()
 
     val actionWidth = 78.dp
     val railPx = with(density) { (actionWidth * trailingActions.size).toPx() }

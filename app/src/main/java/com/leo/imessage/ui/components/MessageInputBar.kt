@@ -84,7 +84,8 @@ fun MessageInputBar(
     autoFocus: Boolean = false,
 ) {
     val palette = LocalPalette.current
-    val haptics = LocalHapticFeedback.current
+    val settings = com.leo.imessage.ui.theme.LocalSettings.current
+    val haptics = com.leo.imessage.ui.components.rememberHaptics()
     var text by remember { mutableStateOf("") }
     val ownFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val focus = focusRequester ?: ownFocus
@@ -140,14 +141,34 @@ fun MessageInputBar(
         )
     }
 
+    // A floating capsule rather than a bar welded to the bottom edge: the
+    // transcript runs underneath it and blurs through, which is the entire
+    // reason for using a real backdrop blur instead of a tinted fill.
     GlassSurface(
         modifier = modifier
             .fillMaxWidth()
-            .navigationBarsPadding(),
+            .navigationBarsPadding()
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(26.dp)),
         hazeState = hazeState,
+        tintAlpha = 0.5f,
+        blurRadius = 36,
         darkBase = darkBase,
-        hairlineAtTop = true,
     ) {
+        Box(
+            Modifier
+                .matchParentSize()
+                .border(
+                    0.9.dp,
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(
+                            Color.White.copy(alpha = if (darkBase == false) 0.5f else 0.22f),
+                            Color.White.copy(alpha = 0.05f),
+                        )
+                    ),
+                    RoundedCornerShape(26.dp),
+                )
+        )
         // Height changes - the edit banner arriving, the field growing as
         // text wraps - flow instead of snapping.
         Column(
@@ -210,7 +231,7 @@ fun MessageInputBar(
                 Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(20.dp))
-                    .border(1.dp, palette.separator, RoundedCornerShape(20.dp))
+                    .border(1.dp, palette.separator.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
                     .padding(start = 13.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
@@ -234,6 +255,27 @@ fun MessageInputBar(
                         modifier = Modifier.fillMaxWidth().focusRequester(focus),
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = palette.label),
                         cursorBrush = SolidColor(palette.accent),
+                        // Honours the Send with Return Key setting: with it
+                        // off, Return inserts a newline as it should.
+                        singleLine = false,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = if (settings.sendWithReturn) {
+                                androidx.compose.ui.text.input.ImeAction.Send
+                            } else {
+                                androidx.compose.ui.text.input.ImeAction.Default
+                            },
+                            capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Sentences,
+                        ),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onSend = {
+                                if (editing != null) {
+                                    onCommitEdit(text.trim())
+                                    text = ""
+                                } else {
+                                    commit(pendingEffect)
+                                }
+                            },
+                        ),
                     )
                 }
 

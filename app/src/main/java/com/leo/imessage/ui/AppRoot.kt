@@ -60,7 +60,7 @@ fun AppRoot(backend: MessagingBackend) {
 
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    val haptics = LocalHapticFeedback.current
+    val haptics = com.leo.imessage.ui.components.rememberHaptics()
     val context = androidx.compose.ui.platform.LocalContext.current
     val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
 
@@ -99,6 +99,7 @@ fun AppRoot(backend: MessagingBackend) {
                 onOpenSettings = { showSettings = true },
                 onCompose = { showCompose = true },
                 onSetPinned = { id, pinned -> scope.launch { backend.setPinned(id, pinned) } },
+                onMarkUnread = { id -> scope.launch { backend.markUnread(id) } },
                 onSetMuted = { id, muted -> scope.launch { backend.setMuted(id, muted) } },
                 onDeleteChat = { id ->
                     scope.launch {
@@ -150,6 +151,7 @@ fun AppRoot(backend: MessagingBackend) {
                         onUnsend = { messageId ->
                             scope.launch { backend.unsend(messageId) }
                         },
+                        onMarkRead = { scope.launch { backend.markRead(chat.id) } },
                         onOpenDetails = { showDetails = true },
                         onDelete = { messageId -> scope.launch { backend.delete(messageId) } },
                         onFaceTime = {

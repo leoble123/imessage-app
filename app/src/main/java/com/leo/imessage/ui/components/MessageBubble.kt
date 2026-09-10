@@ -93,7 +93,7 @@ fun MessageBubble(
     val settings = com.leo.imessage.ui.theme.LocalSettings.current
     val msg = row.message
     val outgoing = msg.isFromMe
-    val haptics = LocalHapticFeedback.current
+    val haptics = com.leo.imessage.ui.components.rememberHaptics()
 
     // Entry animation: a newly-arrived bubble springs up from the composer.
     // Messages already on screen when the thread opened must not animate, or
@@ -277,7 +277,42 @@ fun MessageBubble(
                         }
                     }
 
-                    if (msg.text.isNotBlank()) {
+                    val jumbo = msg.text.isNotBlank() &&
+                        msg.attachments.isEmpty() &&
+                        isJumboEmoji(msg.text)
+                    val link = if (jumbo) null else firstLinkIn(msg.text)
+
+                    if (jumbo) {
+                        // No bubble at all, just the emoji at triple size.
+                        Text(
+                            text = msg.text.trim(),
+                            fontSize = 52.sp,
+                            lineHeight = 62.sp,
+                            color = if (outgoing) palette.outgoingText else incomingTextColor,
+                            modifier = Modifier
+                                .graphicsLayer {
+                                    val sc = pressScale.value
+                                    scaleX = sc
+                                    scaleY = sc
+                                }
+                                .bubbleEffect(playedEffect, msg.id)
+                                .pointerInput(msg.id) {
+                                    detectTapGestures(
+                                        onPress = {
+                                            pressed = true
+                                            tryAwaitRelease()
+                                            pressed = false
+                                        },
+                                        onDoubleTap = { onLongPress() },
+                                        onLongPress = {
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onLongPress()
+                                        },
+                                    )
+                                }
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    } else if (msg.text.isNotBlank()) {
                         Box(
                             modifier = Modifier
                                 .bubbleEffect(playedEffect, msg.id)
@@ -300,6 +335,9 @@ fun MessageBubble(
                                             tryAwaitRelease()
                                             pressed = false
                                         },
+                                        // Double-tap opens tapbacks, the same
+                                        // shortcut iOS has.
+                                        onDoubleTap = { onLongPress() },
                                         onLongPress = {
                                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                             onLongPress()
@@ -308,11 +346,21 @@ fun MessageBubble(
                                 }
                                 .padding(horizontal = 14.dp, vertical = 9.dp),
                         ) {
-                            Text(
-                                text = msg.text,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (outgoing) palette.outgoingText else incomingTextColor,
-                            )
+                            Column {
+                                Text(
+                                    text = msg.text,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = if (outgoing) palette.outgoingText else incomingTextColor,
+                                )
+                                if (link != null) {
+                                    LinkPreview(
+                                        url = link,
+                                        outgoing = outgoing,
+                                        textColor = if (outgoing) palette.outgoingText
+                                            else incomingTextColor,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -366,7 +414,7 @@ fun MessageBubble(
 private fun UnsentBubble(msg: Message) {
     val palette = LocalPalette.current
     var revealed by remember { mutableStateOf(false) }
-    val haptics = LocalHapticFeedback.current
+    val haptics = com.leo.imessage.ui.components.rememberHaptics()
 
     Column(horizontalAlignment = if (msg.isFromMe) Alignment.End else Alignment.Start) {
         Row(

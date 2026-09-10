@@ -16,14 +16,26 @@ data class ChatBackground(
      * gets white bars and opaque light bubbles, which looks broken.
      */
     val isDark: Boolean = true,
-)
+    /**
+     * Colours for the slowly drifting light behind a dynamic background.
+     *
+     * Empty means the background is a still gradient. When populated, each
+     * colour becomes a soft blob that orbits on its own period, so the
+     * pattern never visibly loops.
+     */
+    val drift: List<Color> = emptyList(),
+) {
+    val isDynamic: Boolean get() = drift.isNotEmpty()
+}
 
 /**
  * Conversation backgrounds.
  *
- * These are deliberately low-contrast: a thread's job is to make bubbles
- * legible, so anything busy enough to fight the text is worse than plain,
- * however nice it looks in a picker.
+ * The still ones are deliberately low-contrast: a thread's job is to make
+ * bubbles legible, so anything busy enough to fight the text is worse than
+ * plain, however nice it looks in a picker. The dynamic ones get away with
+ * more colour because the motion is slow and out of focus - the eye reads
+ * it as depth rather than as content competing with the message.
  */
 val ChatBackgrounds: List<ChatBackground> = listOf(
     ChatBackground("none", "Default", null, isDark = false),
@@ -53,7 +65,6 @@ val ChatBackgrounds: List<ChatBackground> = listOf(
         Brush.verticalGradient(listOf(Color(0xFFFDF1F3), Color(0xFFF6E2E8))),
         isDark = false,
     ),
-    // Saturated options, so the glass has something worth transmitting.
     ChatBackground(
         "indigo", "Indigo",
         Brush.linearGradient(listOf(Color(0xFF1B1464), Color(0xFF4B1E8C), Color(0xFF0C1A4D))),
@@ -70,6 +81,49 @@ val ChatBackgrounds: List<ChatBackground> = listOf(
         "sorbet", "Sorbet",
         Brush.verticalGradient(listOf(Color(0xFFFFE9C7), Color(0xFFFFC4C4), Color(0xFFE4C6FF))),
         isDark = false,
+    ),
+
+    // --- Dynamic ---
+    ChatBackground(
+        "aurora", "Aurora",
+        Brush.verticalGradient(listOf(Color(0xFF050B14), Color(0xFF0A1A24))),
+        drift = listOf(
+            Color(0xFF1FD1A0),
+            Color(0xFF2E7BFF),
+            Color(0xFF8B44E0),
+            Color(0xFF19B3C9),
+        ),
+    ),
+    ChatBackground(
+        "nebula", "Nebula",
+        Brush.verticalGradient(listOf(Color(0xFF0A0616), Color(0xFF180B2A))),
+        drift = listOf(
+            Color(0xFF7A2BE2),
+            Color(0xFFE0409B),
+            Color(0xFF3A46E0),
+            Color(0xFFFF6B4A),
+        ),
+    ),
+    ChatBackground(
+        "lagoon", "Lagoon",
+        Brush.verticalGradient(listOf(Color(0xFF021018), Color(0xFF06222E))),
+        drift = listOf(
+            Color(0xFF00C2A8),
+            Color(0xFF0E7BC4),
+            Color(0xFF2BE0C6),
+            Color(0xFF1B3FA0),
+        ),
+    ),
+    ChatBackground(
+        "daybreak", "Daybreak",
+        Brush.verticalGradient(listOf(Color(0xFFFFF3E4), Color(0xFFFFE2E8))),
+        isDark = false,
+        drift = listOf(
+            Color(0xFFFFB36B),
+            Color(0xFFFF8FA8),
+            Color(0xFFB6A6FF),
+            Color(0xFF7FD8FF),
+        ),
     ),
 )
 
