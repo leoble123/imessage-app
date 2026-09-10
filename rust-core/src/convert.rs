@@ -171,3 +171,23 @@ pub fn to_call_event(message: &rustpush::facetime::FTMessage) -> Option<crate::t
         | M::LetMeInRequest(_) => return None,
     })
 }
+
+/// The attachment references on a message, with their positions.
+///
+/// Returned as the protocol's own type rather than the app's: the reference
+/// carries the decryption key and location, which the flat record has nowhere
+/// to put, and which fetching the bytes later depends on.
+pub fn attachments_in(msg: &MessageInst) -> Vec<(u32, Attachment)> {
+    let Message::Message(normal) = &msg.message else { return vec![] };
+    normal
+        .parts
+        .0
+        .iter()
+        .filter_map(|p| match &p.part {
+            MessagePart::Attachment(a) => Some(a.clone()),
+            _ => None,
+        })
+        .enumerate()
+        .map(|(i, a)| (i as u32, a))
+        .collect()
+}

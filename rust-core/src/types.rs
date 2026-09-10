@@ -67,6 +67,20 @@ pub struct AttachmentInfo {
     pub local_path: String,
 }
 
+/// A file on its way out.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct OutgoingFile {
+    /// A real filesystem path. Content URIs have to be copied out first -
+    /// the Rust side opens this with the ordinary file API.
+    pub path: String,
+    pub name: String,
+    pub mime_type: String,
+    /// Apple's own type identifier, e.g. `public.jpeg`. Recipients use it to
+    /// decide how to present the file, so a wrong one shows a photo as a
+    /// generic document.
+    pub uti_type: String,
+}
+
 /// Everything the app can be told about a conversation by an incoming message.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct ConversationInfo {

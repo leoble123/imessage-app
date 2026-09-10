@@ -21,6 +21,16 @@ data class AccountSummary(
 
 /** Where the setup flow currently is. */
 sealed interface AccountState {
+    /**
+     * Reconnecting with credentials already on disk.
+     *
+     * This is the launch state whenever there's something saved. Without it
+     * the sign-in screen renders first - synchronously, before the reconnect
+     * has had a chance to run - and flashes away a second later, telling you
+     * to sign in to an account you're already signed into.
+     */
+    data object Restoring : AccountState
+
     /** No relay configured yet - nothing can happen until there is one. */
     data object NeedsRelay : AccountState
 
@@ -84,7 +94,9 @@ class AccountManager(context: Context) {
         get() = (_state.value as? AccountState.Ready)?.backend as? RustBackend
 
     private val _state = MutableStateFlow<AccountState>(
-        if (relayHost.isNullOrBlank()) AccountState.NeedsRelay else AccountState.NeedsSignIn
+        // Anything saved means resume() is about to run, so start quiet rather
+        // than showing a sign-in form that is about to disappear.
+        if (relayHost.isNullOrBlank()) AccountState.NeedsRelay else AccountState.Restoring
     )
     val state: StateFlow<AccountState> = _state.asStateFlow()
 
@@ -104,8 +116,15 @@ class AccountManager(context: Context) {
      * user - a saved registration means sign-in is already done.
      */
     suspend fun resume(): Boolean = withContext(Dispatchers.IO) {
-        val host = relayHost ?: return@withContext false
-        val code = relayCode ?: return@withContext false
+        // Both are written together, so one without the other means the
+        // saved setup is incomplete. Returning early without saying so would
+        // leave the app sitting on the silent Restoring screen forever.
+        val host = relayHost
+        val code = relayCode
+        if (host.isNullOrBlank() || code.isNullOrBlank()) {
+            _state.value = AccountState.NeedsRelay
+            return@withContext false
+        }
         try {
             core.configureRelay(host, code, null)
             if (!core.isRegistered()) {
@@ -258,7 +277,7 @@ class AccountManager(context: Context) {
         // already has names - loading them afterwards makes every thread title
         // visibly change from a number to a name a moment after it appears.
         contacts.load()
-        val backend = RustBackend(core, store, contacts, CallAudio(appContext, core))
+        val backend = RustBackend(core, store, contacts, CallAudio(appContext, core), appContext)
         backend.start()
         _state.value = AccountState.Ready(backend)
     }

@@ -41,6 +41,8 @@ class RustBackend(
     private val contacts: Contacts? = null,
     /** Microphone and earpiece for calls. Null keeps calls signalling-only. */
     private val audio: CallAudio? = null,
+    /** Needed to stage outgoing files and store downloaded ones. */
+    private val context: android.content.Context? = null,
 ) : MessagingBackend {
 
     /**
@@ -56,6 +58,16 @@ class RustBackend(
 
     private val _chats = MutableStateFlow(store.chats)
     private val _messages = MutableStateFlow(store.messages)
+
+    /**
+     * The conversation currently on screen, if any.
+     *
+     * Set by the UI. Without it, a message arriving in the thread you are
+     * reading still raises the unread badge - and nothing clears it, because
+     * the read receipt only fires when you *enter* a conversation.
+     */
+    @Volatile
+    var openChatId: String? = null
 
     /** This account's own handles, filled in once the core is started. */
     @Volatile
@@ -114,15 +126,22 @@ class RustBackend(
 
     override fun messages(chatId: String): Flow<List<Message>> =
         _messages.asStateFlow().map { all ->
-            all.filter { it.chatId == chatId }.sortedBy { it.timestamp }
+            // distinctBy is deliberate belt-and-braces. The transcript keys
+            // its rows by message id, so a duplicate is not a display glitch -
+            // it takes the whole screen down.
+            all.filter { it.chatId == chatId }
+                .distinctBy { it.id }
+                .sortedBy { it.timestamp }
         }
 
     override fun chatsNow(): List<Chat> = sortChats(_chats.value)
 
     override fun messagesNow(chatId: String): List<Message> =
-        _messages.value.filter { it.chatId == chatId }.sortedBy { it.timestamp }
+        _messages.value.filter { it.chatId == chatId }
+            .distinctBy { it.id }
+            .sortedBy { it.timestamp }
 
-    private fun sortChats(list: List<Chat>) = list.sortedWith(
+    private fun sortChats(list: List<Chat>) = list.distinctBy { it.id }.sortedWith(
         compareByDescending<Chat> { it.isPinned }
             .thenByDescending { it.lastMessage?.timestamp ?: 0 }
     )
@@ -142,6 +161,14 @@ class RustBackend(
             chats.filterNot { it.id in broken } to messages.filterNot { it.chatId in broken }
         }
         core.start(Listener())
+
+        // Re-arm anything that was queued when the app last closed. One whose
+        // time has already passed goes immediately - late is closer to what
+        // was asked for than never.
+        _messages.value
+            .filter { it.scheduledFor != null && it.isFromMe }
+            .forEach { armScheduled(it.id, it.scheduledFor!!) }
+
         myHandles = runCatching { core.handles() }.getOrNull()?.all.orEmpty()
         myHandle = myHandles.firstOrNull()
         // So we aren't listed as a participant in our own call.
@@ -187,22 +214,107 @@ class RustBackend(
         append(pending)
 
         try {
-            val guid = core.sendText(
-                participants = chat.sendTargets(),
-                groupName = chat.groupName(),
-                senderGuid = chat.groupGuid(),
-                text = text,
-                replyToId = replyToId,
-                replyToPart = null,
-                effect = effect.wireName(),
-            )
+            // Attachments are uploaded before the message goes out, so this
+            // path is a different call rather than an extra argument. Sending
+            // them through sendText was the bug: the files stayed local and
+            // the recipient got the text alone, with nothing to show it went
+            // wrong.
+            val guid = if (attachments.isEmpty()) {
+                core.sendText(
+                    participants = chat.sendTargets(),
+                    groupName = chat.groupName(),
+                    senderGuid = chat.groupGuid(),
+                    text = text,
+                    replyToId = replyToId,
+                    replyToPart = null,
+                    effect = effect.wireName(),
+                )
+            } else {
+                val staged = stageForSending(attachments)
+                if (staged.isEmpty()) {
+                    throw IllegalStateException("Couldn't read those files.")
+                }
+                core.sendAttachments(
+                    participants = chat.sendTargets(),
+                    groupName = chat.groupName(),
+                    senderGuid = chat.groupGuid(),
+                    text = text,
+                    files = staged,
+                    replyToId = replyToId,
+                    effect = effect.wireName(),
+                )
+            }
             // Adopt the GUID Apple assigned. Tapbacks, edits and unsends all
             // address a message by it, so a local id that never gets replaced
             // produces a message nobody can react to.
             replaceId(localId, guid, DeliveryState.SENT)
-        } catch (e: CoreException) {
+        } catch (e: Exception) {
+            // Not just CoreException: staging a file can fail with an ordinary
+            // IO error, and a message stuck on "sending" forever is worse than
+            // one that says it failed.
             Log.e(TAG, "send failed", e)
             updateMessage(localId) { it.copy(deliveryState = DeliveryState.FAILED) }
+        }
+    }
+
+    /**
+     * Copies picked files somewhere the Rust side can open them.
+     *
+     * Android's content URIs are permission-scoped handles owned by another
+     * app; the protocol code takes a filesystem path, and the grant can be
+     * revoked as soon as the picker closes.
+     */
+    private fun stageForSending(
+        attachments: List<Attachment>,
+    ): List<uniffi.imessage_core.OutgoingFile> {
+        val context = context ?: return emptyList()
+        return attachments.mapNotNull { attachment ->
+            val uri = attachment.uri ?: return@mapNotNull null
+            val staged = AttachmentFiles.stage(
+                context,
+                android.net.Uri.parse(uri),
+                attachment.id,
+            ) ?: return@mapNotNull null
+            uniffi.imessage_core.OutgoingFile(
+                path = staged.path,
+                name = staged.name,
+                mimeType = staged.mimeType,
+                utiType = staged.utiType,
+            )
+        }
+    }
+
+    /**
+     * Fetches a received attachment's bytes and points the message at them.
+     *
+     * Incoming attachments are references until asked for, so this is what
+     * turns a placeholder into a picture.
+     */
+    suspend fun downloadAttachment(messageId: String, attachmentId: String) {
+        val context = context ?: return
+        val message = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val index = message.attachments.indexOfFirst { it.id == attachmentId }
+        if (index < 0) return
+        val attachment = message.attachments[index]
+        if (attachment.uri != null) return
+
+        val target = java.io.File(
+            AttachmentFiles.dir(context),
+            "$messageId-$index-${attachment.fileName}",
+        )
+        try {
+            core.downloadAttachment(messageId, index.toUInt(), target.absolutePath)
+            updateMessage(messageId) { msg ->
+                msg.copy(
+                    attachments = msg.attachments.mapIndexed { i, a ->
+                        if (i == index) a.copy(uri = android.net.Uri.fromFile(target).toString())
+                        else a
+                    }
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "couldn't download ${attachment.fileName}", e)
+            runCatching { target.delete() }
         }
     }
 
@@ -418,6 +530,17 @@ class RustBackend(
                 scheduledFor = at,
             )
         )
+        armScheduled(id, at)
+    }
+
+    /**
+     * Waits out a scheduled send.
+     *
+     * The timer lives only as long as the process, which is why [start] sweeps
+     * the store on launch: closing the app used to cancel a scheduled message
+     * silently, and it would sit in the transcript marked "sending" forever.
+     */
+    private fun armScheduled(id: String, at: Long) {
         scope.launch {
             delay((at - System.currentTimeMillis()).coerceAtLeast(0))
             // Only fire if it's still queued - it may have been sent early or
@@ -569,7 +692,31 @@ class RustBackend(
                         )
                     },
                 )
-                append(message, incrementUnread = !fromMe)
+                val watching = chatId == openChatId
+                append(message, incrementUnread = !fromMe && !watching)
+
+                // A message landing clears the typing bubble - the sender has
+                // finished typing by definition, and iMessage sends no
+                // separate "stopped" for it.
+                if (!fromMe) updateChat(chatId) { it.copy(isTyping = false) }
+
+                // Reading it as it arrives should tell them so, the same as
+                // opening the thread would.
+                if (!fromMe && watching) {
+                    scope.launch { runCatching { markRead(chatId) } }
+                }
+
+                // Fetch the bytes straight away rather than on tap. An
+                // attachment reference is only good while the sender's upload
+                // lives on Apple's servers, so "download it when you look at
+                // it" means the ones you look at late are gone.
+                if (message.attachments.isNotEmpty()) {
+                    scope.launch {
+                        message.attachments.forEach { attachment ->
+                            downloadAttachment(message.id, attachment.id)
+                        }
+                    }
+                }
             }
 
             is EventKind.Tapback -> updateMessage(kind.targetId) { msg ->
@@ -712,10 +859,48 @@ class RustBackend(
         }
     }
 
+    /**
+     * Swaps a locally-minted id for the GUID Apple assigned.
+     *
+     * The collision this guards against is easy to hit and fatal: send a
+     * message, and Apple can fan its own copy back to us before this runs.
+     * The echo is appended under the real GUID, and renaming the local
+     * placeholder to that same GUID then leaves two messages sharing an id -
+     * which the transcript keys by, so it crashes outright.
+     *
+     * The echo is authoritative, so when one is already present the
+     * placeholder is dropped rather than renamed. Local-only fields are
+     * carried across first, since the copy from Apple has never heard of the
+     * bookmark or note you put on it.
+     */
     private suspend fun replaceId(oldId: String, newId: String, state: DeliveryState) {
         mutate { chats, messages ->
-            val updated = messages.map {
-                if (it.id == oldId) it.copy(id = newId, deliveryState = state) else it
+            val local = messages.firstOrNull { it.id == oldId }
+            val existing = messages.firstOrNull { it.id == newId }
+
+            val updated = when {
+                local == null -> messages
+                existing != null -> messages
+                    .filterNot { it.id == oldId }
+                    .map {
+                        if (it.id != newId) it else it.copy(
+                            // Delivery only moves forward, so keep whichever
+                            // of the two got further.
+                            deliveryState = maxOf(it.deliveryState, state),
+                            isBookmarked = it.isBookmarked || local.isBookmarked,
+                            isPinned = it.isPinned || local.isPinned,
+                            note = it.note ?: local.note,
+                            remindAt = it.remindAt ?: local.remindAt,
+                            poll = it.poll ?: local.poll,
+                            // The echo comes back without the local file URIs,
+                            // so a sent photo would otherwise lose its preview.
+                            attachments = if (it.attachments.isEmpty()) local.attachments
+                            else it.attachments,
+                        )
+                    }
+                else -> messages.map {
+                    if (it.id == oldId) it.copy(id = newId, deliveryState = state) else it
+                }
             }
             chats.map { it.withLatest(updated) } to updated
         }

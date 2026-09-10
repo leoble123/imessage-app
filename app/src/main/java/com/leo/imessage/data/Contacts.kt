@@ -41,9 +41,16 @@ class Contacts(private val context: Context) {
         ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) ==
             PackageManager.PERMISSION_GRANTED
 
-    /** Every saved contact that has a number or address, for the picker. */
+    /**
+     * Every saved contact that has a number or address, for the picker.
+     *
+     * Deduplicated by handle, not by name-and-handle. The picker keys its rows
+     * by handle, and one number saved under two names - a person in your
+     * contacts twice, which is common - would otherwise produce two rows with
+     * the same key and take the screen down.
+     */
     fun all(): List<SavedContact> = byHandle.values
-        .distinctBy { it.name + it.handle }
+        .distinctBy { it.handle }
         .sortedBy { it.name.lowercase() }
 
     fun nameFor(handle: String): String? = byHandle[Handles.normalize(handle)]?.name

@@ -32,7 +32,7 @@ use rustpush::{
     APSConnectionResource, ConversationData, IDSNGMIdentity, IDSUser, IMClient,
     LoginDelegate, Message, MessageInst, MessageType, NormalMessage, OSConfig, ReactMessage,
     ReactMessageType, Reaction, RelayConfig, UnsendMessage, EditMessage, MessageParts, PushError,
-    MessagePart, IndexedMessagePart, VerifyBody, MADRID_SERVICE,
+    MessagePart, IndexedMessagePart, VerifyBody, Attachment, MMCSFile, MADRID_SERVICE,
 };
 use rustpush::facetime::{FTClient, FACETIME_SERVICE, VIDEO_SERVICE};
 use rustpush::avconference::{AudioSender, ChannelFrame, ChannelType, DecoderConfiguration};
@@ -99,6 +99,15 @@ struct Inner {
 pub struct ImessageCore {
     paths: Paths,
     inner: Mutex<Inner>,
+    /// Incoming attachments, kept so their bytes can be fetched on demand.
+    ///
+    /// The reference is all that arrives - it carries the decryption key and
+    /// the location, and neither survives being flattened into the app's own
+    /// attachment record. Keyed by message and position within it.
+    ///
+    /// Held here rather than on `Inner` because the receive task needs it and
+    /// cannot borrow the object.
+    attachments: Arc<Mutex<std::collections::HashMap<(String, u32), Attachment>>>,
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -136,6 +145,7 @@ impl ImessageCore {
         Arc::new(ImessageCore {
             paths,
             inner: Mutex::new(Inner::default()),
+            attachments: Arc::new(Mutex::new(std::collections::HashMap::new())),
         })
     }
 
@@ -454,6 +464,7 @@ impl ImessageCore {
         // reads from the push connection's broadcast channel, so it must exist
         // before any message arrives or that message is simply dropped.
         let mut subscription = connection.messages_cont.subscribe();
+        let attachment_store = self.attachments.clone();
         tokio::spawn(async move {
             loop {
                 let raw = match subscription.recv().await {
@@ -490,6 +501,21 @@ impl ImessageCore {
                         // bookkeeping traffic, which has nothing to show.
                         if !message.has_payload() {
                             continue;
+                        }
+                        // Keep the references before the message is
+                        // flattened - the app's own record has no room for a
+                        // decryption key, and without them a received photo
+                        // can never be fetched.
+                        {
+                            let mut store = attachment_store.lock().await;
+                            for (index, attachment) in convert::attachments_in(&message) {
+                                store.insert((message.id.clone(), index), attachment);
+                            }
+                            // Bounded: a long-running session would otherwise
+                            // hold every attachment reference it ever saw.
+                            if store.len() > 4096 {
+                                store.clear();
+                            }
                         }
                         listener.on_event(convert::to_event(&message));
 
@@ -543,6 +569,121 @@ impl ImessageCore {
         normal.reply_part = reply_to_part;
         self.dispatch(participants, group_name, sender_guid, Message::Message(normal))
             .await
+    }
+
+    /// Sends a message carrying files.
+    ///
+    /// Attachments do not travel inside the message. Each one is encrypted and
+    /// uploaded to Apple's media service first, and what the message carries is
+    /// a reference - so this is an upload followed by a send, and a large file
+    /// makes it a slow call.
+    pub async fn send_attachments(
+        &self,
+        participants: Vec<String>,
+        group_name: Option<String>,
+        sender_guid: Option<String>,
+        text: String,
+        files: Vec<OutgoingFile>,
+        reply_to_id: Option<String>,
+        effect: Option<String>,
+    ) -> Result<String, CoreError> {
+        let inner = self.inner.lock().await;
+        let connection = inner
+            .connection
+            .clone()
+            .ok_or_else(|| CoreError::new("Not connected."))?;
+        drop(inner);
+
+        let mut parts: Vec<IndexedMessagePart> = vec![];
+        for file in &files {
+            let handle = std::fs::File::open(&file.path)
+                .map_err(|e| CoreError::new(format!("Couldn't read {}: {e}", file.name)))?;
+
+            // Two passes over the file: one to hash and size it, one to send
+            // it. Hence the reopen rather than a rewind - the prepared put
+            // consumed the first reader.
+            let prepared = MMCSFile::prepare_put(handle)
+                .await
+                .map_err(|e| CoreError::new(format!("Couldn't prepare {}: {e}", file.name)))?;
+
+            let handle = std::fs::File::open(&file.path)
+                .map_err(|e| CoreError::new(format!("Couldn't read {}: {e}", file.name)))?;
+
+            let attachment = Attachment::new_mmcs(
+                &connection,
+                &prepared,
+                handle,
+                &file.mime_type,
+                &file.uti_type,
+                &file.name,
+                |_sent, _total| {},
+            )
+            .await
+            .map_err(|e| CoreError::new(format!("Couldn't upload {}: {e}", file.name)))?;
+
+            parts.push(IndexedMessagePart {
+                part: MessagePart::Attachment(attachment),
+                idx: None,
+                ext: None,
+            });
+        }
+
+        // Text after the files, which is the order Messages shows them in.
+        if !text.is_empty() {
+            parts.push(IndexedMessagePart {
+                part: MessagePart::Text(text, Default::default()),
+                idx: None,
+                ext: None,
+            });
+        }
+
+        if parts.is_empty() {
+            return Err(CoreError::new("Nothing to send."));
+        }
+
+        let mut normal = NormalMessage::new(String::new(), MessageType::IMessage);
+        normal.parts = MessageParts(parts);
+        normal.effect = effect;
+        normal.reply_guid = reply_to_id;
+
+        self.dispatch(participants, group_name, sender_guid, Message::Message(normal))
+            .await
+    }
+
+    /// Fetches an attachment's bytes to `into_path`.
+    ///
+    /// Incoming attachments arrive as references, so nothing is on disk until
+    /// this runs - which is why a received photo is a placeholder until it is
+    /// asked for.
+    pub async fn download_attachment(
+        &self,
+        message_id: String,
+        attachment_index: u32,
+        into_path: String,
+    ) -> Result<(), CoreError> {
+        let inner = self.inner.lock().await;
+        let connection = inner
+            .connection
+            .clone()
+            .ok_or_else(|| CoreError::new("Not connected."))?;
+        drop(inner);
+
+        let attachment = self
+            .attachments
+            .lock()
+            .await
+            .get(&(message_id.clone(), attachment_index))
+            .cloned()
+            .ok_or_else(|| CoreError::new("That attachment is no longer available."))?;
+
+        let file = std::fs::File::create(&into_path)
+            .map_err(|e| CoreError::new(format!("Couldn't write the file: {e}")))?;
+
+        attachment
+            .get_attachment(&connection, file, |_done, _total| {})
+            .await
+            .map_err(|e| CoreError::new(format!("Couldn't download: {e}")))?;
+        Ok(())
     }
 
     /// Adds or removes a tapback. `reaction` takes the six built-in names or

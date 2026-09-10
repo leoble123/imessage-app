@@ -82,6 +82,11 @@ fun AppRoot(
     val openChat = chats.firstOrNull { it.id == openChatId }
 
     val scope = rememberCoroutineScope()
+    // Tells the other side we're typing. Debounced, because the wire message
+    // is a real one and firing it per keystroke is a burst of traffic.
+    val typing = remember(backend) {
+        com.leo.imessage.data.TypingReporter(backend, scope)
+    }
     val density = LocalDensity.current
     val haptics = com.leo.imessage.ui.components.rememberHaptics()
     val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
@@ -102,6 +107,12 @@ fun AppRoot(
     // when a notification is least needed. What the UI contributes is which
     // thread is open, so the service can stay quiet about that one.
     LaunchedEffect(openChatId) {
+        // Leaving a conversation has to clear the bubble too, or it sits on
+        // their screen until the timeout - or forever, if the app is closed.
+        if (openChatId == null) typing.stop()
+        // The backend needs this too, so a message arriving in the thread
+        // you're reading doesn't raise a badge you can't clear.
+        (backend as? com.leo.imessage.data.RustBackend)?.openChatId = openChatId
         (context.applicationContext as? com.leo.imessage.EchoApp)?.visibleChatId = openChatId
         openChatId?.let { com.leo.imessage.notify.Notifier.clear(context, it) }
     }
@@ -209,6 +220,9 @@ fun AppRoot(
                         messages = messages,
                         onBack = { openChatId = null },
                         onSend = { text, effect, replyToId, attachments ->
+                            // The draft is gone the moment this fires, so the
+                            // typing bubble has to go with it.
+                            typing.stop()
                             scope.launch {
                                 backend.send(chat.id, text, effect, replyToId, attachments)
                             }
@@ -280,6 +294,7 @@ fun AppRoot(
                         onDraftChange = { text ->
                             if (text.isBlank()) drafts.remove(chat.id)
                             else drafts[chat.id] = text
+                            typing.onTyping(chat.id, text.isNotBlank())
                         },
                     )
                 }

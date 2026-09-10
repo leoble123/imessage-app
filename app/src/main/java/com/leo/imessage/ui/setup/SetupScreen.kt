@@ -270,6 +270,12 @@ fun SetupScreen(
                         "This takes a few seconds and only happens once.",
                     )
 
+                    // Deliberately wordless. This is the launch path with an
+                    // account already set up, and it is usually gone within a
+                    // second - a heading and a spinner would be a flash of
+                    // text, which is worse than a quiet moment.
+                    AccountState.Restoring -> Working("", "")
+
                     is AccountState.Failed -> Step(
                         title = "That didn't work",
                         detail = state.message,

@@ -81,9 +81,11 @@ fun ComposeScreen(
     // Everyone else from the address book. Filtered against the above so a
     // person doesn't appear twice under two spellings of the same number.
     val fromBook = remember(addressBook, knownHandles) {
-        addressBook.filterNot { it.handle in knownHandles }
+        // distinctBy guards the row keys below: a duplicate key is a crash,
+        // not a cosmetic glitch.
+        addressBook.filterNot { it.handle in knownHandles }.distinctBy { it.handle }
     }
-    val contacts = known
+    val contacts = remember(known) { known.distinctBy { it.first.id } }
     val filtered = remember(contacts, to) {
         if (to.isBlank()) contacts
         else contacts.filter { (c, _) ->

@@ -843,6 +843,10 @@ internal open class UniffiVTableCallbackInterfaceEventListener(
 
 
 
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -899,6 +903,8 @@ internal interface UniffiLib : Library {
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_decline_call(`ptr`: Pointer,`callId`: RustBuffer.ByValue,
     ): Long
+    fun uniffi_imessage_core_fn_method_imessagecore_download_attachment(`ptr`: Pointer,`messageId`: RustBuffer.ByValue,`attachmentIndex`: Int,`intoPath`: RustBuffer.ByValue,
+    ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_end_call(`ptr`: Pointer,`callId`: RustBuffer.ByValue,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_handles(`ptr`: Pointer,
@@ -912,6 +918,8 @@ internal interface UniffiLib : Library {
     fun uniffi_imessage_core_fn_method_imessagecore_place_call(`ptr`: Pointer,`participants`: RustBuffer.ByValue,`video`: Byte,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_request_sms_code(`ptr`: Pointer,`phoneId`: Int,
+    ): Long
+    fun uniffi_imessage_core_fn_method_imessagecore_send_attachments(`ptr`: Pointer,`participants`: RustBuffer.ByValue,`groupName`: RustBuffer.ByValue,`senderGuid`: RustBuffer.ByValue,`text`: RustBuffer.ByValue,`files`: RustBuffer.ByValue,`replyToId`: RustBuffer.ByValue,`effect`: RustBuffer.ByValue,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_send_call_audio(`ptr`: Pointer,`callId`: RustBuffer.ByValue,`frame`: RustBuffer.ByValue,`timestamp`: Int,
     ): Long
@@ -1081,6 +1089,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_decline_call(
     ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_download_attachment(
+    ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_end_call(
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_handles(
@@ -1094,6 +1104,8 @@ internal interface UniffiLib : Library {
     fun uniffi_imessage_core_checksum_method_imessagecore_place_call(
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_request_sms_code(
+    ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_send_attachments(
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_send_call_audio(
     ): Short
@@ -1181,6 +1193,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_decline_call() != 49734.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_download_attachment() != 26008.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_end_call() != 53262.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1200,6 +1215,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_request_sms_code() != 10899.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_send_attachments() != 22037.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_send_call_audio() != 42287.toShort()) {
@@ -2181,6 +2199,15 @@ public interface ImessageCoreInterface {
     suspend fun `declineCall`(`callId`: kotlin.String)
     
     /**
+     * Fetches an attachment's bytes to `into_path`.
+     *
+     * Incoming attachments arrive as references, so nothing is on disk until
+     * this runs - which is why a received photo is a placeholder until it is
+     * asked for.
+     */
+    suspend fun `downloadAttachment`(`messageId`: kotlin.String, `attachmentIndex`: kotlin.UInt, `intoPath`: kotlin.String)
+    
+    /**
      * Hangs up a call already in progress.
      */
     suspend fun `endCall`(`callId`: kotlin.String)
@@ -2222,6 +2249,16 @@ public interface ImessageCoreInterface {
      * Asks Apple to text a code to one of the account's trusted numbers.
      */
     suspend fun `requestSmsCode`(`phoneId`: kotlin.UInt): LoginStep
+    
+    /**
+     * Sends a message carrying files.
+     *
+     * Attachments do not travel inside the message. Each one is encrypted and
+     * uploaded to Apple's media service first, and what the message carries is
+     * a reference - so this is an upload followed by a send, and a large file
+     * makes it a slow call.
+     */
+    suspend fun `sendAttachments`(`participants`: List<kotlin.String>, `groupName`: kotlin.String?, `senderGuid`: kotlin.String?, `text`: kotlin.String, `files`: List<OutgoingFile>, `replyToId`: kotlin.String?, `effect`: kotlin.String?): kotlin.String
     
     /**
      * Sends one encoded audio frame from the microphone.
@@ -2550,6 +2587,35 @@ open class ImessageCore: Disposable, AutoCloseable, ImessageCoreInterface {
 
     
     /**
+     * Fetches an attachment's bytes to `into_path`.
+     *
+     * Incoming attachments arrive as references, so nothing is on disk until
+     * this runs - which is why a received photo is a placeholder until it is
+     * asked for.
+     */
+    @Throws(CoreException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `downloadAttachment`(`messageId`: kotlin.String, `attachmentIndex`: kotlin.UInt, `intoPath`: kotlin.String) {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_download_attachment(
+                thisPtr,
+                FfiConverterString.lower(`messageId`),FfiConverterUInt.lower(`attachmentIndex`),FfiConverterString.lower(`intoPath`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+        
+        // Error FFI converter
+        CoreException.ErrorHandler,
+    )
+    }
+
+    
+    /**
      * Hangs up a call already in progress.
      */
     @Throws(CoreException::class)
@@ -2702,6 +2768,35 @@ open class ImessageCore: Disposable, AutoCloseable, ImessageCoreInterface {
         { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterTypeLoginStep.lift(it) },
+        // Error FFI converter
+        CoreException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Sends a message carrying files.
+     *
+     * Attachments do not travel inside the message. Each one is encrypted and
+     * uploaded to Apple's media service first, and what the message carries is
+     * a reference - so this is an upload followed by a send, and a large file
+     * makes it a slow call.
+     */
+    @Throws(CoreException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `sendAttachments`(`participants`: List<kotlin.String>, `groupName`: kotlin.String?, `senderGuid`: kotlin.String?, `text`: kotlin.String, `files`: List<OutgoingFile>, `replyToId`: kotlin.String?, `effect`: kotlin.String?) : kotlin.String {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_send_attachments(
+                thisPtr,
+                FfiConverterSequenceString.lower(`participants`),FfiConverterOptionalString.lower(`groupName`),FfiConverterOptionalString.lower(`senderGuid`),FfiConverterString.lower(`text`),FfiConverterSequenceTypeOutgoingFile.lower(`files`),FfiConverterOptionalString.lower(`replyToId`),FfiConverterOptionalString.lower(`effect`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterString.lift(it) },
         // Error FFI converter
         CoreException.ErrorHandler,
     )
@@ -3319,6 +3414,58 @@ public object FfiConverterTypeIncomingEvent: FfiConverterRustBuffer<IncomingEven
             FfiConverterULong.write(value.`timestampMs`, buf)
             FfiConverterTypeEventKind.write(value.`kind`, buf)
             FfiConverterBoolean.write(value.`verificationFailed`, buf)
+    }
+}
+
+
+
+/**
+ * A file on its way out.
+ */
+data class OutgoingFile (
+    /**
+     * A real filesystem path. Content URIs have to be copied out first -
+     * the Rust side opens this with the ordinary file API.
+     */
+    var `path`: kotlin.String, 
+    var `name`: kotlin.String, 
+    var `mimeType`: kotlin.String, 
+    /**
+     * Apple's own type identifier, e.g. `public.jpeg`. Recipients use it to
+     * decide how to present the file, so a wrong one shows a photo as a
+     * generic document.
+     */
+    var `utiType`: kotlin.String
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeOutgoingFile: FfiConverterRustBuffer<OutgoingFile> {
+    override fun read(buf: ByteBuffer): OutgoingFile {
+        return OutgoingFile(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: OutgoingFile) = (
+            FfiConverterString.allocationSize(value.`path`) +
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterString.allocationSize(value.`mimeType`) +
+            FfiConverterString.allocationSize(value.`utiType`)
+    )
+
+    override fun write(value: OutgoingFile, buf: ByteBuffer) {
+            FfiConverterString.write(value.`path`, buf)
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterString.write(value.`mimeType`, buf)
+            FfiConverterString.write(value.`utiType`, buf)
     }
 }
 
@@ -4250,6 +4397,34 @@ public object FfiConverterSequenceTypeCallInfo: FfiConverterRustBuffer<List<Call
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeCallInfo.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeOutgoingFile: FfiConverterRustBuffer<List<OutgoingFile>> {
+    override fun read(buf: ByteBuffer): List<OutgoingFile> {
+        val len = buf.getInt()
+        return List<OutgoingFile>(len) {
+            FfiConverterTypeOutgoingFile.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<OutgoingFile>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeOutgoingFile.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<OutgoingFile>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeOutgoingFile.write(it, buf)
         }
     }
 }
