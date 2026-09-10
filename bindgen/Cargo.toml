@@ -1,0 +1,20 @@
+# A standalone bindgen binary.
+#
+# UniFFI's generator normally lives as a `[[bin]]` inside the crate being
+# bound, but that would mean compiling all of rustpush for the host just to
+# emit Kotlin - a second full dependency tree, for nothing. In `--library`
+# mode the generator reads the metadata straight out of the compiled .so, so
+# it doesn't need to know about our crate at all. The uniffi version must
+# match the one the .so was built with exactly, since that metadata format is
+# versioned.
+[package]
+name = "bindgen-tool"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+uniffi = { version = "=0.28.3", features = ["cli"] }
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/main.rs"

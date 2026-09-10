@@ -26,10 +26,35 @@ crate-type = ["cdylib", "staticlib", "lib"]
 # uses, and it's what the relay already running on your VM answers.
 rustpush = { path = "../vendor/rustpush", default-features = false, features = ["remote-anisette-v3"] }
 uniffi = { version = "0.28", features = ["tokio"] }
-tokio = { version = "1", features = ["rt-multi-thread"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
 anyhow = "1.0"
 serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+plist = "1.7.0"
+uuid = { version = "1.4.1", features = ["v4"] }
+thiserror = "1.0"
+log = "0.4"
+sha2 = "0.10"
+android_logger = "0.14"
+# rustpush stores its RSA/EC key material through this abstraction, so a
+# keystore has to be installed before the APS connection is opened - aps.rs
+# reaches for keystore::RsaKey during the handshake itself. SoftwareKeystore
+# keeps the keys in a plist we own rather than in Android's hardware-backed
+# store; that is what upstream's own reference client does.
+keystore = { path = "../vendor/rustpush/keystore" }
+omnisette = { path = "../vendor/rustpush/third_party/apple-private-apis/omnisette", default-features = false, features = ["remote-anisette-v3"] }
+icloud_auth = { path = "../vendor/rustpush/third_party/apple-private-apis/icloud-auth", default-features = false, features = ["remote-anisette-v3"] }
 
 # No build.rs: lib.rs uses UniFFI's proc-macro mode (setup_scaffolding!), and
 # generate_scaffolding() is the UDL-file path. Running both means the build
 # script tries to parse Rust source as IDL and dies on the first line.
+
+# rustpush vendors a patched quinn (third_party/quinn) and redirects the
+# crates.io version to it via [patch.crates-io]. Cargo only honours [patch]
+# from the *workspace root* manifest, which is this crate - not rustpush's.
+# Without this, h3-quinn links against crates.io quinn 0.11 while rustpush
+# hands it a Connection from its vendored fork, and ids/link.rs fails to
+# compile with two incompatible `quinn::Connection` types.
+[patch.crates-io]
+quinn = { path = "../vendor/rustpush/third_party/quinn/quinn" }
+
