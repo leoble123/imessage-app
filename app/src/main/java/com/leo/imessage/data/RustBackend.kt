@@ -41,6 +41,15 @@ class RustBackend(
     private val contacts: Contacts? = null,
 ) : MessagingBackend {
 
+    /**
+     * FaceTime, sharing this backend's connection.
+     *
+     * It lives here because call events arrive down the same push connection
+     * as messages and are delivered through the same listener - splitting them
+     * across two objects would mean two listeners racing over one socket.
+     */
+    val calls: Calls = Calls(core, contacts)
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _chats = MutableStateFlow(store.chats)
@@ -124,6 +133,8 @@ class RustBackend(
         core.start(Listener())
         myHandles = runCatching { core.handles() }.getOrNull()?.all.orEmpty()
         myHandle = myHandles.firstOrNull()
+        // So we aren't listed as a participant in our own call.
+        calls.myHandles = myHandles
     }
 
     // --- Sending ------------------------------------------------------------
@@ -481,6 +492,13 @@ class RustBackend(
             // The callback comes from a Rust thread; everything below touches
             // the store, so it moves onto our own scope first.
             scope.launch { handle(event) }
+        }
+
+        override fun onCallEvent(event: uniffi.imessage_core.CallEvent) {
+            // Straight through - Calls does its own state handling, and it has
+            // to happen in order, so this must not be dispatched onto a
+            // coroutine that could reorder two events.
+            calls.onEvent(event)
         }
 
         override fun onStateChanged() {

@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import com.leo.imessage.data.AccountManager
@@ -69,6 +70,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             iMessageTheme(settings) {
                 val state by account.state.collectAsState()
+                // Declared here so the overlay below can see it regardless of
+                // which branch rendered.
+                val liveCall = (state as? AccountState.Ready)
+                    ?.let { it.backend as? com.leo.imessage.data.RustBackend }
+                    ?.calls
+
+                val activeCall by (liveCall?.current
+                    ?: remember { kotlinx.coroutines.flow.MutableStateFlow(null) })
+                    .collectAsState()
 
                 // Setup and the app proper are separate trees rather than one
                 // with a flag: the conversation screens require a backend, and
@@ -76,6 +86,7 @@ class MainActivity : ComponentActivity() {
                 // every screen carrying a "not connected yet" branch.
                 when (val current = state) {
                     is AccountState.Ready -> {
+                        val backend = current.backend as? com.leo.imessage.data.RustBackend
                         // Lets notification Reply / Mark as Read reach the same
                         // backend the UI uses, so a reply from the shade lands
                         // in the transcript.
@@ -87,6 +98,11 @@ class MainActivity : ComponentActivity() {
                             onChatRequestHandled = { pendingChatId.value = null },
                             accountSummary = account.summary(),
                             addressBook = account.contacts.all(),
+                            onPlaceCall = { targets ->
+                                lifecycleScope.launch {
+                                    runCatching { backend?.calls?.place(targets, video = false) }
+                                }
+                            },
                             onImport = { uri ->
                                 val r = account.importFromOpenBubbles(uri)
                                 if (r.messages == 0 && r.duplicates > 0) {
@@ -118,6 +134,19 @@ class MainActivity : ComponentActivity() {
                         onConnected = {
                             com.leo.imessage.notify.ConnectionService.start(this)
                         },
+                    )
+                }
+
+                // Above everything, including setup. A ringing phone is the
+                // most interruptive thing the app does and must not be hidden
+                // behind whatever screen happened to be open.
+                activeCall?.let { call ->
+                    com.leo.imessage.ui.screens.CallScreen(
+                        call = call,
+                        onAnswer = { lifecycleScope.launch { liveCall?.answer() } },
+                        onDecline = { lifecycleScope.launch { liveCall?.decline() } },
+                        onHangUp = { lifecycleScope.launch { liveCall?.hangUp() } },
+                        onDismiss = { liveCall?.dismiss() },
                     )
                 }
             }

@@ -665,33 +665,55 @@ internal interface UniffiCallbackInterfaceEventListenerMethod0 : com.sun.jna.Cal
     fun callback(`uniffiHandle`: Long,`event`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceEventListenerMethod1 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`event`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceEventListenerMethod2 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+}
+internal interface UniffiCallbackInterfaceEventListenerMethod3 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`reason`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
-@Structure.FieldOrder("onEvent", "onStateChanged", "onConnectionLost", "uniffiFree")
+@Structure.FieldOrder("onEvent", "onCallEvent", "onStateChanged", "onConnectionLost", "uniffiFree")
 internal open class UniffiVTableCallbackInterfaceEventListener(
     @JvmField internal var `onEvent`: UniffiCallbackInterfaceEventListenerMethod0? = null,
-    @JvmField internal var `onStateChanged`: UniffiCallbackInterfaceEventListenerMethod1? = null,
-    @JvmField internal var `onConnectionLost`: UniffiCallbackInterfaceEventListenerMethod2? = null,
+    @JvmField internal var `onCallEvent`: UniffiCallbackInterfaceEventListenerMethod1? = null,
+    @JvmField internal var `onStateChanged`: UniffiCallbackInterfaceEventListenerMethod2? = null,
+    @JvmField internal var `onConnectionLost`: UniffiCallbackInterfaceEventListenerMethod3? = null,
     @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
 ) : Structure() {
     class UniffiByValue(
         `onEvent`: UniffiCallbackInterfaceEventListenerMethod0? = null,
-        `onStateChanged`: UniffiCallbackInterfaceEventListenerMethod1? = null,
-        `onConnectionLost`: UniffiCallbackInterfaceEventListenerMethod2? = null,
+        `onCallEvent`: UniffiCallbackInterfaceEventListenerMethod1? = null,
+        `onStateChanged`: UniffiCallbackInterfaceEventListenerMethod2? = null,
+        `onConnectionLost`: UniffiCallbackInterfaceEventListenerMethod3? = null,
         `uniffiFree`: UniffiCallbackInterfaceFree? = null,
-    ): UniffiVTableCallbackInterfaceEventListener(`onEvent`,`onStateChanged`,`onConnectionLost`,`uniffiFree`,), Structure.ByValue
+    ): UniffiVTableCallbackInterfaceEventListener(`onEvent`,`onCallEvent`,`onStateChanged`,`onConnectionLost`,`uniffiFree`,), Structure.ByValue
 
    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceEventListener) {
         `onEvent` = other.`onEvent`
+        `onCallEvent` = other.`onCallEvent`
         `onStateChanged` = other.`onStateChanged`
         `onConnectionLost` = other.`onConnectionLost`
         `uniffiFree` = other.`uniffiFree`
     }
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -827,6 +849,8 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_imessage_core_fn_method_eventlistener_on_event(`ptr`: Pointer,`event`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_imessage_core_fn_method_eventlistener_on_call_event(`ptr`: Pointer,`event`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     fun uniffi_imessage_core_fn_method_eventlistener_on_state_changed(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_imessage_core_fn_method_eventlistener_on_connection_lost(`ptr`: Pointer,`reason`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -837,15 +861,29 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_imessage_core_fn_constructor_imessagecore_new(`stateDir`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Pointer
+    fun uniffi_imessage_core_fn_method_imessagecore_active_calls(`ptr`: Pointer,
+    ): Long
+    fun uniffi_imessage_core_fn_method_imessagecore_answer_call(`ptr`: Pointer,`callId`: RustBuffer.ByValue,
+    ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_complete_registration(`ptr`: Pointer,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_configure_relay(`ptr`: Pointer,`host`: RustBuffer.ByValue,`code`: RustBuffer.ByValue,`token`: RustBuffer.ByValue,
+    ): Long
+    fun uniffi_imessage_core_fn_method_imessagecore_create_call_link(`ptr`: Pointer,
+    ): Long
+    fun uniffi_imessage_core_fn_method_imessagecore_decline_call(`ptr`: Pointer,`callId`: RustBuffer.ByValue,
+    ): Long
+    fun uniffi_imessage_core_fn_method_imessagecore_end_call(`ptr`: Pointer,`callId`: RustBuffer.ByValue,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_handles(`ptr`: Pointer,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_is_registered(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     fun uniffi_imessage_core_fn_method_imessagecore_login(`ptr`: Pointer,`email`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,
+    ): Long
+    fun uniffi_imessage_core_fn_method_imessagecore_needs_service_refresh(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
+    fun uniffi_imessage_core_fn_method_imessagecore_place_call(`ptr`: Pointer,`participants`: RustBuffer.ByValue,`video`: Byte,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_request_sms_code(`ptr`: Pointer,`phoneId`: Int,
     ): Long
@@ -989,19 +1027,35 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_imessage_core_checksum_method_eventlistener_on_event(
     ): Short
+    fun uniffi_imessage_core_checksum_method_eventlistener_on_call_event(
+    ): Short
     fun uniffi_imessage_core_checksum_method_eventlistener_on_state_changed(
     ): Short
     fun uniffi_imessage_core_checksum_method_eventlistener_on_connection_lost(
     ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_active_calls(
+    ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_answer_call(
+    ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_complete_registration(
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_configure_relay(
+    ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_create_call_link(
+    ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_decline_call(
+    ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_end_call(
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_handles(
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_is_registered(
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_login(
+    ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_needs_service_refresh(
+    ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_place_call(
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_request_sms_code(
     ): Short
@@ -1052,16 +1106,34 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_imessage_core_checksum_method_eventlistener_on_event() != 57609.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_imessage_core_checksum_method_eventlistener_on_state_changed() != 29487.toShort()) {
+    if (lib.uniffi_imessage_core_checksum_method_eventlistener_on_call_event() != 54338.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_imessage_core_checksum_method_eventlistener_on_connection_lost() != 57411.toShort()) {
+    if (lib.uniffi_imessage_core_checksum_method_eventlistener_on_state_changed() != 49687.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_eventlistener_on_connection_lost() != 15722.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_active_calls() != 48979.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_answer_call() != 30628.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_complete_registration() != 22083.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_configure_relay() != 36876.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_create_call_link() != 59369.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_decline_call() != 49734.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_end_call() != 53262.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_handles() != 27449.toShort()) {
@@ -1071,6 +1143,12 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_login() != 47433.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_needs_service_refresh() != 59203.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_place_call() != 40301.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_request_sms_code() != 10899.toShort()) {
@@ -1499,6 +1577,11 @@ public interface EventListener {
     fun `onEvent`(`event`: IncomingEvent)
     
     /**
+     * A FaceTime call changed state.
+     */
+    fun `onCallEvent`(`event`: CallEvent)
+    
+    /**
      * Called whenever the registration state changes and needs persisting.
      * Losing this means re-registering with Apple on next launch, which burns
      * a registration slot, so the app writes it out immediately.
@@ -1615,6 +1698,20 @@ open class EventListenerImpl: Disposable, AutoCloseable, EventListener {
 
     
     /**
+     * A FaceTime call changed state.
+     */override fun `onCallEvent`(`event`: CallEvent)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_eventlistener_on_call_event(
+        it, FfiConverterTypeCallEvent.lower(`event`),_status)
+}
+    }
+    
+    
+
+    
+    /**
      * Called whenever the registration state changes and needs persisting.
      * Losing this means re-registering with Apple on next launch, which burns
      * a registration slot, so the app writes it out immediately.
@@ -1698,7 +1795,19 @@ internal object uniffiCallbackInterfaceEventListener {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
-    internal object `onStateChanged`: UniffiCallbackInterfaceEventListenerMethod1 {
+    internal object `onCallEvent`: UniffiCallbackInterfaceEventListenerMethod1 {
+        override fun callback(`uniffiHandle`: Long,`event`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeEventListener.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`onCallEvent`(
+                    FfiConverterTypeCallEvent.lift(`event`),
+                )
+            }
+            val writeReturn = { _: Unit -> Unit }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+    internal object `onStateChanged`: UniffiCallbackInterfaceEventListenerMethod2 {
         override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeEventListener.handleMap.get(uniffiHandle)
             val makeCall = { ->
@@ -1709,7 +1818,7 @@ internal object uniffiCallbackInterfaceEventListener {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
-    internal object `onConnectionLost`: UniffiCallbackInterfaceEventListenerMethod2 {
+    internal object `onConnectionLost`: UniffiCallbackInterfaceEventListenerMethod3 {
         override fun callback(`uniffiHandle`: Long,`reason`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeEventListener.handleMap.get(uniffiHandle)
             val makeCall = { ->
@@ -1730,6 +1839,7 @@ internal object uniffiCallbackInterfaceEventListener {
 
     internal var vtable = UniffiVTableCallbackInterfaceEventListener.UniffiByValue(
         `onEvent`,
+        `onCallEvent`,
         `onStateChanged`,
         `onConnectionLost`,
         uniffiFree,
@@ -1876,6 +1986,16 @@ public object FfiConverterTypeEventListener: FfiConverter<EventListener, Pointer
 public interface ImessageCoreInterface {
     
     /**
+     * The calls this device currently knows about.
+     */
+    suspend fun `activeCalls`(): List<CallInfo>
+    
+    /**
+     * Answers a ringing call.
+     */
+    suspend fun `answerCall`(`callId`: kotlin.String)
+    
+    /**
      * Finishes sign-in: authenticates against IDS and registers this device.
      *
      * Only call this once `login`/`submit_device_code` returned `Complete`.
@@ -1893,6 +2013,24 @@ public interface ImessageCoreInterface {
     suspend fun `configureRelay`(`host`: kotlin.String, `code`: kotlin.String, `token`: kotlin.String?)
     
     /**
+     * A shareable FaceTime link, the way iOS's "Create Link" works.
+     *
+     * Useful on its own: a link can be sent to anyone, including people on
+     * devices this app could never call directly.
+     */
+    suspend fun `createCallLink`(): kotlin.String
+    
+    /**
+     * Declines a ringing call, telling the caller rather than just going quiet.
+     */
+    suspend fun `declineCall`(`callId`: kotlin.String)
+    
+    /**
+     * Hangs up a call already in progress.
+     */
+    suspend fun `endCall`(`callId`: kotlin.String)
+    
+    /**
      * The addresses and numbers this account can send from.
      */
     suspend fun `handles`(): Handles
@@ -1907,6 +2045,23 @@ public interface ImessageCoreInterface {
      * Step one of signing in. Returns where Apple stopped, not just success.
      */
     suspend fun `login`(`email`: kotlin.String, `password`: kotlin.String): LoginStep
+    
+    /**
+     * True when the saved registration predates a service this build needs.
+     *
+     * An account registered before FaceTime was added is registered for
+     * iMessage alone, and Apple will never route a call to it. Nothing about
+     * that is visible from the app - calls simply never arrive - so it has to
+     * be detected and repaired rather than waited on.
+     */
+    fun `needsServiceRefresh`(): kotlin.Boolean
+    
+    /**
+     * Starts a call and rings the people named.
+     *
+     * Returns the call id, which every other call method takes.
+     */
+    suspend fun `placeCall`(`participants`: List<kotlin.String>, `video`: kotlin.Boolean): kotlin.String
     
     /**
      * Asks Apple to text a code to one of the account's trusted numbers.
@@ -2059,6 +2214,55 @@ open class ImessageCore: Disposable, AutoCloseable, ImessageCoreInterface {
 
     
     /**
+     * The calls this device currently knows about.
+     */
+    @Throws(CoreException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `activeCalls`() : List<CallInfo> {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_active_calls(
+                thisPtr,
+                
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceTypeCallInfo.lift(it) },
+        // Error FFI converter
+        CoreException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Answers a ringing call.
+     */
+    @Throws(CoreException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `answerCall`(`callId`: kotlin.String) {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_answer_call(
+                thisPtr,
+                FfiConverterString.lower(`callId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+        
+        // Error FFI converter
+        CoreException.ErrorHandler,
+    )
+    }
+
+    
+    /**
      * Finishes sign-in: authenticates against IDS and registers this device.
      *
      * Only call this once `login`/`submit_device_code` returned `Complete`.
@@ -2101,6 +2305,83 @@ open class ImessageCore: Disposable, AutoCloseable, ImessageCoreInterface {
             UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_configure_relay(
                 thisPtr,
                 FfiConverterString.lower(`host`),FfiConverterString.lower(`code`),FfiConverterOptionalString.lower(`token`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+        
+        // Error FFI converter
+        CoreException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * A shareable FaceTime link, the way iOS's "Create Link" works.
+     *
+     * Useful on its own: a link can be sent to anyone, including people on
+     * devices this app could never call directly.
+     */
+    @Throws(CoreException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `createCallLink`() : kotlin.String {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_create_call_link(
+                thisPtr,
+                
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterString.lift(it) },
+        // Error FFI converter
+        CoreException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Declines a ringing call, telling the caller rather than just going quiet.
+     */
+    @Throws(CoreException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `declineCall`(`callId`: kotlin.String) {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_decline_call(
+                thisPtr,
+                FfiConverterString.lower(`callId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+        
+        // Error FFI converter
+        CoreException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Hangs up a call already in progress.
+     */
+    @Throws(CoreException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `endCall`(`callId`: kotlin.String) {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_end_call(
+                thisPtr,
+                FfiConverterString.lower(`callId`),
             )
         },
         { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_void(future, callback, continuation) },
@@ -2173,6 +2454,52 @@ open class ImessageCore: Disposable, AutoCloseable, ImessageCoreInterface {
         { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterTypeLoginStep.lift(it) },
+        // Error FFI converter
+        CoreException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * True when the saved registration predates a service this build needs.
+     *
+     * An account registered before FaceTime was added is registered for
+     * iMessage alone, and Apple will never route a call to it. Nothing about
+     * that is visible from the app - calls simply never arrive - so it has to
+     * be detected and repaired rather than waited on.
+     */override fun `needsServiceRefresh`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_needs_service_refresh(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Starts a call and rings the people named.
+     *
+     * Returns the call id, which every other call method takes.
+     */
+    @Throws(CoreException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `placeCall`(`participants`: List<kotlin.String>, `video`: kotlin.Boolean) : kotlin.String {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_place_call(
+                thisPtr,
+                FfiConverterSequenceString.lower(`participants`),FfiConverterBoolean.lower(`video`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterString.lift(it) },
         // Error FFI converter
         CoreException.ErrorHandler,
     )
@@ -2545,6 +2872,59 @@ public object FfiConverterTypeAttachmentInfo: FfiConverterRustBuffer<AttachmentI
 
 
 /**
+ * A call as the app should show it.
+ */
+data class CallInfo (
+    var `callId`: kotlin.String, 
+    var `members`: List<kotlin.String>, 
+    var `isVideo`: kotlin.Boolean, 
+    /**
+     * True when we started it.
+     */
+    var `outgoing`: kotlin.Boolean, 
+    /**
+     * Milliseconds since the epoch, for the call duration timer.
+     */
+    var `startedMs`: kotlin.ULong
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCallInfo: FfiConverterRustBuffer<CallInfo> {
+    override fun read(buf: ByteBuffer): CallInfo {
+        return CallInfo(
+            FfiConverterString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CallInfo) = (
+            FfiConverterString.allocationSize(value.`callId`) +
+            FfiConverterSequenceString.allocationSize(value.`members`) +
+            FfiConverterBoolean.allocationSize(value.`isVideo`) +
+            FfiConverterBoolean.allocationSize(value.`outgoing`) +
+            FfiConverterULong.allocationSize(value.`startedMs`)
+    )
+
+    override fun write(value: CallInfo, buf: ByteBuffer) {
+            FfiConverterString.write(value.`callId`, buf)
+            FfiConverterSequenceString.write(value.`members`, buf)
+            FfiConverterBoolean.write(value.`isVideo`, buf)
+            FfiConverterBoolean.write(value.`outgoing`, buf)
+            FfiConverterULong.write(value.`startedMs`, buf)
+    }
+}
+
+
+
+/**
  * Everything the app can be told about a conversation by an incoming message.
  */
 data class ConversationInfo (
@@ -2713,6 +3093,267 @@ public object FfiConverterTypePhoneNumber: FfiConverterRustBuffer<PhoneNumber> {
             FfiConverterString.write(value.`number`, buf)
     }
 }
+
+
+
+/**
+ * What happened to a call.
+ *
+ * FaceTime is a separate service from iMessage with its own push topics, so
+ * these arrive on the same connection but through a different client and are
+ * reported separately rather than being folded into message events.
+ */
+sealed class CallEvent {
+    
+    /**
+     * Someone is calling. This is the one that has to ring the phone.
+     */
+    data class Incoming(
+        val `callId`: kotlin.String, 
+        /**
+         * Everyone on the call, us included.
+         */
+        val `members`: List<kotlin.String>, 
+        val `isVideo`: kotlin.Boolean) : CallEvent() {
+        companion object
+    }
+    
+    /**
+     * Our outgoing call started ringing on the other end.
+     */
+    data class Ringing(
+        val `callId`: kotlin.String) : CallEvent() {
+        companion object
+    }
+    
+    /**
+     * Someone joined - the call is live.
+     */
+    data class Joined(
+        val `callId`: kotlin.String, 
+        val `handle`: kotlin.String) : CallEvent() {
+        companion object
+    }
+    
+    /**
+     * Someone left. A one-to-one call is over when this arrives.
+     */
+    data class Left(
+        val `callId`: kotlin.String, 
+        val `handle`: kotlin.String) : CallEvent() {
+        companion object
+    }
+    
+    data class Declined(
+        val `callId`: kotlin.String) : CallEvent() {
+        companion object
+    }
+    
+    /**
+     * Answered on another one of the account's devices, so stop ringing here.
+     */
+    data class AnsweredElsewhere(
+        val `callId`: kotlin.String) : CallEvent() {
+        companion object
+    }
+    
+    /**
+     * Media path is up.
+     */
+    data class Connected(
+        val `callId`: kotlin.String) : CallEvent() {
+        companion object
+    }
+    
+    data class Disconnected(
+        val `callId`: kotlin.String) : CallEvent() {
+        companion object
+    }
+    
+    /**
+     * The call's shareable link changed.
+     */
+    data class LinkChanged(
+        val `callId`: kotlin.String, 
+        val `link`: kotlin.String) : CallEvent() {
+        companion object
+    }
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCallEvent : FfiConverterRustBuffer<CallEvent>{
+    override fun read(buf: ByteBuffer): CallEvent {
+        return when(buf.getInt()) {
+            1 -> CallEvent.Incoming(
+                FfiConverterString.read(buf),
+                FfiConverterSequenceString.read(buf),
+                FfiConverterBoolean.read(buf),
+                )
+            2 -> CallEvent.Ringing(
+                FfiConverterString.read(buf),
+                )
+            3 -> CallEvent.Joined(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                )
+            4 -> CallEvent.Left(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                )
+            5 -> CallEvent.Declined(
+                FfiConverterString.read(buf),
+                )
+            6 -> CallEvent.AnsweredElsewhere(
+                FfiConverterString.read(buf),
+                )
+            7 -> CallEvent.Connected(
+                FfiConverterString.read(buf),
+                )
+            8 -> CallEvent.Disconnected(
+                FfiConverterString.read(buf),
+                )
+            9 -> CallEvent.LinkChanged(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CallEvent) = when(value) {
+        is CallEvent.Incoming -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`callId`)
+                + FfiConverterSequenceString.allocationSize(value.`members`)
+                + FfiConverterBoolean.allocationSize(value.`isVideo`)
+            )
+        }
+        is CallEvent.Ringing -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`callId`)
+            )
+        }
+        is CallEvent.Joined -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`callId`)
+                + FfiConverterString.allocationSize(value.`handle`)
+            )
+        }
+        is CallEvent.Left -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`callId`)
+                + FfiConverterString.allocationSize(value.`handle`)
+            )
+        }
+        is CallEvent.Declined -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`callId`)
+            )
+        }
+        is CallEvent.AnsweredElsewhere -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`callId`)
+            )
+        }
+        is CallEvent.Connected -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`callId`)
+            )
+        }
+        is CallEvent.Disconnected -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`callId`)
+            )
+        }
+        is CallEvent.LinkChanged -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`callId`)
+                + FfiConverterString.allocationSize(value.`link`)
+            )
+        }
+    }
+
+    override fun write(value: CallEvent, buf: ByteBuffer) {
+        when(value) {
+            is CallEvent.Incoming -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.`callId`, buf)
+                FfiConverterSequenceString.write(value.`members`, buf)
+                FfiConverterBoolean.write(value.`isVideo`, buf)
+                Unit
+            }
+            is CallEvent.Ringing -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.`callId`, buf)
+                Unit
+            }
+            is CallEvent.Joined -> {
+                buf.putInt(3)
+                FfiConverterString.write(value.`callId`, buf)
+                FfiConverterString.write(value.`handle`, buf)
+                Unit
+            }
+            is CallEvent.Left -> {
+                buf.putInt(4)
+                FfiConverterString.write(value.`callId`, buf)
+                FfiConverterString.write(value.`handle`, buf)
+                Unit
+            }
+            is CallEvent.Declined -> {
+                buf.putInt(5)
+                FfiConverterString.write(value.`callId`, buf)
+                Unit
+            }
+            is CallEvent.AnsweredElsewhere -> {
+                buf.putInt(6)
+                FfiConverterString.write(value.`callId`, buf)
+                Unit
+            }
+            is CallEvent.Connected -> {
+                buf.putInt(7)
+                FfiConverterString.write(value.`callId`, buf)
+                Unit
+            }
+            is CallEvent.Disconnected -> {
+                buf.putInt(8)
+                FfiConverterString.write(value.`callId`, buf)
+                Unit
+            }
+            is CallEvent.LinkChanged -> {
+                buf.putInt(9)
+                FfiConverterString.write(value.`callId`, buf)
+                FfiConverterString.write(value.`link`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
 
 
 
@@ -3321,6 +3962,34 @@ public object FfiConverterSequenceTypeAttachmentInfo: FfiConverterRustBuffer<Lis
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeAttachmentInfo.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeCallInfo: FfiConverterRustBuffer<List<CallInfo>> {
+    override fun read(buf: ByteBuffer): List<CallInfo> {
+        val len = buf.getInt()
+        return List<CallInfo>(len) {
+            FfiConverterTypeCallInfo.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<CallInfo>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeCallInfo.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<CallInfo>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeCallInfo.write(it, buf)
         }
     }
 }

@@ -34,6 +34,7 @@ use rustpush::{
     ReactMessageType, Reaction, RelayConfig, UnsendMessage, EditMessage, MessageParts, PushError,
     MessagePart, IndexedMessagePart, VerifyBody, MADRID_SERVICE,
 };
+use rustpush::facetime::{FTClient, FACETIME_SERVICE, VIDEO_SERVICE};
 use tokio::sync::Mutex;
 
 use state::{read_plist, write_plist, Paths, SavedState};
@@ -41,10 +42,11 @@ pub use types::*;
 
 /// The IDS services to register for.
 ///
-/// Only Madrid (iMessage proper) for now. FaceTime needs `FACETIME_SERVICE` and
-/// `VIDEO_SERVICE` added here, but registering for a service the app can't
-/// answer makes the account advertise a capability it doesn't have, so they
-/// stay out until there's a call UI to back them.
+/// Madrid is iMessage; the other two are FaceTime's signalling and video
+/// services. Registering for a service means telling Apple this device can
+/// answer it, so they are only listed now that there is a call screen behind
+/// them - an account that advertises FaceTime and never answers rings a
+/// caller's phone for nothing.
 ///
 /// This is a function rather than a `static` because rustpush doesn't export
 /// the `IDSService` type - only the constants - so the type can't be written
@@ -52,9 +54,16 @@ pub use types::*;
 /// which is the lifetime `register` and `IMClient::new` require.
 macro_rules! services {
     () => {
-        &[&MADRID_SERVICE][..]
+        &[&MADRID_SERVICE, &FACETIME_SERVICE, &VIDEO_SERVICE][..]
     };
 }
+
+/// The service names above, for checking an existing registration covers them.
+const SERVICE_NAMES: &[&str] = &[
+    MADRID_SERVICE.name,
+    FACETIME_SERVICE.name,
+    VIDEO_SERVICE.name,
+];
 
 /// Everything mutable, behind one lock.
 ///
@@ -70,6 +79,7 @@ struct Inner {
     users: Vec<IDSUser>,
     identity: Option<IDSNGMIdentity>,
     client: Option<Arc<IMClient>>,
+    facetime: Option<Arc<FTClient>>,
     /// Apple hands back a body with the SMS challenge in it, and verifying
     /// the code requires handing that same body back. Only set when the
     /// account went down the SMS path rather than the trusted-device one.
@@ -130,6 +140,25 @@ impl ImessageCore {
         read_plist::<SavedState>(&self.paths.registration())
             .map(|s| !s.users.is_empty() && s.users.iter().any(|u| !u.registration.is_empty()))
             .unwrap_or(false)
+    }
+
+    /// True when the saved registration predates a service this build needs.
+    ///
+    /// An account registered before FaceTime was added is registered for
+    /// iMessage alone, and Apple will never route a call to it. Nothing about
+    /// that is visible from the app - calls simply never arrive - so it has to
+    /// be detected and repaired rather than waited on.
+    pub fn needs_service_refresh(&self) -> bool {
+        let Some(saved) = read_plist::<SavedState>(&self.paths.registration()) else {
+            return false;
+        };
+        if saved.users.is_empty() {
+            return false;
+        }
+        saved.users.iter().any(|u| {
+            !u.registration.is_empty()
+                && SERVICE_NAMES.iter().any(|name| !u.registration.contains_key(*name))
+        })
     }
 
     /// Points the core at a registration relay and opens the push connection.
@@ -309,7 +338,13 @@ impl ImessageCore {
             }
         };
 
-        if inner.users.iter().any(|u| u.registration.is_empty()) {
+        // Also re-registers when the saved registration predates a service -
+        // an account registered for iMessage alone stays unable to receive
+        // FaceTime forever otherwise, with no visible reason why.
+        let missing_service = inner.users.iter().any(|u| {
+            SERVICE_NAMES.iter().any(|name| !u.registration.contains_key(*name))
+        });
+        if inner.users.iter().any(|u| u.registration.is_empty()) || missing_service {
             info!("registering with Apple");
             let aps_state = connection.state.read().await.clone();
             register(
@@ -370,6 +405,7 @@ impl ImessageCore {
             });
         });
 
+        let config_for_ft = config.clone() as Arc<dyn OSConfig>;
         let client = Arc::new(
             IMClient::new(
                 connection.clone(),
@@ -383,7 +419,28 @@ impl ImessageCore {
             .await,
         );
 
+        // FaceTime is a separate client on the same push connection, with its
+        // own topics. It has to exist before the receive loop starts or the
+        // first call of the session is missed.
+        let facetime_path = self.paths.facetime();
+        let save_path = facetime_path.clone();
+        let facetime = Arc::new(
+            FTClient::new(
+                read_plist(&facetime_path).unwrap_or_default(),
+                Box::new(move |state| {
+                    if let Err(e) = write_plist(&save_path, state) {
+                        warn!("failed to persist FaceTime state: {e}");
+                    }
+                }),
+                connection.clone(),
+                client.identity.clone(),
+                config_for_ft,
+            )
+            .await,
+        );
+
         inner.client = Some(client.clone());
+        inner.facetime = Some(facetime.clone());
         inner.receiving = true;
         drop(inner);
 
@@ -406,6 +463,20 @@ impl ImessageCore {
                         break;
                     }
                 };
+
+                // FaceTime claims its own topics. Offering the message there
+                // first costs nothing - it returns None for anything that
+                // isn't its - and skipping it means calls never arrive.
+                match facetime.handle(raw.clone()).await {
+                    Ok(Some(event)) => {
+                        if let Some(mapped) = convert::to_call_event(&event) {
+                            listener.on_call_event(mapped);
+                        }
+                        continue;
+                    }
+                    Ok(None) => {}
+                    Err(e) => warn!("FaceTime couldn't handle a message: {e}"),
+                }
 
                 match client.handle(raw).await {
                     Ok(Some(message)) => {
@@ -580,6 +651,102 @@ impl ImessageCore {
             .map_err(|e| CoreError::new(format!("couldn't look those up: {e}")))
     }
 
+    // --- FaceTime -------------------------------------------------------
+
+    /// Starts a call and rings the people named.
+    ///
+    /// Returns the call id, which every other call method takes.
+    pub async fn place_call(
+        &self,
+        participants: Vec<String>,
+        video: bool,
+    ) -> Result<String, CoreError> {
+        let (facetime, handle) = self.calling().await?;
+        // FaceTime identifies a call by a GUID the caller mints, unlike
+        // iMessage where the conversation is the participant list.
+        let call_id = uuid::Uuid::new_v4().to_string().to_uppercase();
+        facetime
+            .create_session(call_id.clone(), handle, &participants, video)
+            .await
+            .map_err(|e| CoreError::new(format!("Couldn't start the call: {e}")))?;
+        Ok(call_id)
+    }
+
+    /// Answers a ringing call.
+    pub async fn answer_call(&self, call_id: String) -> Result<(), CoreError> {
+        let (facetime, _) = self.calling().await?;
+        let mut state = facetime.state.write().await;
+        let session = state
+            .sessions
+            .get_mut(&call_id)
+            .ok_or_else(|| CoreError::new("That call has already ended."))?;
+        // ring = false: answering joins, it doesn't ring anyone else.
+        facetime
+            .join(session, false)
+            .await
+            .map_err(|e| CoreError::new(format!("Couldn't join the call: {e}")))
+    }
+
+    /// Declines a ringing call, telling the caller rather than just going quiet.
+    pub async fn decline_call(&self, call_id: String) -> Result<(), CoreError> {
+        let (facetime, _) = self.calling().await?;
+        let mut state = facetime.state.write().await;
+        let session = state
+            .sessions
+            .get_mut(&call_id)
+            .ok_or_else(|| CoreError::new("That call has already ended."))?;
+        facetime
+            .decline_invite(session)
+            .await
+            .map_err(|e| CoreError::new(format!("Couldn't decline: {e}")))
+    }
+
+    /// Hangs up a call already in progress.
+    pub async fn end_call(&self, call_id: String) -> Result<(), CoreError> {
+        let (facetime, _) = self.calling().await?;
+        let mut state = facetime.state.write().await;
+        let session = state
+            .sessions
+            .get_mut(&call_id)
+            .ok_or_else(|| CoreError::new("That call has already ended."))?;
+        facetime
+            .leave(session)
+            .await
+            .map_err(|e| CoreError::new(format!("Couldn't hang up: {e}")))
+    }
+
+    /// A shareable FaceTime link, the way iOS's "Create Link" works.
+    ///
+    /// Useful on its own: a link can be sent to anyone, including people on
+    /// devices this app could never call directly.
+    pub async fn create_call_link(&self) -> Result<String, CoreError> {
+        let (facetime, handle) = self.calling().await?;
+        facetime
+            .get_link_for_usage(&handle, "cxn")
+            .await
+            .map_err(|e| CoreError::new(format!("Couldn't create a link: {e}")))
+    }
+
+    /// The calls this device currently knows about.
+    pub async fn active_calls(&self) -> Result<Vec<CallInfo>, CoreError> {
+        let inner = self.inner.lock().await;
+        let Some(facetime) = inner.facetime.clone() else { return Ok(vec![]) };
+        drop(inner);
+        let state = facetime.state.read().await;
+        Ok(state
+            .sessions
+            .iter()
+            .filter(|(_, session)| session.start_time.is_some())
+            .map(|(id, session)| CallInfo {
+                call_id: id.clone(),
+                members: session.members.iter().map(|m| m.handle.clone()).collect(),
+                is_video: session.is_video,
+                outgoing: session.is_initiator,
+                started_ms: session.start_time.unwrap_or(session.creation_time),
+            })
+            .collect())
+    }
+
     /// Clears every trace of the account from disk.
     pub async fn sign_out(&self) -> Result<(), CoreError> {
         let mut inner = self.inner.lock().await;
@@ -663,6 +830,28 @@ impl ImessageCore {
             };
         }
         Err(CoreError::new("Sign-in didn't settle. Try again."))
+    }
+
+    /// The FaceTime client plus the handle to call from.
+    async fn calling(&self) -> Result<(Arc<FTClient>, String), CoreError> {
+        let inner = self.inner.lock().await;
+        let facetime = inner
+            .facetime
+            .clone()
+            .ok_or_else(|| CoreError::new("FaceTime isn't connected yet."))?;
+        let client = inner
+            .client
+            .clone()
+            .ok_or_else(|| CoreError::new("Not started."))?;
+        drop(inner);
+        let handle = client
+            .identity
+            .get_handles()
+            .await
+            .first()
+            .cloned()
+            .ok_or_else(|| CoreError::new("This account has no FaceTime address."))?;
+        Ok((facetime, handle))
     }
 
     /// Pulls the three things every authenticated call needs, with one error

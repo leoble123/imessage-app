@@ -112,6 +112,15 @@ class AccountManager(context: Context) {
                 _state.value = AccountState.NeedsSignIn
                 return@withContext false
             }
+            // A registration made before FaceTime was added covers iMessage
+            // only, and Apple silently never routes calls to it. Repaired here
+            // rather than forcing a full sign-in, since the saved credentials
+            // are enough to re-register on their own.
+            if (core.needsServiceRefresh()) {
+                _state.value = AccountState.Registering
+                runCatching { core.completeRegistration() }
+                    .onFailure { Log.w(TAG, "couldn't refresh registration", it) }
+            }
             becomeReady()
             true
         } catch (e: CoreException) {

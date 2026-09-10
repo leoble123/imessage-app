@@ -13,6 +13,9 @@
     <!-- iMessage sends handles and nothing else, so names and photos can only
          come from the local address book. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Lets an incoming call raise its screen over the lock screen, the way a
+         phone call does, instead of leaving a banner nobody sees in time. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Saving to the gallery only needs this before scoped storage. -->
@@ -33,6 +36,8 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.iMessage">
             <intent-filter>

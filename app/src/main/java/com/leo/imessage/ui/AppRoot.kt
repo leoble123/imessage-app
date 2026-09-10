@@ -58,6 +58,8 @@ fun AppRoot(
     addressBook: List<com.leo.imessage.data.Contacts.SavedContact> = emptyList(),
     /** Imports an OpenBubbles export, returning a line about what it found. */
     onImport: (suspend (android.net.Uri) -> String)? = null,
+    /** Places a FaceTime call. Null when there's no live account behind it. */
+    onPlaceCall: ((List<String>) -> Unit)? = null,
 ) {
     val chats by backend.chats.collectAsState(initial = remember { backend.chatsNow() })
     val settings = com.leo.imessage.ui.theme.LocalSettings.current
@@ -261,22 +263,11 @@ fun AppRoot(
                         onOpenDetails = { showDetails = true },
                         onDelete = { messageId -> scope.launch { backend.delete(messageId) } },
                         onFaceTime = {
-                            // No FaceTime on Android, so do the honest
-                            // equivalent: dial the handle if it's a number,
-                            // and otherwise fall back to the details screen
-                            // rather than a button that does nothing.
-                            val handle = chat.participants.firstOrNull()?.handle
-                            val dialable = handle != null &&
-                                handle.any { it.isDigit() } && !handle.contains('@')
-                            if (dialable) {
-                                runCatching {
-                                    context.startActivity(
-                                        android.content.Intent(
-                                            android.content.Intent.ACTION_DIAL,
-                                            android.net.Uri.parse("tel:$handle"),
-                                        )
-                                    )
-                                }
+                            // A real FaceTime call now, rather than handing
+                            // the number to the phone dialler.
+                            val targets = chat.participants.map { it.handle }
+                            if (targets.isNotEmpty() && onPlaceCall != null) {
+                                onPlaceCall(targets)
                             } else {
                                 showDetails = true
                             }

@@ -130,3 +130,44 @@ pub fn to_event(msg: &MessageInst) -> IncomingEvent {
         verification_failed: msg.verification_failed,
     }
 }
+
+/// Maps a FaceTime event onto the app's call model.
+///
+/// Returns `None` for the ones the app has nothing to do with - link
+/// bookkeeping and "let me in" requests from people trying to join a link,
+/// which need an approval flow that doesn't exist yet. Dropping them here is
+/// deliberate: showing an incoming-call screen for a join request the app
+/// can't actually approve would ring for nothing.
+pub fn to_call_event(message: &rustpush::facetime::FTMessage) -> Option<crate::types::CallEvent> {
+    use crate::types::CallEvent;
+    use rustpush::facetime::FTMessage as M;
+
+    Some(match message {
+        // Somebody is being added to a call and it is ringing - that's an
+        // incoming call as far as the app is concerned.
+        M::AddMembers { guid, members, ring } if *ring => CallEvent::Incoming {
+            call_id: guid.clone(),
+            members: members.iter().map(|m| m.handle.clone()).collect(),
+            // The wire doesn't say at ring time; the call screen starts on
+            // audio and upgrades if video arrives.
+            is_video: false,
+        },
+        M::Ring { guid } => CallEvent::Ringing { call_id: guid.clone() },
+        M::JoinEvent { guid, handle, .. } => CallEvent::Joined {
+            call_id: guid.clone(),
+            handle: handle.clone(),
+        },
+        M::LeaveEvent { guid, handle, .. } => CallEvent::Left {
+            call_id: guid.clone(),
+            handle: handle.clone(),
+        },
+        M::Decline { guid } => CallEvent::Declined { call_id: guid.clone() },
+        M::RespondedElsewhere { guid } => {
+            CallEvent::AnsweredElsewhere { call_id: guid.clone() }
+        }
+        M::Connected { guid } => CallEvent::Connected { call_id: guid.clone() },
+        M::Disconnected { guid } => CallEvent::Disconnected { call_id: guid.clone() },
+        M::AddMembers { .. } | M::RemoveMembers { .. } | M::LinkChanged { .. }
+        | M::LetMeInRequest(_) => return None,
+    })
+}

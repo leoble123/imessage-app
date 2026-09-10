@@ -53,6 +53,15 @@ impl Paths {
         self.root.join("id_cache.plist")
     }
 
+    /// FaceTime sessions and links.
+    ///
+    /// Kept because a call's crypto state lives here: losing it mid-call
+    /// leaves the other side connected to something that can no longer decrypt
+    /// anything it sends.
+    pub fn facetime(&self) -> PathBuf {
+        self.root.join("facetime.plist")
+    }
+
     /// Working directory for the anisette provider.
     pub fn anisette(&self) -> PathBuf {
         self.root.join("anisette")

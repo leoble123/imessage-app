@@ -141,6 +141,48 @@ pub struct Handles {
     pub preferred: Option<String>,
 }
 
+/// What happened to a call.
+///
+/// FaceTime is a separate service from iMessage with its own push topics, so
+/// these arrive on the same connection but through a different client and are
+/// reported separately rather than being folded into message events.
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum CallEvent {
+    /// Someone is calling. This is the one that has to ring the phone.
+    Incoming {
+        call_id: String,
+        /// Everyone on the call, us included.
+        members: Vec<String>,
+        is_video: bool,
+    },
+    /// Our outgoing call started ringing on the other end.
+    Ringing { call_id: String },
+    /// Someone joined - the call is live.
+    Joined { call_id: String, handle: String },
+    /// Someone left. A one-to-one call is over when this arrives.
+    Left { call_id: String, handle: String },
+    Declined { call_id: String },
+    /// Answered on another one of the account's devices, so stop ringing here.
+    AnsweredElsewhere { call_id: String },
+    /// Media path is up.
+    Connected { call_id: String },
+    Disconnected { call_id: String },
+    /// The call's shareable link changed.
+    LinkChanged { call_id: String, link: String },
+}
+
+/// A call as the app should show it.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CallInfo {
+    pub call_id: String,
+    pub members: Vec<String>,
+    pub is_video: bool,
+    /// True when we started it.
+    pub outgoing: bool,
+    /// Milliseconds since the epoch, for the call duration timer.
+    pub started_ms: u64,
+}
+
 /// How the Rust side reaches the app.
 ///
 /// The push connection is long-lived and delivers messages whenever Apple has
@@ -149,6 +191,8 @@ pub struct Handles {
 #[uniffi::export(with_foreign)]
 pub trait EventListener: Send + Sync {
     fn on_event(&self, event: IncomingEvent);
+    /// A FaceTime call changed state.
+    fn on_call_event(&self, event: CallEvent);
     /// Called whenever the registration state changes and needs persisting.
     /// Losing this means re-registering with Apple on next launch, which burns
     /// a registration slot, so the app writes it out immediately.

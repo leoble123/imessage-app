@@ -19,6 +19,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 
 /**
  * Keeps the iMessage connection up while the app isn't open.
@@ -51,6 +52,12 @@ class ConnectionService : Service() {
                 when (state) {
                     is AccountState.Ready -> {
                         update("Connected")
+                        // Calls are watched on their own coroutine: the message
+                        // watcher below never returns, so anything after it
+                        // would never start.
+                        (state.backend as? com.leo.imessage.data.RustBackend)?.let {
+                            launch { watchForCalls(it) }
+                        }
                         watchForMessages(state)
                     }
                     // Signed out from Settings - there's nothing left to hold
@@ -92,6 +99,57 @@ class ConnectionService : Service() {
         }
     }
 
+    /**
+     * Rings the phone for an incoming call.
+     *
+     * The app is usually not on screen when a call arrives, so the Activity's
+     * own overlay is not enough. A full-screen intent is what lets Android
+     * bring the call UI up over the lock screen, the way a phone call does.
+     */
+    private suspend fun watchForCalls(backend: com.leo.imessage.data.RustBackend) {
+        var lastRinging: String? = null
+        backend.calls.current.collect { call ->
+            val manager = getSystemService(NotificationManager::class.java) ?: return@collect
+            if (call == null || call.stage != com.leo.imessage.data.Calls.Stage.INCOMING) {
+                // Answered, declined or over - the ring has to stop either way.
+                if (lastRinging != null) {
+                    manager.cancel(CALL_NOTIFICATION_ID)
+                    lastRinging = null
+                }
+                return@collect
+            }
+            // Re-posting the same call would restart the ringtone every time
+            // any unrelated field changed.
+            if (lastRinging == call.id) return@collect
+            lastRinging = call.id
+            manager.notify(CALL_NOTIFICATION_ID, buildCallNotification(call.title))
+        }
+    }
+
+    private fun buildCallNotification(who: String): Notification {
+        val open = PendingIntent.getActivity(
+            this,
+            1,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        return NotificationCompat.Builder(this, CALL_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.sym_action_chat)
+            .setContentTitle(who)
+            .setContentText("Incoming FaceTime")
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .setContentIntent(open)
+            // The part that actually raises the call screen over the lock
+            // screen instead of leaving a banner nobody sees in time.
+            .setFullScreenIntent(open, true)
+            .build()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // START_STICKY: if Android kills us under memory pressure, come back.
         // Reconnecting costs a round trip; staying down costs every message
@@ -130,7 +188,9 @@ class ConnectionService : Service() {
 
     companion object {
         private const val CHANNEL_ID = "connection"
+        private const val CALL_CHANNEL_ID = "calls"
         private const val NOTIFICATION_ID = 2
+        private const val CALL_NOTIFICATION_ID = 3
 
         fun start(context: Context) {
             val intent = Intent(context, ConnectionService::class.java)
@@ -158,8 +218,20 @@ class ConnectionService : Service() {
                 description = "Keeps iMessage connected so messages arrive."
                 setShowBadge(false)
             }
-            context.getSystemService(NotificationManager::class.java)
-                ?.createNotificationChannel(channel)
+            val calls = NotificationChannel(
+                CALL_CHANNEL_ID,
+                "Calls",
+                // HIGH is the minimum that lets a full-screen intent through.
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = "Incoming FaceTime calls."
+                setShowBadge(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+            context.getSystemService(NotificationManager::class.java)?.apply {
+                createNotificationChannel(channel)
+                createNotificationChannel(calls)
+            }
         }
     }
 }
