@@ -82,6 +82,14 @@ fun MessageInputBar(
     placeholder: String = "iMessage",
     /** Opens the keyboard as soon as the bar appears. */
     autoFocus: Boolean = false,
+    /** True while the attachment tray is showing, so "+" reads as a close. */
+    trayOpen: Boolean = false,
+    onToggleTray: () -> Unit = {},
+    /** Attachments staged by the tray, hoisted so the tray can outlive this. */
+    staged: List<com.leo.imessage.data.Attachment> = emptyList(),
+    onRemoveStaged: (com.leo.imessage.data.Attachment) -> Unit = {},
+    stagedEffect: MessageEffect = MessageEffect.NONE,
+    onClearStagedEffect: () -> Unit = {},
 ) {
     val palette = LocalPalette.current
     val settings = com.leo.imessage.ui.theme.LocalSettings.current
@@ -90,6 +98,7 @@ fun MessageInputBar(
     val ownFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val focus = focusRequester ?: ownFocus
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
 
     LaunchedEffect(autoFocus) {
         if (autoFocus) {
@@ -107,75 +116,58 @@ fun MessageInputBar(
         if (editing != null) text = editing.text
     }
     var showEffects by remember { mutableStateOf(false) }
-    var showTray by remember { mutableStateOf(false) }
     // Staged attachments and effect, so you can line up a photo, type a
     // caption and pick an effect before anything is sent - rather than each
     // choice firing off a message of its own.
-    var pending by remember { mutableStateOf<List<com.leo.imessage.data.Attachment>>(emptyList()) }
-    var pendingEffect by remember { mutableStateOf(MessageEffect.NONE) }
+    val pending = staged
+    val pendingEffect = stagedEffect
     val canSend = text.isNotBlank() || pending.isNotEmpty()
 
     fun commit(effect: MessageEffect) {
         if (!canSend) return
         onSend(text.trim(), effect, pending)
         text = ""
-        pending = emptyList()
-        pendingEffect = MessageEffect.NONE
     }
 
     if (showEffects) {
         EffectPicker(
             onPick = { effect ->
                 showEffects = false
-                if (canSend) commit(effect) else pendingEffect = effect
+                if (canSend) commit(effect)
             },
             onDismiss = { showEffects = false },
         )
     }
 
-    if (showTray) {
-        AttachmentTray(
-            onAttach = { added -> pending = pending + added },
-            onPickEffect = { effect -> pendingEffect = effect },
-            onDismiss = { showTray = false },
-        )
-    }
 
-    // A floating capsule rather than a bar welded to the bottom edge: the
-    // transcript runs underneath it and blurs through, which is the entire
-    // reason for using a real backdrop blur instead of a tinted fill.
-    GlassSurface(
+    // Two independent pieces of glass, not one slab: the "+" is its own
+    // circle and the field its own capsule, each blurring the thread behind
+    // it separately. A single container welds them together and the whole
+    // thing reads as one bar again - the separation is what makes them feel
+    // like objects floating on the conversation rather than chrome bolted
+    // to the bottom of it. Swiping either one vertically summons or
+    // dismisses the keyboard.
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 10.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(26.dp)),
-        hazeState = hazeState,
-        tintAlpha = 0.5f,
-        blurRadius = 36,
-        darkBase = darkBase,
+            .animateContentSize(Motion.fluid())
+            .verticalFlick(
+                onUp = {
+                    focus.requestFocus()
+                    keyboard?.show()
+                },
+                onDown = {
+                    if (trayOpen) {
+                        onToggleTray()
+                    } else {
+                        keyboard?.hide()
+                        focusManager.clearFocus()
+                    }
+                },
+            ),
     ) {
-        Box(
-            Modifier
-                .matchParentSize()
-                .border(
-                    0.9.dp,
-                    androidx.compose.ui.graphics.Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = if (darkBase == false) 0.5f else 0.22f),
-                            Color.White.copy(alpha = 0.05f),
-                        )
-                    ),
-                    RoundedCornerShape(26.dp),
-                )
-        )
-        // Height changes - the edit banner arriving, the field growing as
-        // text wraps - flow instead of snapping.
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .animateContentSize(Motion.fluid())
-        ) {
+        run {
         if (editing != null) {
             Row(
                 Modifier
@@ -206,8 +198,8 @@ fun MessageInputBar(
             StagedRow(
                 attachments = pending,
                 effect = pendingEffect,
-                onRemove = { att -> pending = pending.filterNot { it.id == att.id } },
-                onClearEffect = { pendingEffect = MessageEffect.NONE },
+                onRemove = onRemoveStaged,
+                onClearEffect = onClearStagedEffect,
             )
         }
         Row(
@@ -217,21 +209,42 @@ fun MessageInputBar(
             verticalAlignment = Alignment.Bottom,
         ) {
             PlusButton(
-                expanded = showTray,
+                expanded = trayOpen,
+                hazeState = hazeState,
+                darkBase = darkBase,
                 onClick = {
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    showTray = true
+                    onToggleTray()
                 },
             )
 
             Spacer(Modifier.width(8.dp))
 
-            // Stroked capsule containing the field and the send button.
+            // The field is its own pane of glass with its own lit rim.
+            GlassPill(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(21.dp)),
+                hazeState = hazeState,
+                darkBase = darkBase,
+            ) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .border(
+                        0.9.dp,
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = if (darkBase == false) 0.55f else 0.24f),
+                                Color.White.copy(alpha = 0.06f),
+                            )
+                        ),
+                        RoundedCornerShape(21.dp),
+                    )
+            )
             Row(
                 Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(20.dp))
-                    .border(1.dp, palette.separator.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                    .fillMaxWidth()
                     .padding(start = 13.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
@@ -336,13 +349,19 @@ fun MessageInputBar(
                     }
                 }
             }
+            }
         }
         }
     }
 }
 
 @Composable
-private fun PlusButton(expanded: Boolean, onClick: () -> Unit) {
+private fun PlusButton(
+    expanded: Boolean,
+    hazeState: HazeState,
+    darkBase: Boolean?,
+    onClick: () -> Unit,
+) {
     val palette = LocalPalette.current
     var pressed by remember { mutableStateOf(false) }
     val scale = pressScale(pressed, pressedScale = 0.88f, spec = Motion.bouncy(), label = "plusPress")
@@ -353,13 +372,12 @@ private fun PlusButton(expanded: Boolean, onClick: () -> Unit) {
         animationSpec = Motion.fluid(),
         label = "plusTurn",
     )
-    Box(
-        Modifier
-            .size(32.dp)
+    GlassPill(
+        modifier = Modifier
+            .size(34.dp)
             .scaleFrom(scale)
             .graphicsLayer { rotationZ = 45f * turn.value }
             .clip(CircleShape)
-            .background(palette.fieldBackground)
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
@@ -370,14 +388,17 @@ private fun PlusButton(expanded: Boolean, onClick: () -> Unit) {
                     onTap = { onClick() },
                 )
             },
-        contentAlignment = Alignment.Center,
+        hazeState = hazeState,
+        darkBase = darkBase,
     ) {
-        Icon(
-            Icons.Filled.Add,
-            contentDescription = "Attach",
-            tint = palette.secondaryLabel,
-            modifier = Modifier.size(20.dp),
-        )
+        Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+            Icon(
+                Icons.Filled.Add,
+                contentDescription = "Attach",
+                tint = palette.secondaryLabel,
+                modifier = Modifier.size(20.dp),
+            )
+        }
     }
 }
 

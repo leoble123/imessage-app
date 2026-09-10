@@ -56,27 +56,33 @@ import com.leo.imessage.media.MediaTools
 import com.leo.imessage.ui.theme.LocalPalette
 import com.leo.imessage.ui.theme.Motion
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
 import java.util.UUID
 
 /**
  * What the "+" opens.
  *
- * iOS presents this as a sheet that rises under your thumb with the options
- * as a row of round tiles, so this does the same: one spring up from the
- * bottom, tiles staggered in behind it, and a scrim you can tap anywhere to
- * put it away.
+ * It takes the keyboard's place rather than floating over the composer -
+ * that's how iOS does it, and it's why the tray never covers the thing you
+ * just tapped. The panel matches the height the keyboard last occupied, so
+ * swapping between the two doesn't make the conversation jump; before the
+ * keyboard has ever been up it falls back to a sensible default.
  *
- * Every tile is real. Photos and Videos go through the system photo picker
- * (which needs no permission at all and never sees your whole library),
- * Camera writes into our own cache through a FileProvider, Files uses the
- * document picker, and Audio records in place with a live timer.
+ * Every tile is real. Photos goes through the system picker (no permission,
+ * and it never sees your whole library), Gallery hands off to whatever
+ * gallery app the phone ships - Samsung's, here - Camera writes into our
+ * cache through a FileProvider, Files uses the document picker, and Audio
+ * records in place with a live timer and transcription.
  */
 @Composable
 fun AttachmentTray(
     onAttach: (List<Attachment>) -> Unit,
     onPickEffect: (MessageEffect) -> Unit,
     onDismiss: () -> Unit,
+    /** Height the keyboard last occupied, so the panel takes its place. */
+    panelHeight: androidx.compose.ui.unit.Dp = 300.dp,
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val palette = LocalPalette.current
@@ -113,6 +119,21 @@ fun AttachmentTray(
         ActivityResultContracts.OpenDocument()
     ) { uri -> deliver(listOfNotNull(uri)) }
 
+    // ACTION_PICK on the media store is what opens the phone's own gallery
+    // app rather than the system picker sheet - on a Samsung that's Gallery.
+    val pickFromGallery = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val data = result.data
+        val uris = buildList {
+            data?.clipData?.let { clip ->
+                for (i in 0 until clip.itemCount) add(clip.getItemAt(i).uri)
+            }
+            data?.data?.let { add(it) }
+        }
+        deliver(uris.distinct())
+    }
+
     // The camera writes into a file we own, so we have to hold on to where
     // it went while the camera app is in the foreground.
     var pendingCapture by remember { mutableStateOf<Pair<File, Uri>?>(null) }
@@ -139,27 +160,23 @@ fun AttachmentTray(
         )
     }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .graphicsLayer { alpha = appear.value }
-            .background(Color.Black.copy(alpha = 0.35f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-            ) { onDismiss() },
-        contentAlignment = Alignment.BottomCenter,
+    Column(
+        modifier
+            .fillMaxWidth()
+            .height(panelHeight)
+            .graphicsLayer {
+                translationY = panelHeight.toPx() * (1f - appear.value)
+                alpha = 0.4f + 0.6f * appear.value
+            }
+            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+            .background(palette.surface)
+            // A flick down anywhere on the panel puts it away, the same
+            // gesture that dismisses the keyboard it replaced.
+            .verticalFlick(onUp = {}, onDown = onDismiss)
+            .padding(top = 10.dp, bottom = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .graphicsLayer { translationY = 320.dp.toPx() * (1f - appear.value) }
-                .clip(RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
-                .background(palette.surface)
-                .navigationBarsPadding()
-                .padding(top = 10.dp, bottom = 18.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
+        run {
             Box(
                 Modifier
                     .width(38.dp)
@@ -178,37 +195,63 @@ fun AttachmentTray(
                     },
                 )
             } else {
-                Row(
-                    Modifier
+                androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                    columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
+                    modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 18.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                        .weight(1f)
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    TrayTile("Photos", index = 0, appear = { appear.value }) {
+                    item { TrayTile("Photos", 0, { appear.value }) {
                         pickMedia.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
                         )
-                    }
-                    TrayTile("Camera", index = 1, appear = { appear.value }) {
+                    } }
+                    item { TrayTile("Gallery", 1, { appear.value }) {
+                        pickFromGallery.launch(openGalleryIntent())
+                    } }
+                    item { TrayTile("Camera", 2, { appear.value }) {
                         val capture = MediaTools.newCaptureTarget(context, "jpg")
                         pendingCapture = capture
                         takePicture.launch(capture.second)
-                    }
-                    TrayTile("Files", index = 2, appear = { appear.value }) {
+                    } }
+                    item { TrayTile("Files", 3, { appear.value }) {
                         pickDocument.launch(arrayOf("*/*"))
-                    }
-                    TrayTile("Audio", index = 3, appear = { appear.value }) {
+                    } }
+                    item { TrayTile("Audio", 4, { appear.value }) {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
-                    }
-                    TrayTile("Effects", index = 4, appear = { appear.value }) {
+                    } }
+                    item { TrayTile("Effects", 5, { appear.value }) {
                         showEffects = true
-                    }
+                    } }
                 }
             }
         }
     }
 }
+
+/**
+ * Opens the phone's gallery app rather than the system picker sheet.
+ *
+ * ACTION_PICK against the media store is what the OEM gallery registers
+ * for, so on a Samsung this lands directly in Gallery with its albums and
+ * multi-select, instead of the generic Android photo sheet.
+ */
+private fun openGalleryIntent(): android.content.Intent =
+    android.content.Intent(
+        android.content.Intent.ACTION_PICK,
+        android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+    ).apply {
+        type = "image/*, video/*"
+        putExtra(
+            android.content.Intent.EXTRA_MIME_TYPES,
+            arrayOf("image/*", "video/*"),
+        )
+        putExtra(android.content.Intent.EXTRA_ALLOW_MULTIPLE, true)
+    }
 
 @Composable
 private fun TrayTile(
@@ -223,7 +266,12 @@ private fun TrayTile(
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
         modifier = Modifier
+            .fillMaxWidth()
+            .height(84.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(LocalPalette.current.fieldBackground)
             .graphicsLayer {
                 // Staggered: each tile trails the one before it, so the row
                 // unfurls rather than arriving as a single block.
@@ -244,16 +292,12 @@ private fun TrayTile(
             },
     ) {
         Box(
-            Modifier
-                .size(58.dp)
-                .scaleFrom(scale)
-                .clip(CircleShape)
-                .background(palette.fieldBackground),
+            Modifier.scaleFrom(scale),
             contentAlignment = Alignment.Center,
         ) {
             TrayGlyph(label, palette.accent)
         }
-        Spacer(Modifier.height(7.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
@@ -300,6 +344,22 @@ private fun TrayGlyph(label: String, color: Color) {
                 )
                 drawCircle(
                     color, radius = w * 0.17f, center = Offset(w * 0.5f, h * 0.53f),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(stroke),
+                )
+            }
+            "Gallery" -> {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(w * 0.04f, h * 0.16f),
+                    size = androidx.compose.ui.geometry.Size(w * 0.6f, h * 0.6f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.12f),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(stroke),
+                )
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(w * 0.34f, h * 0.32f),
+                    size = androidx.compose.ui.geometry.Size(w * 0.62f, h * 0.6f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.12f),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(stroke),
                 )
             }
@@ -377,109 +437,129 @@ private fun AudioRecorderPanel(
 ) {
     val context = LocalContext.current
     val palette = LocalPalette.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     var elapsed by remember { mutableStateOf(0L) }
+    var transcribing by remember { mutableStateOf(false) }
 
     val target = remember {
         val dir = File(context.cacheDir, "recordings").apply { mkdirs() }
-        File(dir, "${System.currentTimeMillis()}.m4a")
+        File(dir, "${System.currentTimeMillis()}.wav")
     }
-
-    val recorder = remember {
-        runCatching {
-            @Suppress("DEPRECATION")
-            val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                MediaRecorder(context)
-            } else {
-                MediaRecorder()
-            }
-            r.apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioEncodingBitRate(96_000)
-                setAudioSamplingRate(44_100)
-                setOutputFile(target.absolutePath)
-                prepare()
-                start()
-            }
-        }.getOrNull()
-    }
+    val recorder = remember { com.leo.imessage.media.VoiceRecorder(context) }
+    var live by remember { mutableStateOf(0f) }
 
     DisposableEffect(Unit) {
-        onDispose { runCatching { recorder?.release() } }
+        val started = runCatching { recorder.start(target) }.getOrDefault(false)
+        if (!started) onCancel()
+        onDispose { runCatching { recorder.stop(target) } }
     }
 
     LaunchedEffect(Unit) {
         while (true) {
-            delay(100)
-            elapsed += 100
+            delay(60)
+            elapsed += 60
+            live = recorder.level
         }
     }
 
-    Row(
+    Column(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 22.dp, vertical = 22.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .padding(horizontal = 22.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            "Cancel",
-            style = MaterialTheme.typography.titleSmall,
-            color = palette.secondaryLabel,
-            modifier = Modifier
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                ) {
-                    runCatching { recorder?.stop() }
-                    target.delete()
-                    onCancel()
-                }
-                .padding(6.dp),
-        )
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(9.dp)
-                    .clip(CircleShape)
-                    .background(palette.destructive)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                MediaTools.formatDuration(elapsed),
-                style = MaterialTheme.typography.titleMedium,
-                color = palette.label,
-            )
+        // Live level, so you can see the mic is actually hearing you.
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+        ) {
+            val bars = 40
+            val gap = size.width / (bars * 1.8f)
+            val barWidth = (size.width - gap * (bars - 1)) / bars
+            repeat(bars) { i ->
+                val distance = kotlin.math.abs(i - bars / 2f) / (bars / 2f)
+                val amp = (live * (1f - distance * 0.75f)).coerceIn(0.02f, 1f)
+                val h = size.height * amp
+                drawLine(
+                    color = palette.accent,
+                    start = Offset(i * (barWidth + gap) + barWidth / 2f, size.height / 2f - h / 2f),
+                    end = Offset(i * (barWidth + gap) + barWidth / 2f, size.height / 2f + h / 2f),
+                    strokeWidth = barWidth,
+                    cap = StrokeCap.Round,
+                )
+            }
         }
 
+        Spacer(Modifier.height(14.dp))
+
         Text(
-            "Send",
-            style = MaterialTheme.typography.titleSmall,
-            color = palette.accent,
-            modifier = Modifier
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                ) {
-                    val stopped = runCatching { recorder?.stop() }.isSuccess
-                    if (stopped && target.exists() && target.length() > 0) {
-                        onFinished(
-                            Attachment(
-                                id = UUID.randomUUID().toString(),
-                                fileName = "Audio Message.m4a",
-                                mimeType = "audio/mp4",
-                                uri = Uri.fromFile(target).toString(),
-                                durationMs = elapsed,
-                                sizeBytes = target.length(),
-                            )
-                        )
-                    } else {
+            text = if (transcribing) "Transcribing…" else MediaTools.formatDuration(elapsed),
+            style = MaterialTheme.typography.headlineSmall,
+            color = palette.label,
+        )
+
+        Spacer(Modifier.height(20.dp))
+
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "Cancel",
+                style = MaterialTheme.typography.titleSmall,
+                color = palette.secondaryLabel,
+                modifier = Modifier
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        enabled = !transcribing,
+                    ) {
+                        recorder.cancel(target)
                         onCancel()
                     }
-                }
-                .padding(6.dp),
-        )
+                    .padding(10.dp),
+            )
+            Text(
+                "Send",
+                style = MaterialTheme.typography.titleSmall,
+                color = palette.accent,
+                modifier = Modifier
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        enabled = !transcribing,
+                    ) {
+                        val duration = elapsed
+                        val ok = recorder.stop(target)
+                        if (!ok) {
+                            onCancel()
+                            return@clickable
+                        }
+                        transcribing = true
+                        scope.launch {
+                            // Transcribed before sending rather than patched
+                            // in afterwards: a voice note whose text appears
+                            // a second later reads as a glitch.
+                            val text = com.leo.imessage.media.transcribeWav(context, target)
+                            transcribing = false
+                            onFinished(
+                                Attachment(
+                                    id = UUID.randomUUID().toString(),
+                                    fileName = "Audio Message.wav",
+                                    mimeType = "audio/wav",
+                                    uri = Uri.fromFile(target).toString(),
+                                    durationMs = duration,
+                                    sizeBytes = target.length(),
+                                    transcript = text,
+                                )
+                            )
+                        }
+                    }
+                    .padding(10.dp),
+            )
+        }
     }
 }

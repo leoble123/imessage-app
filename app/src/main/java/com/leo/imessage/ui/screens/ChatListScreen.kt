@@ -69,6 +69,7 @@ fun ChatListScreen(
     onSetMuted: (String, Boolean) -> Unit = { _, _ -> },
     onDeleteChat: (String) -> Unit = {},
     onMarkUnread: (String) -> Unit = {},
+    onSetArchived: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     val palette = LocalPalette.current
     val listState = rememberLazyListState()
@@ -76,14 +77,18 @@ fun ChatListScreen(
     var query by remember { mutableStateOf("") }
     var unreadOnly by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
+    var showArchived by remember { mutableStateOf(false) }
+    var actionsFor by remember { mutableStateOf<Chat?>(null) }
     val selected = remember { androidx.compose.runtime.mutableStateListOf<String>() }
     val haptics = com.leo.imessage.ui.components.rememberHaptics()
     val density = androidx.compose.ui.platform.LocalDensity.current
     var topBarHeight by remember { androidx.compose.runtime.mutableStateOf(0.dp) }
     var bottomBarHeight by remember { androidx.compose.runtime.mutableStateOf(0.dp) }
 
-    val visibleChats = remember(chats, query, unreadOnly) {
+    val archivedCount = chats.count { it.isArchived }
+    val visibleChats = remember(chats, query, unreadOnly, showArchived) {
         chats
+            .filter { it.isArchived == showArchived }
             .filter { !unreadOnly || it.unreadCount > 0 }
             .filter { chat ->
                 query.isBlank() ||
@@ -118,6 +123,42 @@ fun ChatListScreen(
             val pinned = visibleChats.filter { it.isPinned }
             val rest = visibleChats.filterNot { it.isPinned }
 
+            if (pinned.isNotEmpty()) {
+                item(key = "pins") {
+                    com.leo.imessage.ui.components.PinnedChatsRow(
+                        pinned = pinned,
+                        onOpen = onOpenChat,
+                        onLongPress = { actionsFor = it },
+                    )
+                }
+            }
+
+            if (archivedCount > 0 || showArchived) {
+                item(key = "archived-entry") {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { showArchived = !showArchived }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (showArchived) "← Back to Messages" else "Archived",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = palette.accent,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (!showArchived) {
+                            Text(
+                                text = "$archivedCount",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = palette.tertiaryLabel,
+                            )
+                        }
+                    }
+                }
+            }
+
             if (visibleChats.isEmpty()) {
                 item(key = "empty") {
                     Text(
@@ -132,30 +173,6 @@ fun ChatListScreen(
                 }
             }
 
-            items(pinned, key = { it.id }) { chat ->
-                ChatRow(
-                    chat = chat,
-                    onOpen = onOpenChat,
-                    editing = editing,
-                    isSelected = chat.id in selected,
-                    onToggleSelected = { toggleSelection(selected, chat.id) },
-                    onSetPinned = onSetPinned,
-                    onSetMuted = onSetMuted,
-                    onDeleteChat = onDeleteChat,
-                    onMarkUnread = onMarkUnread,
-                )
-            }
-            if (pinned.isNotEmpty() && rest.isNotEmpty()) {
-                item(key = "pinned-sep") {
-                    Box(
-                        Modifier
-                            .padding(start = 82.dp)
-                            .fillMaxWidth()
-                            .height(0.5.dp)
-                            .background(palette.separator)
-                    )
-                }
-            }
             items(rest, key = { it.id }) { chat ->
                 ChatRow(
                     chat = chat,
@@ -167,6 +184,7 @@ fun ChatListScreen(
                     onSetMuted = onSetMuted,
                     onDeleteChat = onDeleteChat,
                     onMarkUnread = onMarkUnread,
+                    onLongPress = { actionsFor = chat },
                 )
             }
         }
@@ -278,12 +296,49 @@ fun ChatListScreen(
                     }
                 }
                 Text(
-                    text = "Messages",
+                    text = if (showArchived) "Archived" else "Messages",
                     style = MaterialTheme.typography.displaySmall,
                     color = palette.label,
                     modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
                 )
             }
+        }
+
+        actionsFor?.let { chat ->
+            com.leo.imessage.ui.components.ChatActionsMenu(
+                chat = chat,
+                onDismiss = { actionsFor = null },
+                actions = listOf(
+                    com.leo.imessage.ui.components.ChatAction(
+                        if (chat.isPinned) "Unpin" else "Pin",
+                        if (chat.isPinned) "\u2716" else "\u2691",
+                    ) { onSetPinned(chat.id, !chat.isPinned) },
+                    com.leo.imessage.ui.components.ChatAction(
+                        if (chat.isMuted) "Show Alerts" else "Hide Alerts",
+                        if (chat.isMuted) "\uD83D\uDD14" else "\uD83D\uDD15",
+                    ) { onSetMuted(chat.id, !chat.isMuted) },
+                    com.leo.imessage.ui.components.ChatAction(
+                        if (chat.unreadCount > 0) "Mark as Read" else "Mark as Unread",
+                        "\u25CF",
+                    ) {
+                        if (chat.unreadCount > 0) onOpenChat(chat) else onMarkUnread(chat.id)
+                    },
+                    com.leo.imessage.ui.components.ChatAction(
+                        if (chat.isArchived) "Unarchive" else "Archive",
+                        "\u2913",
+                    ) { onSetArchived(chat.id, !chat.isArchived) },
+                    com.leo.imessage.ui.components.ChatAction(
+                        "Delete",
+                        "\u2715",
+                        destructive = true,
+                    ) { onDeleteChat(chat.id) },
+                ),
+                preview = {
+                    Box(Modifier.width(320.dp)) {
+                        ChatRow(chat = chat, onOpen = {})
+                    }
+                },
+            )
         }
     }
 }
@@ -347,8 +402,10 @@ private fun ChatRow(
     onSetMuted: (String, Boolean) -> Unit = { _, _ -> },
     onDeleteChat: (String) -> Unit = {},
     onMarkUnread: (String) -> Unit = {},
+    onLongPress: () -> Unit = {},
 ) {
     val palette = LocalPalette.current
+    val rowHaptics = com.leo.imessage.ui.components.rememberHaptics()
 
     // iOS highlights a row the instant you touch it and clears the moment you
     // lift - no ripple, no delay. That immediacy is most of why taps feel
@@ -387,6 +444,10 @@ private fun ChatRow(
                             pressed = false
                         },
                         onTap = { if (editing) onToggleSelected() else onOpen(chat) },
+                        onLongPress = {
+                            rowHaptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onLongPress()
+                        },
                     )
                 }
                 .padding(start = 16.dp, end = 16.dp, top = 9.dp, bottom = 9.dp),

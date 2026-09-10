@@ -187,10 +187,8 @@ fun AudioAttachment(
         }
     }
 
+    Column(modifier.widthIn(max = 260.dp).padding(vertical = 2.dp)) {
     Row(
-        modifier
-            .widthIn(max = 260.dp)
-            .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -248,6 +246,19 @@ fun AudioAttachment(
             style = MaterialTheme.typography.labelSmall,
             color = tint.copy(alpha = 0.8f),
         )
+    }
+
+    // iOS puts the transcript right under the waveform, and it turns a
+    // voice note into something you can read in a room where you can't
+    // play it. Absent when the device's recogniser couldn't produce one.
+    attachment.transcript?.let { transcript ->
+        Text(
+            text = transcript,
+            style = MaterialTheme.typography.bodyMedium,
+            color = tint.copy(alpha = 0.92f),
+            modifier = Modifier.padding(top = 7.dp, start = 2.dp, end = 2.dp),
+        )
+    }
     }
 }
 

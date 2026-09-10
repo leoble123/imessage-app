@@ -55,6 +55,8 @@ data class Attachment(
     val uri: String? = null,
     val durationMs: Long? = null,
     val sizeBytes: Long? = null,
+    /** Speech-to-text for a voice message, when the device could produce it. */
+    val transcript: String? = null,
 ) {
     val kind: MediaKind
         get() = when {
@@ -103,6 +105,7 @@ data class Chat(
     val unreadCount: Int = 0,
     val isPinned: Boolean = false,
     val isMuted: Boolean = false,
+    val isArchived: Boolean = false,
     val isTyping: Boolean = false,
     val service: Service = Service.IMESSAGE,
 ) {

@@ -159,6 +159,7 @@ fun ConversationScreen(
     backgroundId: String = "none",
 ) {
     val palette = LocalPalette.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
     val listState = rememberLazyListState()
     val hazeState = remember { HazeState() }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -179,15 +180,25 @@ fun ConversationScreen(
     var viewing by remember { mutableStateOf<com.leo.imessage.data.Attachment?>(null) }
     // The message whose details sheet is open, if any.
     var infoFor by remember { mutableStateOf<Message?>(null) }
+    // Attachment tray state lives here, not inside the composer: rendered
+    // from inside the bar it was clipped by the bar's own bounds, which is
+    // why it came up underneath the text field.
+    var showTray by remember { mutableStateOf(false) }
+    var staged by remember { mutableStateOf<List<com.leo.imessage.data.Attachment>>(emptyList()) }
+    var stagedEffect by remember { mutableStateOf(com.leo.imessage.data.MessageEffect.NONE) }
+    // Remembered so the tray can take the keyboard's exact place.
+    var keyboardHeight by remember { mutableStateOf(300.dp) }
     val composerFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     androidx.activity.compose.BackHandler(
-        enabled = threadRoot != null || menuFor != null || viewing != null || infoFor != null
+        enabled = threadRoot != null || menuFor != null || viewing != null ||
+            infoFor != null || showTray
     ) {
         when {
             viewing != null -> viewing = null
             infoFor != null -> infoFor = null
+            showTray -> showTray = false
             menuFor != null -> menuFor = null
             else -> threadRoot = null
         }
@@ -195,6 +206,29 @@ fun ConversationScreen(
 
     // Opening a thread clears its unread badge.
     LaunchedEffect(chat.id) { onMarkRead() }
+
+    // Opening the tray shifts the transcript up the same way the keyboard
+    // does, so the last message stays where you left it.
+    LaunchedEffect(showTray) {
+        if (showTray && rows.isNotEmpty()) listState.animateScrollToItem(rows.lastIndex)
+    }
+
+    // Track the keyboard's height while it's up, so the tray can occupy
+    // exactly the same space and swapping between them doesn't shift the
+    // conversation.
+    val imeInsets = androidx.compose.foundation.layout.WindowInsets.ime
+    LaunchedEffect(Unit) {
+        androidx.compose.runtime.snapshotFlow { imeInsets.getBottom(density) }
+            .collect { px ->
+                val dp = with(density) { px.toDp() }
+                if (dp > 180.dp) {
+                    keyboardHeight = dp
+                    // Tapping the field while the tray is up should hand the
+                    // space back to the keyboard, not stack the two.
+                    showTray = false
+                }
+            }
+    }
 
     // Swipe the thread left to uncover per-message timestamps.
     val stampReveal = remember { androidx.compose.animation.core.Animatable(0f) }
@@ -219,7 +253,6 @@ fun ConversationScreen(
     com.leo.imessage.ui.components.ScrollWithKeyboard(listState)
 
     val background = com.leo.imessage.ui.theme.backgroundById(backgroundId)
-    val density = androidx.compose.ui.platform.LocalDensity.current
     // Both shells float over the transcript now, so the list has to reserve
     // room for them itself rather than being squeezed between two bars.
     var navBarHeight by remember { mutableStateOf(104.dp) }
@@ -267,7 +300,9 @@ fun ConversationScreen(
                 },
             contentPadding = PaddingValues(
                 top = navBarHeight + 6.dp,
-                bottom = composerHeight + 8.dp,
+                // The tray takes the keyboard's space, so it owes the
+                // transcript the same room the keyboard would have.
+                bottom = composerHeight + (if (showTray) keyboardHeight else 0.dp) + 8.dp,
                 start = 12.dp,
                 end = 12.dp,
             ),
@@ -336,7 +371,12 @@ fun ConversationScreen(
         }
 
         MessageInputBar(
-                onSend = { text, effect, attachments -> onSend(text, effect, null, attachments) },
+                onSend = { text, effect, attachments ->
+                    onSend(text, effect, null, attachments)
+                    staged = emptyList()
+                    stagedEffect = com.leo.imessage.data.MessageEffect.NONE
+                    showTray = false
+                },
                 hazeState = hazeState,
                 darkBase = if (background.brush != null) background.isDark else null,
                 editing = editingMessage,
@@ -346,13 +386,44 @@ fun ConversationScreen(
                     editingMessage?.let { onEdit(it.id, newText) }
                     editingMessage = null
                 },
+                trayOpen = showTray,
+                onToggleTray = {
+                    if (showTray) {
+                        showTray = false
+                    } else {
+                        keyboard?.hide()
+                        showTray = true
+                    }
+                },
+                staged = staged,
+                onRemoveStaged = { att -> staged = staged.filterNot { it.id == att.id } },
+                stagedEffect = stagedEffect,
+                onClearStagedEffect = {
+                    stagedEffect = com.leo.imessage.data.MessageEffect.NONE
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    .padding(bottom = if (showTray) keyboardHeight else 0.dp)
                     .imePadding()
                     .onSizeChanged {
                         composerHeight = with(density) { it.height.toDp() }
                     },
             )
+
+            // Sits where the keyboard was, under the composer.
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showTray,
+                enter = androidx.compose.animation.fadeIn(Motion.fade(120)),
+                exit = androidx.compose.animation.fadeOut(Motion.fade(160)),
+                modifier = Modifier.align(Alignment.BottomCenter),
+            ) {
+                com.leo.imessage.ui.components.AttachmentTray(
+                    onAttach = { added -> staged = staged + added },
+                    onPickEffect = { effect -> stagedEffect = effect },
+                    onDismiss = { showTray = false },
+                    panelHeight = keyboardHeight,
+                )
+            }
 
         ConversationNavBar(
             chat = chat,

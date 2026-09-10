@@ -84,6 +84,12 @@ class MockBackend : MessagingBackend {
         }
     }
 
+    override suspend fun setArchived(chatId: String, archived: Boolean) {
+        _chats.value = _chats.value.map {
+            if (it.id == chatId) it.copy(isArchived = archived, isPinned = false) else it
+        }
+    }
+
     override suspend fun deleteChat(chatId: String) {
         _chats.value = _chats.value.filterNot { it.id == chatId }
         _messages.value = _messages.value.filterNot { it.chatId == chatId }

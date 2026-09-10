@@ -100,6 +100,12 @@ fun AppRoot(backend: MessagingBackend) {
                 onCompose = { showCompose = true },
                 onSetPinned = { id, pinned -> scope.launch { backend.setPinned(id, pinned) } },
                 onMarkUnread = { id -> scope.launch { backend.markUnread(id) } },
+                onSetArchived = { id, archived ->
+                    scope.launch {
+                        if (openChatId == id && archived) openChatId = null
+                        backend.setArchived(id, archived)
+                    }
+                },
                 onSetMuted = { id, muted -> scope.launch { backend.setMuted(id, muted) } },
                 onDeleteChat = { id ->
                     scope.launch {

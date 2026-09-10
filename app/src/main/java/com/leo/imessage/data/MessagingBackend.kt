@@ -52,6 +52,9 @@ interface MessagingBackend {
 
     suspend fun setMuted(chatId: String, muted: Boolean)
 
+    /** Archived chats leave the main list without being deleted. */
+    suspend fun setArchived(chatId: String, archived: Boolean)
+
     /** Removes a conversation and everything in it. */
     suspend fun deleteChat(chatId: String)
 

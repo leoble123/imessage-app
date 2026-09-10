@@ -21,7 +21,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -63,6 +66,12 @@ fun ReplyThreadView(
     val palette = LocalPalette.current
     val dark = darkBase ?: palette.isDark
     val listState = rememberLazyListState()
+
+    var showTray by remember { mutableStateOf(false) }
+    var staged by remember {
+        mutableStateOf<List<com.leo.imessage.data.Attachment>>(emptyList())
+    }
+    var stagedEffect by remember { mutableStateOf(MessageEffect.NONE) }
 
     val appear = remember { Animatable(0f) }
     LaunchedEffect(root.id) { appear.animateTo(1f, Motion.standard()) }
@@ -176,12 +185,31 @@ fun ReplyThreadView(
             }
 
             MessageInputBar(
-                onSend = { text, effect, attachments -> onSendReply(text, effect, attachments) },
+                onSend = { text, effect, attachments ->
+                    onSendReply(text, effect, attachments)
+                    staged = emptyList()
+                    stagedEffect = MessageEffect.NONE
+                    showTray = false
+                },
                 hazeState = hazeState,
                 darkBase = darkBase,
                 placeholder = "Reply",
                 autoFocus = true,
+                trayOpen = showTray,
+                onToggleTray = { showTray = !showTray },
+                staged = staged,
+                onRemoveStaged = { att -> staged = staged.filterNot { it.id == att.id } },
+                stagedEffect = stagedEffect,
+                onClearStagedEffect = { stagedEffect = MessageEffect.NONE },
             )
+
+            if (showTray) {
+                AttachmentTray(
+                    onAttach = { added -> staged = staged + added },
+                    onPickEffect = { effect -> stagedEffect = effect },
+                    onDismiss = { showTray = false },
+                )
+            }
         }
     }
 }
