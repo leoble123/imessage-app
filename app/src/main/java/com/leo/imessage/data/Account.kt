@@ -129,9 +129,8 @@ class AccountManager(context: Context) {
             core.configureRelay(normalized, code.trim(), null)
             relayHost = normalized
             relayCode = code.trim()
-            _state.value =
-                if (core.isRegistered()) { becomeReady(); return@withContext }
-                else AccountState.NeedsSignIn
+            if (core.isRegistered()) becomeReady()
+            else _state.value = AccountState.NeedsSignIn
         } catch (e: CoreException) {
             _state.value = AccountState.Failed(e.friendlyMessage(), AccountState.NeedsRelay)
         }

@@ -1,68 +1,89 @@
 # Building the Rust core
 
-This is the real iMessage engine: rustpush, the same protocol implementation
-OpenBubbles uses, cross-compiled for the phone and called from Kotlin through
-UniFFI instead of from Dart.
+`./rust-core/build.sh` does everything: cross-compiles for the phone,
+regenerates the Kotlin bindings from the compiled library, strips it, and
+installs it into `app/src/main/jniLibs/arm64-v8a/`.
 
-## The two things that block a clean `cargo build`
+Run it after any change to `rust-core/src`. The Kotlin bindings are generated
+from the compiled `.so`, not from the source, so skipping the regenerate step
+leaves the app calling an API the library no longer has — which surfaces as a
+crash at the first call rather than a compile error.
 
-**1. rustpush's submodules use SSH URLs.** `.gitmodules` points at
-`git@github.com:...`, and Cargo's submodule handling goes through libgit2,
-which does not apply git's `insteadOf` rewrites - so `cargo build` fails on a
-machine without SSH keys no matter how git is configured. `setup.sh` clones
-rustpush directly, rewrites those URLs to HTTPS, and points Cargo at the local
-checkout.
+## Requirements
 
-**2. The default feature set cannot work off a Mac.** rustpush's default
-feature is `macos-validation-data`, which pulls in `open-absinthe` - a stub
-upstream whose implementation is literally `panic!("Not supported with
-binary!")`. That is the wall every self-built iMessage client hits: it can
-sign in, but it cannot produce the validation data Apple demands.
+- **Nightly Rust.** Not optional: rustpush uses the unstable
+  `atomic_try_update` feature in `src/auth.rs` and `src/lib.rs`, so stable
+  fails with E0658 before it compiles a line of our code.
+  `rustup toolchain install nightly && rustup +nightly target add aarch64-linux-android`
+- **Android NDK r27.** Set `ANDROID_NDK_HOME` if it isn't at the default path
+  in `build.sh`.
+- `./rust-core/setup.sh` once, to vendor rustpush into `vendor/`.
 
-The way around it is `remote-anisette-v3`, which moves that problem off the
-device and asks a relay server for it. That is what your relay exists to
-answer, and it is the same route OpenBubbles takes.
+## What was in the way
 
-## Build
+Six separate walls stood between "clone rustpush" and "a library that links
+for Android". They're all handled now, but each is easy to reintroduce:
 
-    ./setup.sh                    # clone + patch rustpush, once
-    ./build.sh                    # cross-compile and generate Kotlin bindings
+**1. Submodules declared with SSH URLs.** rustpush's `.gitmodules` uses
+`git@github.com:` throughout. Cargo resolves submodules through libgit2, which
+does *not* honour git's `insteadOf` rewrites — so configuring git to rewrite
+SSH to HTTPS looks like it should work and doesn't. `setup.sh` rewrites the
+URLs in the vendored copy instead.
 
-`build.sh` drops `libimessage_core.so` into
-`app/src/main/jniLibs/arm64-v8a/` and the generated bindings into
-`app/build/generated/uniffi/`, both of which the Gradle build already reads.
+**2. `icloud_auth` wouldn't resolve `default_provider`.** It's behind the
+`remote-anisette-v3` feature, which the default build doesn't enable. Turned on
+explicitly in `Cargo.toml`.
 
-Requires: Rust with the `aarch64-linux-android` target
-(`rustup target add aarch64-linux-android`) and an Android NDK.
+**3. Missing FairPlay certificates.** `src/activation.rs` points at ten modern
+FairPlay keypairs in `certs/fairplay/` that are deliberately withheld from the
+public repository. The vendored copy is patched to use the published legacy
+pair in `certs/legacy-fairplay/`.
 
-## Where it currently stops
+**4. UDL versus proc-macro mode.** The original `build.rs` called UniFFI's
+`generate_scaffolding()`, which is the `.udl`-file path, against source that
+uses `setup_scaffolding!()` — the proc-macro path. It tried to parse Rust as
+IDL and died on line one. `build.rs` is deleted; the macro is the whole of it.
 
-Solved so far, in order, each a real blocker:
+**5. Two incompatible `quinn` crates.** rustpush vendors a patched quinn in
+`third_party/quinn` and redirects crates.io to it with `[patch.crates-io]`.
+Cargo only honours `[patch]` from the *workspace root* manifest — which is this
+crate, not rustpush's — so without repeating the patch here, `h3-quinn` linked
+against crates.io quinn while rustpush handed it a `Connection` from the fork,
+and `ids/link.rs` failed with a type mismatch between two identically-named
+types. The patch is now in `rust-core/Cargo.toml`.
 
-1. **SSH submodule URLs** - `setup.sh` clones and rewrites them.
-2. **`icloud_auth` fails to compile with default features off** - `default_provider`
-   and `DefaultAnisetteProvider` live behind `remote-anisette-v3`. Enabled.
-3. **`certs/fairplay/` is not in the public repo** - ten FairPlay
-   activation keypairs, deliberately withheld. Patched to the
-   `certs/legacy-fairplay` pair the project does publish.
-4. **`build.rs` ran the UDL path against proc-macro source** - removed.
+Note that adding a `[patch]` section does *not* on its own make Cargo
+re-resolve: a lockfile that's still satisfiable is left alone, and the patch is
+silently ignored with no warning. `cargo update` forces the re-resolve.
 
-Remaining, and it needs a toolchain change rather than a patch: rustpush's
-own `src/auth.rs` and `src/lib.rs` use `atomic_try_update`, which is an
-unstable library feature. **rustpush requires a nightly Rust toolchain.**
-Next step is `rustup toolchain install nightly`, add the Android target to
-it, and run `build.sh` with `cargo +nightly`. That is a long compile - a
-clean run is ~450 crates - so give it a proper window rather than a
-session tail.
+**6. An error field named `message`.** UniFFI turns error variants into Kotlin
+exception subclasses, so a field called `message` collides with
+`Throwable.message` and fails to compile on the Kotlin side with an overload
+ambiguity pointing at generated code. `CoreError` uses `reason`.
 
-After the `.so` exists, the Kotlin side is a `RustBackend` implementing the
-existing `MessagingBackend` interface. Every screen is already written
-against that interface, so nothing in the UI changes when it lands.
+A seventh thing worth knowing: UniFFI rejects `Result<T, String>` outright,
+panicking with `unknown throw type: Some(String)` during generation. Errors
+have to be a real `uniffi::Error` enum.
 
-## The identity question, which matters more than the build
+## Why the bindgen lives in its own crate
 
-Even once this compiles, registering a *new* device with Apple needs
-validation data, which is what the relay is for. But your phone already has
-a registered identity: the OpenBubbles install that works today. Reusing
-that identity is a far shorter path than activating a second one, and worth
-settling before spending another session on the compile.
+`bindgen/` is a standalone binary that depends only on `uniffi`. UniFFI's
+generator normally sits as a `[[bin]]` inside the crate being bound, but that
+would mean compiling all of rustpush for the host just to emit Kotlin — a
+second full dependency tree, for nothing. In `--library` mode the generator
+reads its metadata straight out of the compiled `.so`, so it doesn't need to
+know about our crate at all.
+
+The `uniffi` version there must match the one the `.so` was built with
+exactly; the metadata format is versioned.
+
+## Why a relay is required at all
+
+Registering with Apple's IDS needs validation data — a blob signed by Apple
+hardware. rustpush can generate it on macOS via the `macos-validation-data`
+feature, but that path is an unimplemented stub in the public tree
+(`HardwareConfig::from_validation_data` is `panic!("Not supported with
+binary!")`) and couldn't work on a phone regardless. The `RelayConfig` path
+asks a server for it instead, which is what OpenBubbles itself does. That's why
+`configure_relay` has to be called before anything else, and why
+`default-features = false` is set on the rustpush dependency.

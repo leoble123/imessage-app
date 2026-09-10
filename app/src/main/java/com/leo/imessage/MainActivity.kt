@@ -28,12 +28,13 @@ class MainActivity : ComponentActivity() {
     private val pendingChatId = androidx.compose.runtime.mutableStateOf<String?>(null)
 
     /**
-     * Owns sign-in and hands back a live backend once there is one.
+     * Sign-in and the live backend, shared with the connection service.
      *
-     * Every screen is written against the MessagingBackend interface, so what
-     * changed when the Rust core landed is only which object gets passed in.
+     * Held by the Application rather than here: the push connection lives
+     * inside it, and an Activity-scoped copy would tear down and reconnect on
+     * every rotation.
      */
-    private val account by lazy { AccountManager(this) }
+    private val account: AccountManager get() = (application as EchoApp).account
     private val settings by lazy {
         com.leo.imessage.ui.theme.AppSettings(
             com.leo.imessage.ui.theme.SettingsStore(this)
@@ -49,7 +50,14 @@ class MainActivity : ComponentActivity() {
 
         // Reconnect with the saved relay and registration, if there are any,
         // so a relaunch goes straight to the conversation list.
-        lifecycleScope.launch { account.resume() }
+        lifecycleScope.launch {
+            if (account.resume()) {
+                // Only once there's something to keep alive - starting the
+                // service before that would put a "Connected" notification in
+                // the shade for an account that doesn't exist yet.
+                com.leo.imessage.notify.ConnectionService.start(this@MainActivity)
+            }
+        }
         pendingChatId.value = intent?.getStringExtra(
             com.leo.imessage.notify.Notifier.EXTRA_CHAT_ID
         )
@@ -74,10 +82,24 @@ class MainActivity : ComponentActivity() {
                             openChatRequest = pendingChatId.value,
                             onChatRequestHandled = { pendingChatId.value = null },
                             accountSummary = account.summary(),
-                            onSignOut = { lifecycleScope.launch { account.signOut() } },
+                            onSignOut = {
+                                lifecycleScope.launch {
+                                    account.signOut()
+                                    com.leo.imessage.notify.ConnectionService
+                                        .stop(this@MainActivity)
+                                }
+                            },
                         )
                     }
-                    else -> SetupScreen(state = current, account = account)
+                    else -> SetupScreen(
+                        state = current,
+                        account = account,
+                        // Finishing setup is the moment there's a connection
+                        // worth keeping, so that's when the service starts.
+                        onConnected = {
+                            com.leo.imessage.notify.ConnectionService.start(this)
+                        },
+                    )
                 }
             }
         }
@@ -93,6 +115,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        (application as EchoApp).isVisible = false
         // Android can kill the process the moment the app is backgrounded, so
         // anything still buffered has to reach disk here rather than later.
         lifecycleScope.launch { account.flush() }
@@ -100,6 +123,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        (application as EchoApp).isVisible = true
         // Some launchers/OEM power paths reset the mode when the window is
         // re-shown, so re-assert it rather than only asking once.
         requestHighestRefreshRate()

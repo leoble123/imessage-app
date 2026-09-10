@@ -70,6 +70,8 @@ fun SetupScreen(
     state: AccountState,
     account: AccountManager,
     modifier: Modifier = Modifier,
+    /** Fired once sign-in succeeds, so the connection service can start. */
+    onConnected: () -> Unit = {},
 ) {
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -81,6 +83,12 @@ fun SetupScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var factor by remember { mutableStateOf("") }
+
+    // Ready means there is now a live connection to keep alive. Demo mode
+    // doesn't get a service - there's nothing connected to hold open.
+    androidx.compose.runtime.LaunchedEffect(state) {
+        if (state is AccountState.Ready && !state.isDemo) onConnected()
+    }
 
     fun run(block: suspend () -> Unit) {
         if (busy) return

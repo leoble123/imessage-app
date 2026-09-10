@@ -22,7 +22,9 @@ class NotificationActionReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val chatId = intent.getStringExtra(Notifier.EXTRA_CHAT_ID) ?: return
-        val backend = backendProvider ?: return
+        // Prefer the account's own backend: a reply can arrive long after the
+        // Activity is gone, and the field below is only set while it's alive.
+        val backend = currentBackend() ?: return
         val pending = goAsync()
 
         scope.launch {
@@ -59,14 +61,20 @@ class NotificationActionReceiver : BroadcastReceiver() {
         private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
         /**
-         * The live backend, handed over by the app on start.
+         * Set by the Activity while it's running.
          *
-         * A receiver is constructed by the framework and cannot be given
-         * constructor arguments, and the in-memory backend has no other way
-         * to be reached from outside the activity. When the rustpush core
-         * lands this becomes a real service binding instead.
+         * Only used as a fallback now - it's how the sample-data backend is
+         * reachable, since that one exists nowhere else. A real account's
+         * backend is found through the Application instead, which outlives
+         * the Activity and is what makes replying from the shade work when
+         * the app isn't open.
          */
         @Volatile
         var backendProvider: MessagingBackend? = null
+
+        private fun currentBackend(): MessagingBackend? =
+            (com.leo.imessage.EchoApp.instance.account.state.value
+                as? com.leo.imessage.data.AccountState.Ready)?.backend
+                ?: backendProvider
     }
 }

@@ -91,20 +91,12 @@ fun AppRoot(
         onChatRequestHandled()
     }
 
-    // Notify on anything that arrives while you're not looking at it.
-    // Keyed on the newest inbound message id rather than on the chat list, so
-    // a pin or a mute doesn't re-announce a message you already saw.
-    val newest = chats.mapNotNull { it.lastMessage }.maxByOrNull { it.timestamp }
-    LaunchedEffect(newest?.id, settings.notificationsEnabled) {
-        val message = newest ?: return@LaunchedEffect
-        if (!settings.notificationsEnabled || message.isFromMe) return@LaunchedEffect
-        if (message.chatId == openChatId) return@LaunchedEffect
-        chats.firstOrNull { it.id == message.chatId }?.let { chat ->
-            com.leo.imessage.notify.Notifier.post(context, chat, message)
-        }
-    }
-
+    // Notifications are posted by ConnectionService, not here: this
+    // composition only runs while the app is on screen, which is precisely
+    // when a notification is least needed. What the UI contributes is which
+    // thread is open, so the service can stay quiet about that one.
     LaunchedEffect(openChatId) {
+        (context.applicationContext as? com.leo.imessage.EchoApp)?.visibleChatId = openChatId
         openChatId?.let { com.leo.imessage.notify.Notifier.clear(context, it) }
     }
 
