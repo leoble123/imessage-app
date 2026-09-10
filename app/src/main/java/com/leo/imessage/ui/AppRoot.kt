@@ -68,6 +68,10 @@ fun AppRoot(
     var showSettings by remember { mutableStateOf(false) }
     var showCompose by remember { mutableStateOf(false) }
     var composeError by remember { mutableStateOf<String?>(null) }
+    // Whether the picker is choosing someone to message or to call.
+    var composeMode by remember {
+        mutableStateOf(com.leo.imessage.ui.screens.PickMode.MESSAGE)
+    }
     var showDetails by remember { mutableStateOf(false) }
     // A photo opened from the details screen's Photos strip.
     var detailsViewing by remember { mutableStateOf<com.leo.imessage.data.Attachment?>(null) }
@@ -151,7 +155,16 @@ fun AppRoot(
                 drafts = drafts,
                 onOpenChat = { chat -> openChatId = chat.id },
                 onOpenSettings = { showSettings = true },
-                onCompose = { showCompose = true },
+                onCompose = {
+                    composeMode = com.leo.imessage.ui.screens.PickMode.MESSAGE
+                    showCompose = true
+                },
+                onFaceTime = onPlaceCall?.let {
+                    {
+                        composeMode = com.leo.imessage.ui.screens.PickMode.CALL
+                        showCompose = true
+                    }
+                },
                 onSetPinned = { id, pinned -> scope.launch { backend.setPinned(id, pinned) } },
                 onMarkUnread = { id -> scope.launch { backend.markUnread(id) } },
                 onSetArchived = { id, archived ->
@@ -417,6 +430,12 @@ fun AppRoot(
                         openChatId = chat.id
                     },
                     onStartNew = { handle ->
+                        if (composeMode == com.leo.imessage.ui.screens.PickMode.CALL) {
+                            showCompose = false
+                            composeError = null
+                            onPlaceCall?.invoke(listOf(handle))
+                            return@ComposeScreen
+                        }
                         scope.launch {
                             try {
                                 val id = backend.startChat(listOf(handle))
@@ -439,6 +458,7 @@ fun AppRoot(
                     },
                     error = composeError,
                     addressBook = addressBook,
+                    mode = composeMode,
                 )
             }
         }

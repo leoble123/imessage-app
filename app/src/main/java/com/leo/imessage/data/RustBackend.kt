@@ -143,7 +143,12 @@ class RustBackend(
 
     private fun sortChats(list: List<Chat>) = list.distinctBy { it.id }.sortedWith(
         compareByDescending<Chat> { it.isPinned }
-            .thenByDescending { it.lastMessage?.timestamp ?: 0 }
+            // 0L, not 0. timestamp is a Long, so a bare 0 makes this selector
+            // return an Int for conversations with no messages and a Long for
+            // the rest - and comparing the two throws ClassCastException. It
+            // only fires once the list holds both kinds, which is exactly the
+            // moment a new conversation is created alongside existing ones.
+            .thenByDescending { it.lastMessage?.timestamp ?: 0L }
     )
 
     /**

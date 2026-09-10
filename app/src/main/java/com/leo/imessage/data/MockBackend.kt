@@ -40,7 +40,7 @@ class MockBackend : MessagingBackend {
     override val chats: Flow<List<Chat>> = _chats.asStateFlow().map { list ->
         list.sortedWith(
             compareByDescending<Chat> { it.isPinned }
-                .thenByDescending { it.lastMessage?.timestamp ?: 0 }
+                .thenByDescending { it.lastMessage?.timestamp ?: 0L }
         )
     }
 
@@ -51,7 +51,7 @@ class MockBackend : MessagingBackend {
 
     override fun chatsNow(): List<Chat> = _chats.value.sortedWith(
         compareByDescending<Chat> { it.isPinned }
-            .thenByDescending { it.lastMessage?.timestamp ?: 0 }
+            .thenByDescending { it.lastMessage?.timestamp ?: 0L }
     )
 
     override fun messagesNow(chatId: String): List<Message> =

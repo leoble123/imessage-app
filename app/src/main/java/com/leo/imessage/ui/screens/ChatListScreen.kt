@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Edit
@@ -65,6 +66,8 @@ fun ChatListScreen(
     onOpenChat: (Chat) -> Unit,
     onOpenSettings: () -> Unit = {},
     onCompose: () -> Unit = {},
+    /** Starts a FaceTime call with someone. Null hides the button entirely. */
+    onFaceTime: (() -> Unit)? = null,
     onSetPinned: (String, Boolean) -> Unit = { _, _ -> },
     onSetMuted: (String, Boolean) -> Unit = { _, _ -> },
     onDeleteChat: (String) -> Unit = {},
@@ -218,6 +221,24 @@ fun ChatListScreen(
             ) {
                 Box(Modifier.weight(1f)) {
                     SearchField(query = query, onQueryChange = { query = it })
+                }
+                if (onFaceTime != null) {
+                    Spacer(Modifier.width(10.dp))
+                    Box(
+                        Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(palette.fieldBackground)
+                            .clickable { onFaceTime() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Filled.Videocam,
+                            contentDescription = "New FaceTime",
+                            tint = palette.accent,
+                            modifier = Modifier.size(21.dp),
+                        )
+                    }
                 }
                 Spacer(Modifier.width(10.dp))
                 Box(

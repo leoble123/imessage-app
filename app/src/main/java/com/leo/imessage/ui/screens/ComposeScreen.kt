@@ -44,6 +44,8 @@ import com.leo.imessage.ui.theme.LocalPalette
  * New Message. Typing filters the known contacts live, matching Messages'
  * "To:" field behaviour.
  */
+enum class PickMode { MESSAGE, CALL }
+
 @Composable
 fun ComposeScreen(
     chats: List<Chat>,
@@ -65,6 +67,14 @@ fun ComposeScreen(
      * which on a fresh install is nobody.
      */
     addressBook: List<com.leo.imessage.data.Contacts.SavedContact> = emptyList(),
+    /**
+     * What picking someone does.
+     *
+     * The same screen serves messaging and calling. They differ only in the
+     * wording and what happens on tap, and two near-identical pickers would
+     * drift apart the moment one of them gained a feature.
+     */
+    mode: PickMode = PickMode.MESSAGE,
 ) {
     val palette = LocalPalette.current
     val hazeState = remember { HazeState() }
@@ -143,12 +153,13 @@ fun ComposeScreen(
                         Spacer(Modifier.width(12.dp))
                         Column {
                             Text(
-                                "Message $typed",
+                                if (mode == PickMode.CALL) "FaceTime $typed" else "Message $typed",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = palette.label,
                             )
                             Text(
-                                "Start a new conversation",
+                                if (mode == PickMode.CALL) "Start a call"
+                                else "Start a new conversation",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = palette.secondaryLabel,
                             )
@@ -220,7 +231,13 @@ fun ComposeScreen(
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .clickable { onPick(chat) }
+                        .clickable {
+                            // In call mode an existing thread is just a
+                            // shortcut to its participant - opening the
+                            // conversation would be the wrong action.
+                            if (mode == PickMode.CALL) onStartNew(contact.handle)
+                            else onPick(chat)
+                        }
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -269,7 +286,7 @@ fun ComposeScreen(
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
-                        "New Message",
+                        if (mode == PickMode.CALL) "New FaceTime" else "New Message",
                         style = MaterialTheme.typography.titleLarge,
                         color = palette.label,
                     )
@@ -283,7 +300,7 @@ fun ComposeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "To:",
+                        if (mode == PickMode.CALL) "Call:" else "To:",
                         style = MaterialTheme.typography.bodyLarge,
                         color = palette.secondaryLabel,
                     )
