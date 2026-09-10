@@ -73,8 +73,8 @@ fun MessageContextMenu(
 
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(Motion.fade(160)),
-        exit = fadeOut(Motion.fade(140)),
+        enter = fadeIn(Motion.fade(250)),
+        exit = fadeOut(Motion.fade(210)),
     ) {
         Box(
             Modifier

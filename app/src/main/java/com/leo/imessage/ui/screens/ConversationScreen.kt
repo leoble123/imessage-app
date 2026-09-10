@@ -147,8 +147,14 @@ fun ConversationScreen(
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val rows = remember(messages) { buildRows(messages, chat.isGroup) }
     val byId = remember(messages) { messages.associateBy { it.id } }
+
+    // Replying opens the message's thread rather than arming a banner on the
+    // main composer. That's what Messages does, and it's the only way the
+    // reply you just sent is somewhere you can see it: replies live in the
+    // thread, so composing anywhere else means watching your own message
+    // vanish from the transcript the moment it lands.
+    fun threadFor(m: Message): Message = m.replyToId?.let { byId[it] } ?: m
     var menuFor by remember { mutableStateOf<MessageRow?>(null) }
-    var replyingTo by remember { mutableStateOf<Message?>(null) }
     var editingMessage by remember { mutableStateOf<Message?>(null) }
     // The message whose reply chain is being viewed, if any.
     var threadRoot by remember { mutableStateOf<Message?>(null) }
@@ -241,11 +247,7 @@ fun ConversationScreen(
                     ?.substringBefore(' ')
 
                 com.leo.imessage.ui.components.SwipeToReply(
-                    onReply = {
-                        replyingTo = row.message
-                        composerFocus.requestFocus()
-                        keyboard?.show()
-                    },
+                    onReply = { threadRoot = threadFor(row.message) },
                     modifier = Modifier.padding(
                         top = if (row.groupPosition == GroupPosition.SINGLE ||
                             row.groupPosition == GroupPosition.FIRST
@@ -255,6 +257,7 @@ fun ConversationScreen(
                     MessageBubble(
                         row = row,
                         onCustomBackground = background.brush != null,
+                        backgroundIsDark = background.brush != null && background.isDark,
                         sender = chat.participants.firstOrNull { it.id == row.message.senderId },
                         senderName = senderName,
                         onLongPress = { menuFor = row },
@@ -270,10 +273,7 @@ fun ConversationScreen(
                                     ?.displayName
                                     ?.substringBefore(' ')
                             },
-                        onOpenThread = {
-                            threadRoot = row.message.replyToId?.let { byId[it] }
-                                ?: row.message
-                        },
+                        onOpenThread = { threadRoot = threadFor(row.message) },
                     )
                 }
             }
@@ -288,12 +288,7 @@ fun ConversationScreen(
         }
 
             MessageInputBar(
-                replyingTo = replyingTo,
-                onCancelReply = { replyingTo = null },
-                onSend = { text, effect ->
-                    onSend(text, effect, replyingTo?.id)
-                    replyingTo = null
-                },
+                onSend = { text, effect -> onSend(text, effect, null) },
                 hazeState = hazeState,
                 darkBase = if (background.brush != null) background.isDark else null,
                 editing = editingMessage,
@@ -315,7 +310,9 @@ fun ConversationScreen(
             modifier = Modifier.align(Alignment.TopCenter),
         )
 
-        val root = threadRoot
+        // Re-resolved from the live list each frame, so a tapback or an edit
+        // made while the thread is open shows up in it.
+        val root = threadRoot?.let { byId[it.id] ?: it }
         if (root != null) {
             com.leo.imessage.ui.components.ReplyThreadView(
                 root = root,
@@ -343,9 +340,7 @@ fun ConversationScreen(
             actions = buildList {
                 add(
                     com.leo.imessage.ui.components.MenuAction("Reply") {
-                        replyingTo = focused?.message
-                        composerFocus.requestFocus()
-                        keyboard?.show()
+                        focused?.let { threadRoot = threadFor(it.message) }
                     }
                 )
                 add(com.leo.imessage.ui.components.MenuAction("Copy") {})

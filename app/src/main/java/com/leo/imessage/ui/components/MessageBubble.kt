@@ -62,6 +62,8 @@ fun MessageBubble(
     sender: com.leo.imessage.data.Contact? = null,
     /** Set when the thread has a custom background, so bubbles go translucent. */
     onCustomBackground: Boolean = false,
+    /** Whether that background is dark, so the glass and text adapt to it. */
+    backgroundIsDark: Boolean = false,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
     /**
@@ -203,15 +205,23 @@ fun MessageBubble(
                 val shape = BubbleShape(outgoing, row.groupPosition)
                 val style = settings.bubbleStyle
                 val glass = style == com.leo.imessage.ui.theme.BubbleStyle.GLASS
+                val overBackground = glass && onCustomBackground
                 val transmission = when {
                     !glass -> 1f
-                    outgoing && onCustomBackground -> GlassAlpha.OUTGOING_OVER_BACKGROUND
-                    outgoing -> GlassAlpha.OUTGOING
-                    onCustomBackground -> GlassAlpha.INCOMING_OVER_BACKGROUND
-                    else -> GlassAlpha.INCOMING
+                    overBackground && backgroundIsDark -> GlassAlpha.OUTGOING_ON_DARK_BACKGROUND
+                    overBackground -> GlassAlpha.OUTGOING_ON_LIGHT_BACKGROUND
+                    else -> GlassAlpha.OUTGOING
                 }
                 val fill: Brush = when {
-                    !outgoing -> glassFill(palette.incomingBubble, transmission)
+                    !outgoing -> if (glass) {
+                        incomingGlassFill(
+                            grey = palette.incomingBubble,
+                            overBackground = overBackground,
+                            backgroundIsDark = backgroundIsDark,
+                        )
+                    } else {
+                        glassFill(palette.incomingBubble, 1f)
+                    }
                     style == com.leo.imessage.ui.theme.BubbleStyle.FLAT ->
                         glassFill(
                             if (msg.service == Service.SMS) palette.smsBubbleFlat
@@ -223,6 +233,14 @@ fun MessageBubble(
                         else palette.outgoingBubbleColors,
                         transmission,
                     )
+                }
+                // Over a chosen background the incoming bubble is a clear
+                // pane, so its text has to follow the background rather than
+                // the app's theme or it can end up black on black.
+                val incomingTextColor = when {
+                    !overBackground -> palette.incomingText
+                    backgroundIsDark -> Color.White
+                    else -> Color.Black
                 }
 
                 Box(
@@ -241,7 +259,11 @@ fun MessageBubble(
                         .liquidGlass(
                             shape = shape,
                             fill = fill,
-                            dark = if (outgoing) true else palette.isDark,
+                            dark = when {
+                                outgoing -> true
+                                overBackground -> backgroundIsDark
+                                else -> palette.isDark
+                            },
                             enabled = glass,
                         )
                         .pointerInput(msg.id) {
@@ -262,7 +284,7 @@ fun MessageBubble(
                     Text(
                         text = msg.text,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = if (outgoing) palette.outgoingText else palette.incomingText,
+                        color = if (outgoing) palette.outgoingText else incomingTextColor,
                     )
                 }
             }
@@ -346,7 +368,7 @@ private fun UnsentBubble(msg: Message) {
         AnimatedVisibility(
             visible = revealed,
             enter = fadeIn(Motion.fade()) + expandVertically(Motion.standard()),
-            exit = fadeOut(Motion.fade(120)) + shrinkVertically(Motion.snappy()),
+            exit = fadeOut(Motion.fade(200)) + shrinkVertically(Motion.snappy()),
         ) {
             Box(
                 Modifier

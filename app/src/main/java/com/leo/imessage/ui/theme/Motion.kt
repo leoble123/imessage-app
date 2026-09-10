@@ -5,64 +5,65 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 
 /**
- * Motion specs tuned to UIKit.
+ * Motion specs, expressed the way Apple expresses them.
  *
- * The thing that reads as "buttery" on iOS is not bounce - it's that
- * animations are *fast* and *well damped*: they arrive quickly, overshoot by
- * a hair, and stop. A low damping ratio wobbles, and a wobble reads as cheap
- * and jolty rather than lively. So damping sits high here (0.8-1.0) and
- * liveliness comes from stiffness instead, with real overshoot reserved for
- * the few moments that should feel physical.
+ * SwiftUI doesn't describe a spring by stiffness - it uses *response* (how
+ * long the spring takes to travel, in seconds) and *damping fraction* (how
+ * much it overshoots). Its default is response 0.55 / damping 0.825, and its
+ * three presets - smooth, snappy, bouncy - all sit at a 0.5s response and
+ * differ only in bounce.
  *
- * For reference, SwiftUI's default `.spring()` is roughly dampingFraction
- * 0.825 - notably tame. These match that neighbourhood.
+ * That's the number that matters here: every spring in this app used to run
+ * at a 0.21-0.34s response, which is two to three times faster than
+ * anything iOS ships. Fast springs don't read as responsive, they read as
+ * *abrupt* - the motion is over before the eye can follow it, so what
+ * registers isn't a movement but a jump. Slowing the response down and
+ * keeping damping high is what turns it liquid.
  */
 object Motion {
-    /** Default for view transitions. Arrives fast, barely overshoots. */
-    fun <T> standard() = spring<T>(
-        dampingRatio = 0.88f,
-        stiffness = 420f,
+    /** 2pi/response squared, since Compose takes stiffness with unit mass. */
+    private fun stiffnessFor(response: Float): Float {
+        val omega = (2.0 * Math.PI / response).toFloat()
+        return omega * omega
+    }
+
+    private fun <T> springOf(response: Float, damping: Float) = spring<T>(
+        dampingRatio = damping,
+        stiffness = stiffnessFor(response),
     )
 
-    /** Follows a finger (drags, swipes, scrubbing). No perceptible bounce. */
-    fun <T> snappy() = spring<T>(
-        dampingRatio = 0.95f,
-        stiffness = 900f,
-    )
+    /** Default for view transitions. SwiftUI's `.smooth`, near enough. */
+    fun <T> standard() = springOf<T>(response = 0.5f, damping = 0.92f)
 
     /**
-     * Small controls that should feel physical when tapped - send button,
-     * tapbacks. Overshoots visibly but settles in one pass, no wobble.
+     * Settles a gesture back into place. The one spec that stays quick,
+     * because it's resolving motion the finger already started - but still
+     * well off the 0.21s it used to sit at.
      */
-    fun <T> bouncy() = spring<T>(
-        dampingRatio = 0.7f,
-        stiffness = 650f,
-    )
+    fun <T> snappy() = springOf<T>(response = 0.4f, damping = 0.9f)
+
+    /** Things that should feel physical - send, tapbacks. SwiftUI `.bouncy`. */
+    fun <T> bouncy() = springOf<T>(response = 0.55f, damping = 0.76f)
 
     /** Large surfaces (sheets, modals). Critically damped - never bounces. */
-    fun <T> gentle() = spring<T>(
-        dampingRatio = 1f,
-        stiffness = 340f,
-    )
+    fun <T> gentle() = springOf<T>(response = 0.62f, damping = 1f)
 
     /**
      * Touch-down feedback on a large target (a bubble, a row).
      *
-     * Slower and softer than [snappy] on purpose: a press that snaps in
-     * 80ms only ever paints two or three frames, and three frames of scale
-     * change reads as a step rather than a glide no matter what the panel is
-     * doing. Stretching it to roughly a quarter second gives the spring
-     * enough frames to actually look continuous.
+     * Slow and heavily damped: a press that lands in 80ms only ever paints
+     * two or three frames, and three frames of scale change reads as a step
+     * rather than a glide no matter what the panel is doing.
      */
-    fun <T> pressIn() = spring<T>(
-        dampingRatio = 0.85f,
-        stiffness = 700f,
-    )
+    fun <T> pressIn() = springOf<T>(response = 0.5f, damping = 0.96f)
+
+    /** SwiftUI's untouched default, for anything that just wants to flow. */
+    fun <T> fluid() = springOf<T>(response = 0.55f, damping = 0.825f)
 
     /** iOS's standard ease curve, for opacity and color. */
     val AppleEase = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f)
 
-    fun <T> fade(durationMillis: Int = 180) = tween<T>(
+    fun <T> fade(durationMillis: Int = 260) = tween<T>(
         durationMillis = durationMillis,
         easing = AppleEase,
     )

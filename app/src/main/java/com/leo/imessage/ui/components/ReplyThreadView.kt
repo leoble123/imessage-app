@@ -112,7 +112,11 @@ fun ReplyThreadView(
                 },
         ) {
             Text(
-                text = if (replies.size == 1) "1 Reply" else "${replies.size} Replies",
+                text = when (replies.size) {
+                    0 -> "Reply"
+                    1 -> "1 Reply"
+                    else -> "${replies.size} Replies"
+                },
                 style = MaterialTheme.typography.labelLarge,
                 color = palette.secondaryLabel,
                 textAlign = TextAlign.Center,

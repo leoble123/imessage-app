@@ -53,6 +53,24 @@ val ChatBackgrounds: List<ChatBackground> = listOf(
         Brush.verticalGradient(listOf(Color(0xFFFDF1F3), Color(0xFFF6E2E8))),
         isDark = false,
     ),
+    // Saturated options, so the glass has something worth transmitting.
+    ChatBackground(
+        "indigo", "Indigo",
+        Brush.linearGradient(listOf(Color(0xFF1B1464), Color(0xFF4B1E8C), Color(0xFF0C1A4D))),
+    ),
+    ChatBackground(
+        "sunset", "Sunset",
+        Brush.verticalGradient(listOf(Color(0xFF3A0E3D), Color(0xFF8E2A4A), Color(0xFFC24E2E))),
+    ),
+    ChatBackground(
+        "teal", "Teal",
+        Brush.linearGradient(listOf(Color(0xFF04262E), Color(0xFF0B6B70), Color(0xFF11304A))),
+    ),
+    ChatBackground(
+        "sorbet", "Sorbet",
+        Brush.verticalGradient(listOf(Color(0xFFFFE9C7), Color(0xFFFFC4C4), Color(0xFFE4C6FF))),
+        isDark = false,
+    ),
 )
 
 fun backgroundById(id: String): ChatBackground =

@@ -1,6 +1,7 @@
 package com.leo.imessage.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -47,6 +48,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -71,8 +73,6 @@ fun MessageInputBar(
     hazeState: HazeState,
     modifier: Modifier = Modifier,
     onAttach: () -> Unit = {},
-    replyingTo: com.leo.imessage.data.Message? = null,
-    onCancelReply: () -> Unit = {},
     darkBase: Boolean? = null,
     editing: com.leo.imessage.data.Message? = null,
     onCancelEdit: () -> Unit = {},
@@ -127,7 +127,13 @@ fun MessageInputBar(
         darkBase = darkBase,
         hairlineAtTop = true,
     ) {
-        Column(Modifier.fillMaxWidth()) {
+        // Height changes - the edit banner arriving, the field growing as
+        // text wraps - flow instead of snapping.
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .animateContentSize(Motion.fluid())
+        ) {
         if (editing != null) {
             Row(
                 Modifier
@@ -151,45 +157,6 @@ fun MessageInputBar(
                             onCancelEdit()
                         }
                         .padding(horizontal = 4.dp),
-                )
-            }
-        }
-        if (replyingTo != null) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 12.dp, top = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    Modifier
-                        .width(2.5.dp)
-                        .height(30.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(palette.accent)
-                )
-                Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "Replying to",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = palette.accent,
-                    )
-                    Text(
-                        replyingTo.text.ifBlank { "Attachment" },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = palette.secondaryLabel,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    )
-                }
-                Text(
-                    "\u00d7",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = palette.tertiaryLabel,
-                    modifier = Modifier
-                        .clickable { onCancelReply() }
-                        .padding(horizontal = 8.dp),
                 )
             }
         }
@@ -237,30 +204,43 @@ fun MessageInputBar(
 
                 Spacer(Modifier.width(4.dp))
 
-                // Scales in from nothing when there's something to send.
-                val sendAppear by animateFloatAsState(
+                // Mic sits in the field until there's something to send,
+                // then the send button takes its place. Both stay composed
+                // and cross-dissolve through graphicsLayer, so the handover
+                // is one continuous motion rather than two pops - and costs
+                // no recomposition while it runs.
+                val sendAppear = animateFloatAsState(
                     targetValue = if (canSend) 1f else 0f,
-                    animationSpec = Motion.bouncy(),
+                    animationSpec = Motion.fluid(),
                     label = "sendAppear",
                 )
                 Box(
                     Modifier.size(28.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    // Mic sits in the field until there's something to send,
-                    // then the send button takes its place - they cross-fade
-                    // rather than one popping in over the other.
-                    if (sendAppear < 0.99f) {
-                        MicIcon(
-                            color = palette.secondaryLabel,
-                            modifier = Modifier
-                                .size(19.dp)
-                                .scale(1f - sendAppear * 0.4f)
-                                .alpha((1f - sendAppear).coerceIn(0f, 1f)),
-                        )
-                    }
-                    if (sendAppear > 0.01f) {
-                        Box(Modifier.scale(sendAppear)) {
+                    MicIcon(
+                        color = palette.secondaryLabel,
+                        modifier = Modifier
+                            .size(19.dp)
+                            .graphicsLayer {
+                                val a = (1f - sendAppear.value).coerceIn(0f, 1f)
+                                alpha = a
+                                val sc = 0.72f + 0.28f * a
+                                scaleX = sc
+                                scaleY = sc
+                            },
+                    )
+                    Box(
+                        Modifier.graphicsLayer {
+                            val a = sendAppear.value.coerceIn(0f, 1f)
+                            alpha = a
+                            val sc = 0.7f + 0.3f * a
+                            scaleX = sc
+                            scaleY = sc
+                            // Lifts into place as it arrives.
+                            translationY = 4.dp.toPx() * (1f - a)
+                        }
+                    ) {
                         SendButton(
                             onSend = {
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -276,7 +256,6 @@ fun MessageInputBar(
                                 showEffects = true
                             },
                         )
-                        }
                     }
                 }
             }

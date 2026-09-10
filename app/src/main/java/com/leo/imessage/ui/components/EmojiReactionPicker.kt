@@ -103,8 +103,8 @@ fun TapbackRail(
 
         AnimatedVisibility(
             visible = expanded,
-            enter = fadeIn(Motion.fade(140)),
-            exit = fadeOut(Motion.fade(120)),
+            enter = fadeIn(Motion.fade(240)),
+            exit = fadeOut(Motion.fade(200)),
         ) {
             Box(
                 Modifier
