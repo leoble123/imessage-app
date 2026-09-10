@@ -178,6 +178,19 @@ class MockBackend : MessagingBackend {
         }
     }
 
+    override suspend fun startChat(handles: List<String>): String {
+        val contacts = handles.map { Handles.contact(it) }
+        val chatId = Handles.chatId(handles, if (handles.size > 1) UUID.randomUUID().toString() else null)
+        _chats.value.firstOrNull { it.id == chatId }?.let { return chatId }
+        _chats.value = _chats.value + Chat(
+            id = chatId,
+            displayName = contacts.joinToString(", ") { it.displayName },
+            participants = contacts,
+            lastMessage = null,
+        )
+        return chatId
+    }
+
     override suspend fun setPinned(chatId: String, pinned: Boolean) {
         _chats.value = _chats.value.map {
             if (it.id == chatId) it.copy(isPinned = pinned) else it

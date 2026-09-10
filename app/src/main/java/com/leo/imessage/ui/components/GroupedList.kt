@@ -70,6 +70,8 @@ fun SettingsRow(
     title: String,
     value: String? = null,
     showChevron: Boolean = true,
+    /** Red, the way iOS marks a row that undoes or removes something. */
+    destructive: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
     val palette = LocalPalette.current
@@ -80,7 +82,11 @@ fun SettingsRow(
             .padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = MaterialTheme.typography.bodyLarge, color = palette.label)
+        Text(
+            title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (destructive) palette.destructive else palette.label,
+        )
         Spacer(Modifier.weight(1f))
         if (value != null) {
             Text(value, style = MaterialTheme.typography.bodyLarge, color = palette.secondaryLabel)

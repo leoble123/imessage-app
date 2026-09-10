@@ -13,15 +13,20 @@
 /// between its error kinds don't change what the app does (every one of them
 /// ends as "this didn't work, here's why"), so carrying the message across is
 /// enough and keeps the generated bindings small.
+///
+/// The field is `reason` rather than `message` on purpose: UniFFI turns error
+/// variants into Kotlin exception subclasses, and a field called `message`
+/// collides with `Throwable.message`, which fails to compile on the Kotlin
+/// side with an overload ambiguity that points at generated code.
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum CoreError {
-    #[error("{message}")]
-    Failure { message: String },
+    #[error("{reason}")]
+    Failure { reason: String },
 }
 
 impl CoreError {
-    pub fn new(message: impl std::fmt::Display) -> Self {
-        CoreError::Failure { message: message.to_string() }
+    pub fn new(reason: impl std::fmt::Display) -> Self {
+        CoreError::Failure { reason: reason.to_string() }
     }
 }
 

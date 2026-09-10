@@ -2725,15 +2725,20 @@ public object FfiConverterTypePhoneNumber: FfiConverterRustBuffer<PhoneNumber> {
  * between its error kinds don't change what the app does (every one of them
  * ends as "this didn't work, here's why"), so carrying the message across is
  * enough and keeps the generated bindings small.
+ *
+ * The field is `reason` rather than `message` on purpose: UniFFI turns error
+ * variants into Kotlin exception subclasses, and a field called `message`
+ * collides with `Throwable.message`, which fails to compile on the Kotlin
+ * side with an overload ambiguity that points at generated code.
  */
 sealed class CoreException: kotlin.Exception() {
     
     class Failure(
         
-        val `message`: kotlin.String
+        val `reason`: kotlin.String
         ) : CoreException() {
         override val message
-            get() = "message=${ `message` }"
+            get() = "reason=${ `reason` }"
     }
     
 
@@ -2764,7 +2769,7 @@ public object FfiConverterTypeCoreError : FfiConverterRustBuffer<CoreException> 
             is CoreException.Failure -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterString.allocationSize(value.`message`)
+                + FfiConverterString.allocationSize(value.`reason`)
             )
         }
     }
@@ -2773,7 +2778,7 @@ public object FfiConverterTypeCoreError : FfiConverterRustBuffer<CoreException> 
         when(value) {
             is CoreException.Failure -> {
                 buf.putInt(1)
-                FfiConverterString.write(value.`message`, buf)
+                FfiConverterString.write(value.`reason`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

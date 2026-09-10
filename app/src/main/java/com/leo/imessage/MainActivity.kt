@@ -6,7 +6,13 @@ import android.view.Display
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.leo.imessage.data.MockBackend
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import com.leo.imessage.data.AccountManager
+import com.leo.imessage.data.AccountState
+import com.leo.imessage.ui.setup.SetupScreen
 import com.leo.imessage.ui.AppRoot
 import com.leo.imessage.ui.theme.iMessageTheme
 
@@ -21,10 +27,13 @@ class MainActivity : ComponentActivity() {
      */
     private val pendingChatId = androidx.compose.runtime.mutableStateOf<String?>(null)
 
-    // Swapped for the rustpush-backed implementation once the Rust core is
-    // wired in; every screen is written against the MessagingBackend
-    // interface, so nothing above this line changes when that happens.
-    private val backend by lazy { MockBackend() }
+    /**
+     * Owns sign-in and hands back a live backend once there is one.
+     *
+     * Every screen is written against the MessagingBackend interface, so what
+     * changed when the Rust core landed is only which object gets passed in.
+     */
+    private val account by lazy { AccountManager(this) }
     private val settings by lazy {
         com.leo.imessage.ui.theme.AppSettings(
             com.leo.imessage.ui.theme.SettingsStore(this)
@@ -36,21 +45,40 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         requestHighestRefreshRate()
         com.leo.imessage.notify.Notifier.ensureChannel(this)
-        // Lets notification Reply / Mark as Read reach the same backend the
-        // UI uses, so a reply from the shade lands in the transcript.
-        com.leo.imessage.notify.NotificationActionReceiver.backendProvider = backend
         requestNotificationPermission()
+
+        // Reconnect with the saved relay and registration, if there are any,
+        // so a relaunch goes straight to the conversation list.
+        lifecycleScope.launch { account.resume() }
         pendingChatId.value = intent?.getStringExtra(
             com.leo.imessage.notify.Notifier.EXTRA_CHAT_ID
         )
 
         setContent {
             iMessageTheme(settings) {
-                AppRoot(
-                    backend = backend,
-                    openChatRequest = pendingChatId.value,
-                    onChatRequestHandled = { pendingChatId.value = null },
-                )
+                val state by account.state.collectAsState()
+
+                // Setup and the app proper are separate trees rather than one
+                // with a flag: the conversation screens require a backend, and
+                // giving them a placeholder one to satisfy the type would mean
+                // every screen carrying a "not connected yet" branch.
+                when (val current = state) {
+                    is AccountState.Ready -> {
+                        // Lets notification Reply / Mark as Read reach the same
+                        // backend the UI uses, so a reply from the shade lands
+                        // in the transcript.
+                        com.leo.imessage.notify.NotificationActionReceiver
+                            .backendProvider = current.backend
+                        AppRoot(
+                            backend = current.backend,
+                            openChatRequest = pendingChatId.value,
+                            onChatRequestHandled = { pendingChatId.value = null },
+                            accountSummary = account.summary(),
+                            onSignOut = { lifecycleScope.launch { account.signOut() } },
+                        )
+                    }
+                    else -> SetupScreen(state = current, account = account)
+                }
             }
         }
     }
@@ -61,6 +89,13 @@ class MainActivity : ComponentActivity() {
         intent.getStringExtra(com.leo.imessage.notify.Notifier.EXTRA_CHAT_ID)?.let {
             pendingChatId.value = it
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Android can kill the process the moment the app is backgrounded, so
+        // anything still buffered has to reach disk here rather than later.
+        lifecycleScope.launch { account.flush() }
     }
 
     override fun onResume() {

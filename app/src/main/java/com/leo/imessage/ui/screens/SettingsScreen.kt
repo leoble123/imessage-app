@@ -44,15 +44,20 @@ import com.leo.imessage.ui.components.ListSection
 import com.leo.imessage.ui.components.SettingsDivider
 import com.leo.imessage.ui.components.SettingsRow
 import com.leo.imessage.ui.components.SettingsToggle
+import com.leo.imessage.data.AccountSummary
 import com.leo.imessage.ui.theme.LocalPalette
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    /** The account this app is signed into, or null when running on sample data. */
+    account: AccountSummary? = null,
+    onSignOut: () -> Unit = {},
+) {
     val palette = LocalPalette.current
     val hazeState = remember { HazeState() }
     val settings = com.leo.imessage.ui.theme.LocalSettings.current
     val context = androidx.compose.ui.platform.LocalContext.current
-    var editing by remember { mutableStateOf<EditableSetting?>(null) }
     var editingTemplates by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize().background(palette.groupedBackground)) {
@@ -63,23 +68,36 @@ fun SettingsScreen(onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState())
                 .padding(top = 100.dp, bottom = 40.dp),
         ) {
+            // These read the live account rather than editable text fields.
+            // They used to be free-text settings, which meant you could type a
+            // relay address that changed nothing and an Apple ID that wasn't
+            // the one you were signed in as.
             ListSection(header = "Account") {
-                SettingsRow(
-                    "Apple Account",
-                    value = settings.appleAccount.ifBlank { "Not signed in" },
-                    onClick = { editing = EditableSetting.APPLE_ACCOUNT },
-                )
+                if (account == null) {
+                    SettingsRow("Sample data", value = "No account", showChevron = false)
+                } else {
+                    SettingsRow(
+                        "Sending from",
+                        value = account.primaryHandle ?: "Unknown",
+                        showChevron = false,
+                    )
+                    if (account.otherHandles.isNotEmpty()) {
+                        SettingsDivider()
+                        SettingsRow(
+                            "Also reachable at",
+                            value = account.otherHandles.joinToString(", "),
+                            showChevron = false,
+                        )
+                    }
+                    SettingsDivider()
+                    SettingsRow("Relay", value = account.relay ?: "Not set", showChevron = false)
+                }
                 SettingsDivider()
                 SettingsRow(
-                    "Relay Server",
-                    value = settings.relayServer.ifBlank { "Not set" },
-                    onClick = { editing = EditableSetting.RELAY_SERVER },
-                )
-                SettingsDivider()
-                SettingsRow(
-                    "Phone Number",
-                    value = settings.phoneNumber.ifBlank { "Not linked" },
-                    onClick = { editing = EditableSetting.PHONE_NUMBER },
+                    if (account == null) "Set up an account" else "Sign out",
+                    showChevron = false,
+                    destructive = account != null,
+                    onClick = onSignOut,
                 )
             }
 
@@ -367,131 +385,9 @@ fun SettingsScreen(onBack: () -> Unit) {
             )
         }
 
-        editing?.let { field ->
-            SettingEditor(
-                field = field,
-                initial = when (field) {
-                    EditableSetting.APPLE_ACCOUNT -> settings.appleAccount
-                    EditableSetting.RELAY_SERVER -> settings.relayServer
-                    EditableSetting.PHONE_NUMBER -> settings.phoneNumber
-                },
-                onCommit = { value ->
-                    when (field) {
-                        EditableSetting.APPLE_ACCOUNT -> settings.appleAccount = value
-                        EditableSetting.RELAY_SERVER -> settings.relayServer = value
-                        EditableSetting.PHONE_NUMBER -> settings.phoneNumber = value
-                    }
-                },
-                onDismiss = { editing = null },
-            )
-        }
     }
 }
 
-/** The account fields that open a text editor when tapped. */
-enum class EditableSetting(val title: String, val hint: String) {
-    APPLE_ACCOUNT("Apple Account", "you@icloud.com"),
-    RELAY_SERVER("Relay Server", "http://host:5005"),
-    PHONE_NUMBER("Phone Number", "+15555550123"),
-}
-
-/**
- * A small editor for the account fields.
- *
- * These have nothing behind them until the rustpush core lands, but a row
- * that opens nothing at all is worse than one that stores what you type -
- * this way the values are real, and there's somewhere for the backend to
- * read them from when it arrives.
- */
-@Composable
-private fun SettingEditor(
-    field: EditableSetting,
-    initial: String,
-    onCommit: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val palette = LocalPalette.current
-    var value by remember(field) { mutableStateOf(initial) }
-    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
-
-    androidx.activity.compose.BackHandler { onDismiss() }
-    LaunchedEffect(field) {
-        androidx.compose.runtime.withFrameNanos {}
-        runCatching { focus.requestFocus() }
-    }
-
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.34f))
-            .clickable(
-                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                indication = null,
-            ) { onDismiss() }
-            .imePadding(),
-        contentAlignment = Alignment.Center,
-    ) {
-        com.leo.imessage.ui.components.GlassSheet(
-            shape = RoundedCornerShape(20.dp),
-            modifier = Modifier.padding(horizontal = 30.dp),
-            tintAlpha = 0.68f,
-        ) {
-        Column(Modifier.padding(20.dp)) {
-            Text(
-                field.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = palette.label,
-            )
-            Spacer(Modifier.height(14.dp))
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(palette.fieldBackground)
-                    .padding(horizontal = 12.dp, vertical = 11.dp),
-            ) {
-                if (value.isEmpty()) {
-                    Text(
-                        field.hint,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = palette.tertiaryLabel,
-                    )
-                }
-                androidx.compose.foundation.text.BasicTextField(
-                    value = value,
-                    onValueChange = { value = it },
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = palette.label),
-                    cursorBrush = androidx.compose.ui.graphics.SolidColor(palette.accent),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focus),
-                )
-            }
-            Spacer(Modifier.height(18.dp))
-            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    "Cancel",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = palette.secondaryLabel,
-                    modifier = Modifier.clickable { onDismiss() }.padding(8.dp),
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    "Save",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = palette.accent,
-                    modifier = Modifier
-                        .clickable {
-                            onCommit(value.trim())
-                            onDismiss()
-                        }
-                        .padding(8.dp),
-                )
-            }
-        }
-        }
-    }
-}
 
 /** Hands notification behaviour to the system, which actually owns it. */
 private fun openNotificationSettings(context: android.content.Context) {

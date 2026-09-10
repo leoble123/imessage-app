@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
@@ -32,6 +33,11 @@ import com.leo.imessage.ui.components.Avatar
 import com.leo.imessage.ui.components.GlassSurface
 import com.leo.imessage.ui.components.glassSource
 import dev.chrisbanes.haze.HazeState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.sp
+import com.leo.imessage.data.Handles
 import com.leo.imessage.ui.theme.LocalPalette
 
 /**
@@ -43,6 +49,15 @@ fun ComposeScreen(
     chats: List<Chat>,
     onBack: () -> Unit,
     onPick: (Chat) -> Unit,
+    /**
+     * Starts a conversation with a handle that isn't in the list yet.
+     *
+     * Without this the screen can only reopen threads that already exist,
+     * which on a fresh account means it can't do anything at all.
+     */
+    onStartNew: (String) -> Unit = {},
+    /** Set when the last attempt failed - e.g. the handle isn't on iMessage. */
+    error: String? = null,
 ) {
     val palette = LocalPalette.current
     val hazeState = remember { HazeState() }
@@ -68,6 +83,62 @@ fun ComposeScreen(
                 bottom = 24.dp,
             ),
         ) {
+            // Anything that could be an address or a number gets an explicit
+            // row, so a handle you've never messaged is reachable by typing it.
+            val typed = to.trim()
+            val looksLikeHandle = typed.length >= 3 && (
+                typed.contains('@') ||
+                    typed.count { it.isDigit() } >= 7
+                )
+            val alreadyListed = filtered.any {
+                it.first.handle.equals(Handles.normalize(typed), ignoreCase = true)
+            }
+            if (looksLikeHandle && !alreadyListed) {
+                item(key = "new:$typed") {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onStartNew(typed) }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(palette.accent),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("→", color = Color.White, fontSize = 18.sp)
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                "Message $typed",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = palette.label,
+                            )
+                            Text(
+                                "Start a new conversation",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = palette.secondaryLabel,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (error != null) {
+                item(key = "error") {
+                    Text(
+                        error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = palette.destructive,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    )
+                }
+            }
+
             items(filtered, key = { it.first.id }) { (contact, chat) ->
                 Row(
                     Modifier

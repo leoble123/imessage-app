@@ -1,0 +1,690 @@
+package com.leo.imessage.data
+
+import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import uniffi.imessage_core.CoreException
+import uniffi.imessage_core.EventKind
+import uniffi.imessage_core.EventListener
+import uniffi.imessage_core.ImessageCore
+import uniffi.imessage_core.IncomingEvent
+import java.util.UUID
+
+/**
+ * The real backend: the app's [MessagingBackend] on top of the rustpush core.
+ *
+ * The split is deliberate. Rust owns the protocol - the push connection, the
+ * cryptographic identity, encoding and decoding. Kotlin owns everything the
+ * protocol doesn't have an opinion about: what a conversation *is*, what order
+ * things happened in, and the pile of local-only features (bookmarks, notes,
+ * reminders, polls, scheduled sends) that never touch the network at all.
+ *
+ * That means a good half of this class doesn't call into Rust and shouldn't:
+ * pinning a chat or saving a note is a local edit, and routing it through the
+ * protocol would be inventing traffic Apple's servers don't expect.
+ */
+class RustBackend(
+    private val core: ImessageCore,
+    private val store: MessageStore,
+) : MessagingBackend {
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val _chats = MutableStateFlow(store.chats)
+    private val _messages = MutableStateFlow(store.messages)
+
+    /** This account's own handles, filled in once the core is started. */
+    @Volatile
+    private var myHandles: List<String> = emptyList()
+
+    @Volatile
+    private var myHandle: String? = null
+
+    private val me get() = Contact("me", "Me", myHandle ?: "me")
+
+    /** This account's own addresses and numbers, for Settings to show. */
+    fun handles(): List<String> = myHandles
+
+    override val chats: Flow<List<Chat>> = _chats.asStateFlow().map(::sortChats)
+
+    override fun messages(chatId: String): Flow<List<Message>> =
+        _messages.asStateFlow().map { all ->
+            all.filter { it.chatId == chatId }.sortedBy { it.timestamp }
+        }
+
+    override fun chatsNow(): List<Chat> = sortChats(_chats.value)
+
+    override fun messagesNow(chatId: String): List<Message> =
+        _messages.value.filter { it.chatId == chatId }.sortedBy { it.timestamp }
+
+    private fun sortChats(list: List<Chat>) = list.sortedWith(
+        compareByDescending<Chat> { it.isPinned }
+            .thenByDescending { it.lastMessage?.timestamp ?: 0 }
+    )
+
+    /**
+     * Starts the receive loop. Safe to call more than once - the core ignores
+     * a second start.
+     */
+    suspend fun start() {
+        core.start(Listener())
+        myHandles = runCatching { core.handles() }.getOrNull()?.all.orEmpty()
+        myHandle = myHandles.firstOrNull()
+    }
+
+    // --- Sending ------------------------------------------------------------
+
+    override suspend fun send(
+        chatId: String,
+        text: String,
+        effect: MessageEffect,
+        replyToId: String?,
+        attachments: List<Attachment>,
+    ) {
+        val chat = _chats.value.firstOrNull { it.id == chatId } ?: return
+        val localId = UUID.randomUUID().toString()
+
+        // The bubble appears before the network is touched. Waiting on the
+        // round trip would put a visible stall between the send tap and the
+        // bubble, which is the single most noticeable thing a messenger can
+        // get wrong.
+        val pending = Message(
+            id = localId,
+            chatId = chatId,
+            text = text,
+            timestamp = System.currentTimeMillis(),
+            isFromMe = true,
+            senderId = me.id,
+            deliveryState = DeliveryState.SENDING,
+            effect = effect,
+            replyToId = replyToId,
+            attachments = attachments,
+        )
+        append(pending)
+
+        try {
+            val guid = core.sendText(
+                participants = chat.sendTargets(),
+                groupName = chat.groupName(),
+                senderGuid = chat.groupGuid(),
+                text = text,
+                replyToId = replyToId,
+                replyToPart = null,
+                effect = effect.wireName(),
+            )
+            // Adopt the GUID Apple assigned. Tapbacks, edits and unsends all
+            // address a message by it, so a local id that never gets replaced
+            // produces a message nobody can react to.
+            replaceId(localId, guid, DeliveryState.SENT)
+        } catch (e: CoreException) {
+            Log.e(TAG, "send failed", e)
+            updateMessage(localId) { it.copy(deliveryState = DeliveryState.FAILED) }
+        }
+    }
+
+    override suspend fun setTapback(messageId: String, kind: TapbackKind) {
+        val message = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val existing = message.tapbacks.firstOrNull { it.fromMe }
+        // Tapping the tapback you already gave takes it back, the way iOS does.
+        val removing = existing?.kind == kind
+        applyTapback(message, kind, null, added = !removing)
+        sendTapback(message, kind.wireName(), added = !removing)
+    }
+
+    override suspend fun setEmojiTapback(messageId: String, emoji: String) {
+        val message = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val existing = message.tapbacks.firstOrNull { it.fromMe }
+        val removing = existing?.emoji == emoji
+        applyTapback(message, TapbackKind.ANY_EMOJI, emoji, added = !removing)
+        sendTapback(message, emoji, added = !removing)
+    }
+
+    private suspend fun sendTapback(message: Message, reaction: String, added: Boolean) {
+        val chat = _chats.value.firstOrNull { it.id == message.chatId } ?: return
+        runCatching {
+            core.sendTapback(
+                participants = chat.sendTargets(),
+                groupName = chat.groupName(),
+                senderGuid = chat.groupGuid(),
+                targetId = message.id,
+                targetPart = 0uL,
+                // iMessage quotes the message being reacted to in the tapback
+                // itself; that's what devices without tapback support show.
+                targetText = message.text,
+                reaction = reaction,
+                added = added,
+            )
+        }.onFailure { Log.e(TAG, "tapback failed", it) }
+    }
+
+    private suspend fun applyTapback(
+        message: Message,
+        kind: TapbackKind,
+        emoji: String?,
+        added: Boolean,
+    ) {
+        updateMessage(message.id) { msg ->
+            val others = msg.tapbacks.filterNot { it.fromMe }
+            msg.copy(
+                tapbacks = if (added) {
+                    others + Tapback(kind, fromMe = true, senderId = me.id, emoji = emoji)
+                } else {
+                    others
+                }
+            )
+        }
+    }
+
+    override suspend fun edit(messageId: String, newText: String) {
+        val message = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val chat = _chats.value.firstOrNull { it.id == message.chatId } ?: return
+        updateMessage(messageId) {
+            it.copy(
+                text = newText,
+                editHistory = it.editHistory + it.text,
+                editedAt = System.currentTimeMillis(),
+            )
+        }
+        runCatching {
+            core.sendEdit(
+                participants = chat.sendTargets(),
+                groupName = chat.groupName(),
+                senderGuid = chat.groupGuid(),
+                targetId = messageId,
+                targetPart = 0uL,
+                newText = newText,
+            )
+        }.onFailure { Log.e(TAG, "edit failed", it) }
+    }
+
+    override suspend fun unsend(messageId: String) {
+        val message = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val chat = _chats.value.firstOrNull { it.id == message.chatId } ?: return
+        // The text is kept locally for one-tap reveal. It's gone from the
+        // other side, which is the point, but hiding it from yourself as well
+        // just means you can't remember what you retracted.
+        updateMessage(messageId) { it.copy(unsentText = it.text, isUnsent = true, text = "") }
+        runCatching {
+            core.sendUnsend(
+                participants = chat.sendTargets(),
+                groupName = chat.groupName(),
+                senderGuid = chat.groupGuid(),
+                targetId = messageId,
+                targetPart = 0uL,
+            )
+        }.onFailure { Log.e(TAG, "unsend failed", it) }
+    }
+
+    override suspend fun setTyping(chatId: String, typing: Boolean) {
+        val chat = _chats.value.firstOrNull { it.id == chatId } ?: return
+        runCatching {
+            core.sendTyping(
+                participants = chat.sendTargets(),
+                groupName = chat.groupName(),
+                senderGuid = chat.groupGuid(),
+                typing = typing,
+            )
+        }.onFailure { Log.d(TAG, "typing indicator not sent", it) }
+    }
+
+    override suspend fun markRead(chatId: String) {
+        val chat = _chats.value.firstOrNull { it.id == chatId } ?: return
+        if (chat.unreadCount == 0) return
+        updateChat(chatId) { it.copy(unreadCount = 0) }
+        runCatching {
+            core.sendRead(
+                participants = chat.sendTargets(),
+                groupName = chat.groupName(),
+                senderGuid = chat.groupGuid(),
+            )
+        }.onFailure { Log.d(TAG, "read receipt not sent", it) }
+    }
+
+    override suspend fun markUnread(chatId: String) {
+        val chat = _chats.value.firstOrNull { it.id == chatId } ?: return
+        updateChat(chatId) { it.copy(unreadCount = maxOf(it.unreadCount, 1)) }
+        runCatching {
+            core.sendMarkUnread(
+                participants = chat.sendTargets(),
+                groupName = chat.groupName(),
+                senderGuid = chat.groupGuid(),
+            )
+        }.onFailure { Log.d(TAG, "unread state not synced", it) }
+    }
+
+    override suspend fun startChat(handles: List<String>): String {
+        val targets = handles.map(Handles::normalize).distinct()
+        require(targets.isNotEmpty()) { "No one to message." }
+
+        val sender = myHandle
+        if (sender != null) {
+            // Ask IDS who can actually receive iMessage before creating the
+            // thread. A chat opened against an unreachable handle looks
+            // completely normal until the first message fails.
+            val reachable = runCatching { core.validateTargets(targets, sender) }
+                .getOrDefault(targets)
+            if (reachable.isEmpty()) {
+                throw IllegalArgumentException(
+                    if (targets.size == 1) "${Handles.display(targets.first())} isn't on iMessage."
+                    else "None of those are on iMessage."
+                )
+            }
+        }
+
+        // A group needs a GUID minted here; a one-to-one chat is identified by
+        // the other participant, so it gets none.
+        val guid = if (targets.size > 1) UUID.randomUUID().toString() else null
+        val chatId = Handles.chatId(targets, guid)
+        _chats.value.firstOrNull { it.id == chatId }?.let { return chatId }
+
+        val participants = targets.map { Handles.contact(it) }
+        mutate { chats, messages ->
+            chats + Chat(
+                id = chatId,
+                displayName = participants.joinToString(", ") { it.displayName },
+                participants = participants,
+                lastMessage = null,
+            ) to messages
+        }
+        return chatId
+    }
+
+    // --- Local-only state ---------------------------------------------------
+    //
+    // None of these send anything. They're this device's view of the
+    // conversation, and iMessage has no message for most of them.
+
+    override suspend fun delete(messageId: String) {
+        mutate { chats, messages ->
+            val remaining = messages.filterNot { it.id == messageId }
+            chats.map { it.withLatest(remaining) } to remaining
+        }
+    }
+
+    override suspend fun setBookmarked(messageId: String, bookmarked: Boolean) =
+        updateMessage(messageId) { it.copy(isBookmarked = bookmarked) }
+
+    override suspend fun setMessagePinned(messageId: String, pinned: Boolean) =
+        updateMessage(messageId) { it.copy(isPinned = pinned) }
+
+    override suspend fun setNote(messageId: String, note: String?) =
+        updateMessage(messageId) { it.copy(note = note?.takeIf { n -> n.isNotBlank() }) }
+
+    override suspend fun setReminder(messageId: String, at: Long?) =
+        updateMessage(messageId) { it.copy(remindAt = at) }
+
+    override suspend fun setPinned(chatId: String, pinned: Boolean) =
+        updateChat(chatId) { it.copy(isPinned = pinned) }
+
+    override suspend fun setMuted(chatId: String, muted: Boolean) =
+        updateChat(chatId) { it.copy(isMuted = muted) }
+
+    override suspend fun setArchived(chatId: String, archived: Boolean) =
+        updateChat(chatId) { it.copy(isArchived = archived, isPinned = false) }
+
+    override suspend fun deleteChat(chatId: String) {
+        mutate { chats, messages ->
+            chats.filterNot { it.id == chatId } to messages.filterNot { it.chatId == chatId }
+        }
+    }
+
+    override suspend fun scheduleSend(chatId: String, text: String, at: Long) {
+        val id = UUID.randomUUID().toString()
+        append(
+            Message(
+                id = id,
+                chatId = chatId,
+                text = text,
+                timestamp = at,
+                isFromMe = true,
+                senderId = me.id,
+                deliveryState = DeliveryState.SENDING,
+                scheduledFor = at,
+            )
+        )
+        scope.launch {
+            delay((at - System.currentTimeMillis()).coerceAtLeast(0))
+            // Only fire if it's still queued - it may have been sent early or
+            // cancelled while we were waiting.
+            if (_messages.value.any { it.id == id && it.scheduledFor != null }) {
+                resolveScheduled(id, send = true)
+            }
+        }
+    }
+
+    override suspend fun resolveScheduled(messageId: String, send: Boolean) {
+        val message = _messages.value.firstOrNull { it.id == messageId } ?: return
+        if (!send) {
+            delete(messageId)
+            return
+        }
+        // Drop the placeholder and send for real, so it goes out through the
+        // same path as anything else and picks up a genuine GUID.
+        delete(messageId)
+        send(message.chatId, message.text, message.effect, message.replyToId)
+    }
+
+    override suspend fun sendPoll(chatId: String, question: String, options: List<String>) {
+        // iMessage has no poll message. Rendering it as a poll card here and
+        // sending readable text keeps it from arriving as an empty bubble on
+        // an actual iPhone.
+        val poll = Poll(
+            question = question,
+            options = options.filter { it.isNotBlank() }
+                .map { PollOption(UUID.randomUUID().toString(), it.trim()) },
+        )
+        val body = buildString {
+            append(question)
+            poll.options.forEachIndexed { i, option -> append("\n${i + 1}. ${option.label}") }
+        }
+        val chat = _chats.value.firstOrNull { it.id == chatId } ?: return
+        val localId = UUID.randomUUID().toString()
+        append(
+            Message(
+                id = localId,
+                chatId = chatId,
+                text = "",
+                timestamp = System.currentTimeMillis(),
+                isFromMe = true,
+                senderId = me.id,
+                deliveryState = DeliveryState.SENDING,
+                poll = poll,
+            )
+        )
+        runCatching {
+            core.sendText(
+                participants = chat.sendTargets(),
+                groupName = chat.groupName(),
+                senderGuid = chat.groupGuid(),
+                text = body,
+                replyToId = null,
+                replyToPart = null,
+                effect = null,
+            )
+        }.onSuccess { guid -> replaceId(localId, guid, DeliveryState.SENT) }
+            .onFailure { updateMessage(localId) { m -> m.copy(deliveryState = DeliveryState.FAILED) } }
+    }
+
+    override suspend fun votePoll(messageId: String, optionId: String) {
+        updateMessage(messageId) { msg ->
+            val poll = msg.poll ?: return@updateMessage msg
+            val already = poll.options.firstOrNull { it.id == optionId }
+                ?.voters?.contains(me.id) == true
+            msg.copy(
+                poll = poll.copy(
+                    options = poll.options.map { option ->
+                        when {
+                            option.id == optionId && already ->
+                                option.copy(voters = option.voters - me.id)
+                            option.id == optionId ->
+                                option.copy(voters = option.voters + me.id)
+                            !poll.allowsMultiple ->
+                                option.copy(voters = option.voters - me.id)
+                            else -> option
+                        }
+                    }
+                )
+            )
+        }
+    }
+
+    // --- Receiving ----------------------------------------------------------
+
+    private inner class Listener : EventListener {
+        override fun onEvent(event: IncomingEvent) {
+            // The callback comes from a Rust thread; everything below touches
+            // the store, so it moves onto our own scope first.
+            scope.launch { handle(event) }
+        }
+
+        override fun onStateChanged() {
+            scope.launch { store.flush() }
+        }
+
+        override fun onConnectionLost(reason: String) {
+            Log.w(TAG, "push connection lost: $reason")
+        }
+    }
+
+    private suspend fun handle(event: IncomingEvent) {
+        val fromMe = event.sender != null && event.sender in myHandles
+        val chatId = Handles.chatId(
+            // Our own handle is a participant on the wire but not a person in
+            // the conversation; leaving it in would make every one-to-one chat
+            // look like a two-person group.
+            participants = event.conversation.participants.filterNot { it in myHandles },
+            groupGuid = event.conversation.senderGuid,
+        )
+
+        when (val kind = event.kind) {
+            is EventKind.Text -> {
+                ensureChat(chatId, event)
+                val message = Message(
+                    id = event.id,
+                    chatId = chatId,
+                    text = kind.text,
+                    timestamp = event.timestampMs.toLong(),
+                    isFromMe = fromMe,
+                    senderId = event.sender?.let { Handles.contactId(it) },
+                    service = if (kind.isSms) Service.SMS else Service.IMESSAGE,
+                    deliveryState = DeliveryState.DELIVERED,
+                    effect = effectFrom(kind.effect),
+                    replyToId = kind.replyToId,
+                    attachments = kind.attachments.map {
+                        Attachment(
+                            id = UUID.randomUUID().toString(),
+                            fileName = it.name,
+                            mimeType = it.mimeType,
+                            // Attachments arrive as MMCS references; the bytes
+                            // are a separate fetch, so there's no file yet.
+                            uri = it.localPath.takeIf { path -> path.isNotEmpty() },
+                            sizeBytes = it.sizeBytes.toLong(),
+                        )
+                    },
+                )
+                append(message, incrementUnread = !fromMe)
+            }
+
+            is EventKind.Tapback -> updateMessage(kind.targetId) { msg ->
+                val others = msg.tapbacks.filterNot { it.fromMe == fromMe }
+                if (!kind.added) {
+                    msg.copy(tapbacks = others)
+                } else {
+                    val builtIn = kind.reaction.toTapbackKind()
+                    msg.copy(
+                        tapbacks = others + Tapback(
+                            kind = builtIn ?: TapbackKind.ANY_EMOJI,
+                            fromMe = fromMe,
+                            senderId = event.sender?.let { Handles.contactId(it) }.orEmpty(),
+                            emoji = if (builtIn == null) kind.reaction else null,
+                        )
+                    )
+                }
+            }
+
+            is EventKind.Edit -> updateMessage(kind.targetId) {
+                it.copy(
+                    text = kind.newText,
+                    editHistory = it.editHistory + it.text,
+                    editedAt = event.timestampMs.toLong(),
+                )
+            }
+
+            is EventKind.Unsend -> updateMessage(kind.targetId) {
+                it.copy(unsentText = it.text.ifEmpty { it.unsentText }, isUnsent = true, text = "")
+            }
+
+            is EventKind.Typing -> updateChat(chatId) { it.copy(isTyping = kind.active) }
+
+            // Our messages were read. Only the newest one shows a receipt, so
+            // marking them all keeps that consistent as the thread grows.
+            EventKind.Read -> markOwnMessages(chatId, DeliveryState.READ)
+            EventKind.Delivered -> markOwnMessages(chatId, DeliveryState.DELIVERED)
+
+            EventKind.MarkedUnread -> updateChat(chatId) {
+                it.copy(unreadCount = maxOf(it.unreadCount, 1))
+            }
+
+            is EventKind.GroupRenamed -> updateChat(chatId) { it.copy(displayName = kind.name) }
+
+            is EventKind.ParticipantsChanged -> updateChat(chatId) { chat ->
+                chat.copy(
+                    participants = kind.participants
+                        .filterNot { it in myHandles }
+                        .map { Handles.contact(it) }
+                )
+            }
+
+            is EventKind.SendFailed -> updateMessage(kind.targetId) {
+                it.copy(deliveryState = DeliveryState.FAILED)
+            }
+
+            is EventKind.Unhandled -> Log.d(TAG, "ignoring: ${kind.description}")
+        }
+    }
+
+    private suspend fun markOwnMessages(chatId: String, state: DeliveryState) {
+        mutate { chats, messages ->
+            chats to messages.map { msg ->
+                // Never walk a receipt backwards: a late "delivered" arriving
+                // after a "read" would otherwise un-read the thread.
+                if (msg.chatId == chatId && msg.isFromMe && msg.deliveryState < state) {
+                    msg.copy(deliveryState = state)
+                } else {
+                    msg
+                }
+            }
+        }
+    }
+
+    private suspend fun ensureChat(chatId: String, event: IncomingEvent) {
+        if (_chats.value.any { it.id == chatId }) return
+        val participants = event.conversation.participants
+            .filterNot { it in myHandles }
+            .map { Handles.contact(it) }
+        mutate { chats, messages ->
+            chats + Chat(
+                id = chatId,
+                displayName = event.conversation.groupName
+                    ?: participants.joinToString(", ") { it.displayName },
+                participants = participants,
+                lastMessage = null,
+            ) to messages
+        }
+    }
+
+    // --- Store plumbing -----------------------------------------------------
+
+    private suspend fun mutate(
+        block: (List<Chat>, List<Message>) -> Pair<List<Chat>, List<Message>>,
+    ) {
+        store.update(block)
+        _chats.value = store.chats
+        _messages.value = store.messages
+    }
+
+    private suspend fun append(message: Message, incrementUnread: Boolean = false) {
+        mutate { chats, messages ->
+            // Apple re-delivers a message if the first acknowledgement was
+            // lost, so the same GUID can arrive twice.
+            if (messages.any { it.id == message.id }) return@mutate chats to messages
+            val updated = messages + message
+            chats.map { chat ->
+                if (chat.id != message.chatId) chat
+                else chat.withLatest(updated).let {
+                    if (incrementUnread) it.copy(unreadCount = it.unreadCount + 1) else it
+                }
+            } to updated
+        }
+    }
+
+    private suspend fun updateMessage(id: String, block: (Message) -> Message) {
+        mutate { chats, messages ->
+            val updated = messages.map { if (it.id == id) block(it) else it }
+            chats.map { it.withLatest(updated) } to updated
+        }
+    }
+
+    private suspend fun updateChat(id: String, block: (Chat) -> Chat) {
+        mutate { chats, messages ->
+            chats.map { if (it.id == id) block(it) else it } to messages
+        }
+    }
+
+    private suspend fun replaceId(oldId: String, newId: String, state: DeliveryState) {
+        mutate { chats, messages ->
+            val updated = messages.map {
+                if (it.id == oldId) it.copy(id = newId, deliveryState = state) else it
+            }
+            chats.map { it.withLatest(updated) } to updated
+        }
+    }
+
+    private companion object {
+        const val TAG = "RustBackend"
+    }
+}
+
+// --- Mapping helpers ---------------------------------------------------------
+
+private fun Chat.withLatest(messages: List<Message>): Chat =
+    copy(lastMessage = messages.filter { it.chatId == id }.maxByOrNull { it.timestamp })
+
+/** The handles to address a message to. */
+private fun Chat.sendTargets(): List<String> = participants.map { Handles.normalize(it.handle) }
+
+/** Only groups carry a name on the wire; sending one for a 1:1 renames nothing. */
+private fun Chat.groupName(): String? = if (isGroup) displayName else null
+
+private fun Chat.groupGuid(): String? = id.removePrefix("group:").takeIf { id.startsWith("group:") }
+
+/**
+ * iMessage names its effects with reverse-DNS identifiers. Anything the app
+ * doesn't recognise sends as a plain message rather than guessing.
+ */
+private fun MessageEffect.wireName(): String? = when (this) {
+    MessageEffect.NONE -> null
+    MessageEffect.SLAM -> "com.apple.MobileSMS.expressivesend.impact"
+    MessageEffect.LOUD -> "com.apple.MobileSMS.expressivesend.loud"
+    MessageEffect.GENTLE -> "com.apple.MobileSMS.expressivesend.gentle"
+    MessageEffect.INVISIBLE_INK -> "com.apple.MobileSMS.expressivesend.invisibleink"
+}
+
+private fun effectFrom(wire: String?): MessageEffect = when (wire) {
+    "com.apple.MobileSMS.expressivesend.impact" -> MessageEffect.SLAM
+    "com.apple.MobileSMS.expressivesend.loud" -> MessageEffect.LOUD
+    "com.apple.MobileSMS.expressivesend.gentle" -> MessageEffect.GENTLE
+    "com.apple.MobileSMS.expressivesend.invisibleink" -> MessageEffect.INVISIBLE_INK
+    else -> MessageEffect.NONE
+}
+
+private fun TapbackKind.wireName(): String = when (this) {
+    TapbackKind.HEART -> "heart"
+    TapbackKind.THUMBS_UP -> "like"
+    TapbackKind.THUMBS_DOWN -> "dislike"
+    TapbackKind.HAHA -> "laugh"
+    TapbackKind.EXCLAIM -> "emphasize"
+    TapbackKind.QUESTION -> "question"
+    // Shouldn't be reached - emoji tapbacks go through setEmojiTapback, which
+    // sends the emoji itself.
+    TapbackKind.ANY_EMOJI -> "heart"
+}
+
+/** Null for anything that isn't one of the six built-ins, i.e. an emoji. */
+private fun String.toTapbackKind(): TapbackKind? = when (this) {
+    "heart" -> TapbackKind.HEART
+    "like" -> TapbackKind.THUMBS_UP
+    "dislike" -> TapbackKind.THUMBS_DOWN
+    "laugh" -> TapbackKind.HAHA
+    "emphasize" -> TapbackKind.EXCLAIM
+    "question" -> TapbackKind.QUESTION
+    else -> null
+}

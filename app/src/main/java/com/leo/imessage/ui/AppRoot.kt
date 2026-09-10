@@ -51,6 +51,9 @@ fun AppRoot(
     /** Conversation to jump straight into, from a tapped notification. */
     openChatRequest: String? = null,
     onChatRequestHandled: () -> Unit = {},
+    /** Shown in Settings. Null when the app is running on sample data. */
+    accountSummary: com.leo.imessage.data.AccountSummary? = null,
+    onSignOut: () -> Unit = {},
 ) {
     val chats by backend.chats.collectAsState(initial = remember { backend.chatsNow() })
     val settings = com.leo.imessage.ui.theme.LocalSettings.current
@@ -58,6 +61,7 @@ fun AppRoot(
     var openChatId by remember { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(false) }
     var showCompose by remember { mutableStateOf(false) }
+    var composeError by remember { mutableStateOf<String?>(null) }
     var showDetails by remember { mutableStateOf(false) }
     // A photo opened from the details screen's Photos strip.
     var detailsViewing by remember { mutableStateOf<com.leo.imessage.data.Attachment?>(null) }
@@ -378,7 +382,11 @@ fun AppRoot(
                         shadowElevation = 18f * settingsProgress
                     }
             ) {
-                com.leo.imessage.ui.screens.SettingsScreen(onBack = { showSettings = false })
+                com.leo.imessage.ui.screens.SettingsScreen(
+                    onBack = { showSettings = false },
+                    account = accountSummary,
+                    onSignOut = onSignOut,
+                )
             }
         }
 
@@ -399,11 +407,28 @@ fun AppRoot(
             ) {
                 com.leo.imessage.ui.screens.ComposeScreen(
                     chats = chats,
-                    onBack = { showCompose = false },
+                    onBack = { showCompose = false; composeError = null },
                     onPick = { chat ->
                         showCompose = false
+                        composeError = null
                         openChatId = chat.id
                     },
+                    onStartNew = { handle ->
+                        scope.launch {
+                            try {
+                                val id = backend.startChat(listOf(handle))
+                                showCompose = false
+                                composeError = null
+                                openChatId = id
+                            } catch (e: Exception) {
+                                // Shown in place rather than as a toast: the
+                                // fix is to edit what's in the field, which is
+                                // right there.
+                                composeError = e.message ?: "Couldn't start that conversation."
+                            }
+                        }
+                    },
+                    error = composeError,
                 )
             }
         }

@@ -85,4 +85,16 @@ interface MessagingBackend {
     suspend fun markUnread(chatId: String)
 
     suspend fun setTyping(chatId: String, typing: Boolean)
+
+    /**
+     * Opens a conversation with these handles, returning its chat id.
+     *
+     * Returns an existing chat when there already is one, so typing a number
+     * you've messaged before lands you in that thread rather than starting a
+     * second, parallel copy of it.
+     *
+     * Throws if none of the handles can receive iMessage - which is worth
+     * knowing before a message is typed, not after it fails to send.
+     */
+    suspend fun startChat(handles: List<String>): String
 }
