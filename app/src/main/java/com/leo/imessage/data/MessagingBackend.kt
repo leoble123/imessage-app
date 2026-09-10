@@ -27,6 +27,17 @@ interface MessagingBackend {
 
     fun messagesNow(chatId: String): List<Message>
 
+    /**
+     * A cheap first page of a conversation, for the frame it opens on.
+     *
+     * Composition is on the main thread, so the value a transcript starts with
+     * is read there too - and reading a whole conversation's scrollback at
+     * that moment is a visible stutter between the tap and the screen. This
+     * returns about a screenful; the full transcript arrives from
+     * [messages] a moment later, off the main thread.
+     */
+    fun recentMessages(chatId: String): List<Message> = messagesNow(chatId)
+
     suspend fun send(
         chatId: String,
         text: String,

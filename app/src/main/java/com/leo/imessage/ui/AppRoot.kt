@@ -201,7 +201,7 @@ fun AppRoot(
             val chat = openChat ?: lastOpenChat
             if (chat != null) {
                 val messages by remember(chat.id) { backend.messages(chat.id) }
-                    .collectAsState(initial = remember(chat.id) { backend.messagesNow(chat.id) })
+                    .collectAsState(initial = remember(chat.id) { backend.recentMessages(chat.id) })
 
                 Box(
                     Modifier

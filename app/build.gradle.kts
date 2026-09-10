@@ -12,8 +12,8 @@ android {
         applicationId = "com.leo.imessage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 37
-        versionName = "0.37.0"
+        versionCode = 38
+        versionName = "0.38.0"
         buildConfigField("long", "BUILD_TIME", "${System.currentTimeMillis()}L")
         ndk {
             // Only the ABI we actually target - keeps the APK lean.
@@ -52,6 +52,15 @@ android {
             // Kotlin bindings sit alongside the hand-written sources.
             jniLibs.srcDirs("src/main/jniLibs")
             java.srcDirs("src/main/java", "build/generated/uniffi")
+        }
+    }
+
+    testOptions {
+        unitTests {
+            // Robolectric needs the merged resources and manifest to stand up
+            // an application context, which is what lets the storage layer be
+            // tested against real SQLite instead of a mock of it.
+            isIncludeAndroidResources = true
         }
     }
 
@@ -99,4 +108,13 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.15.0@aar")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // The history is the only copy of the conversation that exists, so the
+    // layer that keeps it is the one place in this app where a regression is
+    // unrecoverable rather than annoying. These run on the JVM against real
+    // SQLite - no device, no emulator, so they run on every build.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }

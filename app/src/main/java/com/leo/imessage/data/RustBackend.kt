@@ -6,11 +6,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import uniffi.imessage_core.CoreException
 import uniffi.imessage_core.EventKind
 import uniffi.imessage_core.EventListener
@@ -55,9 +55,6 @@ class RustBackend(
     val calls: Calls = Calls(core, contacts, audio)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    private val _chats = MutableStateFlow(store.chats)
-    private val _messages = MutableStateFlow(store.messages)
 
     /**
      * The conversation currently on screen, if any.
@@ -115,53 +112,88 @@ class RustBackend(
 
     /**
      * Re-reads the store after something outside the backend changed it, such
-     * as an import. The flows hold a snapshot, so without this the new rows
-     * exist on disk and nowhere on screen.
+     * as an import. The conversation list is cached in memory, so without this
+     * the new rows exist on disk and nowhere on screen.
      */
-    fun reloadFromStore() {
-        _chats.value = store.chats
-        _messages.value = store.messages
-    }
+    suspend fun reloadFromStore() = store.reload()
 
     /** Re-titles existing chats after contacts load or permission is granted. */
     suspend fun refreshContactNames() {
         val source = contacts ?: return
         if (!source.loaded) return
-        mutate { chats, messages ->
-            chats.map { chat ->
-                val named = chat.participants.map { contactFor(it.handle) }
-                val title = if (chat.id.startsWith("group:") && chat.displayName.isNotBlank() &&
-                    chat.participants.none { it.displayName == chat.displayName }
-                ) {
-                    // A group's own name is not derived from participants, so
-                    // it must not be overwritten by them.
-                    chat.displayName
-                } else {
-                    named.joinToString(", ") { it.displayName }
-                }
-                chat.copy(participants = named, displayName = title)
-            } to messages
+        store.updateAllChats { chat ->
+            val named = chat.participants.map { contactFor(it.handle) }
+            val title = if (chat.id.startsWith("group:") && chat.displayName.isNotBlank() &&
+                chat.participants.none { it.displayName == chat.displayName }
+            ) {
+                // A group's own name is not derived from participants, so it
+                // must not be overwritten by them.
+                chat.displayName
+            } else {
+                named.joinToString(", ") { it.displayName }
+            }
+            chat.copy(participants = named, displayName = title)
         }
     }
 
-    override val chats: Flow<List<Chat>> = _chats.asStateFlow().map(::sortChats)
+    override val chats: Flow<List<Chat>> = store.chats.map(::sortChats)
 
+    /**
+     * One conversation's transcript, re-queried when it changes.
+     *
+     * Filtered on the conversation the change touched, so a message landing
+     * in another thread doesn't make this one re-read and re-parse a thousand
+     * rows. `onStart` supplies the opening value, because a filtered flow has
+     * nothing to say until something actually changes.
+     */
     override fun messages(chatId: String): Flow<List<Message>> =
-        _messages.asStateFlow().map { all ->
-            // distinctBy is deliberate belt-and-braces. The transcript keys
-            // its rows by message id, so a duplicate is not a display glitch -
-            // it takes the whole screen down.
-            all.filter { it.chatId == chatId }
-                .distinctBy { it.id }
-                .sortedBy { it.timestamp }
-        }
+        store.changes
+            .filter { it.chatId == null || it.chatId == chatId }
+            .map { readMessages(chatId) }
+            .onStart { emit(readMessages(chatId)) }
+            .flowOn(Dispatchers.IO)
 
-    override fun chatsNow(): List<Chat> = sortChats(_chats.value)
+    override fun chatsNow(): List<Chat> = sortChats(store.chatsNow())
 
     override fun messagesNow(chatId: String): List<Message> =
-        _messages.value.filter { it.chatId == chatId }
-            .distinctBy { it.id }
-            .sortedBy { it.timestamp }
+        cached(chatId) ?: readMessages(chatId)
+
+    override fun recentMessages(chatId: String): List<Message> =
+        cached(chatId) ?: order(store.messages(chatId, MessageStore.FIRST_PAINT))
+
+    /**
+     * The last transcript read, so the screens that ask for one outside the
+     * flow - the attachment gallery, the export, a poll vote - don't each
+     * re-run the query and re-parse the rows.
+     *
+     * Stamped with the store's change serial rather than invalidated by hand:
+     * the serial is read *before* the query, so a message landing while it
+     * runs leaves the snapshot marked stale and the next reader goes back to
+     * the database. Nothing has to remember to clear it.
+     */
+    private class Snapshot(val chatId: String, val serial: Long, val messages: List<Message>)
+
+    @Volatile
+    private var snapshot: Snapshot? = null
+
+    private fun cached(chatId: String): List<Message>? = snapshot
+        ?.takeIf { it.chatId == chatId && it.serial == store.changes.value.serial }
+        ?.messages
+
+    private fun readMessages(chatId: String): List<Message> {
+        val serial = store.changes.value.serial
+        val messages = order(store.messages(chatId))
+        snapshot = Snapshot(chatId, serial, messages)
+        return messages
+    }
+
+    /**
+     * distinctBy is deliberate belt-and-braces. The transcript keys its rows
+     * by message id, so a duplicate is not a display glitch - it takes the
+     * whole screen down.
+     */
+    private fun order(messages: List<Message>): List<Message> =
+        messages.distinctBy { it.id }.sortedBy { it.timestamp }
 
     private fun sortChats(list: List<Chat>) = list.distinctBy { it.id }.sortedWith(
         compareByDescending<Chat> { it.isPinned }
@@ -187,10 +219,7 @@ class RustBackend(
     private fun pruneOrphanedAttachments() {
         val context = context ?: return
         runCatching {
-            val referenced = store.messages
-                .flatMap { it.attachments }
-                .mapNotNull { it.uri }
-                .toSet()
+            val referenced = store.referencedAttachmentUris()
             AttachmentFiles.dir(context).listFiles()?.forEach { file ->
                 val uri = android.net.Uri.fromFile(file).toString()
                 if (uri !in referenced) {
@@ -206,20 +235,13 @@ class RustBackend(
         // Clears out conversations left by that bug. They can neither send nor
         // receive, so there is nothing to preserve - and one sitting in the
         // list looks like a real thread that has simply stopped working.
-        mutate { chats, messages ->
-            val broken = chats.filter { it.participants.isEmpty() }.map { it.id }.toSet()
-            if (broken.isEmpty()) return@mutate chats to messages
-            Log.i(TAG, "removing ${broken.size} conversation(s) with no participants")
-            chats.filterNot { it.id in broken } to messages.filterNot { it.chatId in broken }
-        }
+        store.removeParticipantlessChats()
         core.start(Listener())
 
         // Re-arm anything that was queued when the app last closed. One whose
         // time has already passed goes immediately - late is closer to what
         // was asked for than never.
-        _messages.value
-            .filter { it.scheduledFor != null && it.isFromMe }
-            .forEach { armScheduled(it.id, it.scheduledFor!!) }
+        store.scheduledMessages().forEach { armScheduled(it.id, it.scheduledFor!!) }
 
         myHandles = runCatching { core.handles() }.getOrNull()?.all.orEmpty()
         myHandle = myHandles.firstOrNull()
@@ -236,7 +258,7 @@ class RustBackend(
         replyToId: String?,
         attachments: List<Attachment>,
     ) {
-        val chat = _chats.value.firstOrNull { it.id == chatId } ?: return
+        val chat = store.chat(chatId) ?: return
         // A conversation with nobody in it can't be sent to. This used to be
         // reachable: a message addressed only to your own handle had that
         // handle filtered out as "us", leaving a participant-less thread that
@@ -356,7 +378,7 @@ class RustBackend(
      */
     suspend fun downloadAttachment(messageId: String, attachmentId: String) {
         val context = context ?: return
-        val message = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val message = store.message(messageId) ?: return
         val index = message.attachments.indexOfFirst { it.id == attachmentId }
         if (index < 0) return
         val attachment = message.attachments[index]
@@ -383,7 +405,7 @@ class RustBackend(
     }
 
     override suspend fun setTapback(messageId: String, kind: TapbackKind) {
-        val message = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val message = store.message(messageId) ?: return
         val existing = message.tapbacks.firstOrNull { it.fromMe }
         // Tapping the tapback you already gave takes it back, the way iOS does.
         val removing = existing?.kind == kind
@@ -392,7 +414,7 @@ class RustBackend(
     }
 
     override suspend fun setEmojiTapback(messageId: String, emoji: String) {
-        val message = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val message = store.message(messageId) ?: return
         val existing = message.tapbacks.firstOrNull { it.fromMe }
         val removing = existing?.emoji == emoji
         applyTapback(message, TapbackKind.ANY_EMOJI, emoji, added = !removing)
@@ -400,7 +422,7 @@ class RustBackend(
     }
 
     private suspend fun sendTapback(message: Message, reaction: String, added: Boolean) {
-        val chat = _chats.value.firstOrNull { it.id == message.chatId } ?: return
+        val chat = store.chat(message.chatId) ?: return
         runCatching {
             core.sendTapback(
                 participants = chat.sendTargets(),
@@ -436,8 +458,8 @@ class RustBackend(
     }
 
     override suspend fun edit(messageId: String, newText: String) {
-        val message = _messages.value.firstOrNull { it.id == messageId } ?: return
-        val chat = _chats.value.firstOrNull { it.id == message.chatId } ?: return
+        val message = store.message(messageId) ?: return
+        val chat = store.chat(message.chatId) ?: return
         updateMessage(messageId) {
             it.copy(
                 text = newText,
@@ -458,8 +480,8 @@ class RustBackend(
     }
 
     override suspend fun unsend(messageId: String) {
-        val message = _messages.value.firstOrNull { it.id == messageId } ?: return
-        val chat = _chats.value.firstOrNull { it.id == message.chatId } ?: return
+        val message = store.message(messageId) ?: return
+        val chat = store.chat(message.chatId) ?: return
         // The text is kept locally for one-tap reveal. It's gone from the
         // other side, which is the point, but hiding it from yourself as well
         // just means you can't remember what you retracted.
@@ -476,7 +498,7 @@ class RustBackend(
     }
 
     override suspend fun setTyping(chatId: String, typing: Boolean) {
-        val chat = _chats.value.firstOrNull { it.id == chatId } ?: return
+        val chat = store.chat(chatId) ?: return
         runCatching {
             core.sendTyping(
                 participants = chat.sendTargets(),
@@ -488,7 +510,7 @@ class RustBackend(
     }
 
     override suspend fun markRead(chatId: String) {
-        val chat = _chats.value.firstOrNull { it.id == chatId } ?: return
+        val chat = store.chat(chatId) ?: return
         if (chat.unreadCount == 0) return
         updateChat(chatId) { it.copy(unreadCount = 0) }
         runCatching {
@@ -501,7 +523,7 @@ class RustBackend(
     }
 
     override suspend fun markUnread(chatId: String) {
-        val chat = _chats.value.firstOrNull { it.id == chatId } ?: return
+        val chat = store.chat(chatId) ?: return
         updateChat(chatId) { it.copy(unreadCount = maxOf(it.unreadCount, 1)) }
         runCatching {
             core.sendMarkUnread(
@@ -527,22 +549,20 @@ class RustBackend(
         // the other participant, so it gets none.
         val guid = if (targets.size > 1) UUID.randomUUID().toString() else null
         val chatId = Handles.chatId(targets, guid)
-        _chats.value.firstOrNull { it.id == chatId }?.let { return chatId }
-
         val participants = targets.map { contactFor(it) }
-        mutate { chats, messages ->
-            chats + Chat(
+        store.addChat(
+            Chat(
                 id = chatId,
                 displayName = participants.joinToString(", ") { it.displayName },
                 participants = participants,
                 lastMessage = null,
-            ) to messages
-        }
+            )
+        )
         return chatId
     }
 
     override suspend fun retry(messageId: String) {
-        val message = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val message = store.message(messageId) ?: return
         if (message.deliveryState != DeliveryState.FAILED) return
         // Removed first so the retry doesn't sit beside its own failure.
         delete(messageId)
@@ -560,12 +580,7 @@ class RustBackend(
     // None of these send anything. They're this device's view of the
     // conversation, and iMessage has no message for most of them.
 
-    override suspend fun delete(messageId: String) {
-        mutate { chats, messages ->
-            val remaining = messages.filterNot { it.id == messageId }
-            chats.map { it.withLatest(remaining) } to remaining
-        }
-    }
+    override suspend fun delete(messageId: String) = store.deleteMessage(messageId)
 
     override suspend fun setBookmarked(messageId: String, bookmarked: Boolean) =
         updateMessage(messageId) { it.copy(isBookmarked = bookmarked) }
@@ -588,11 +603,7 @@ class RustBackend(
     override suspend fun setArchived(chatId: String, archived: Boolean) =
         updateChat(chatId) { it.copy(isArchived = archived, isPinned = false) }
 
-    override suspend fun deleteChat(chatId: String) {
-        mutate { chats, messages ->
-            chats.filterNot { it.id == chatId } to messages.filterNot { it.chatId == chatId }
-        }
-    }
+    override suspend fun deleteChat(chatId: String) = store.deleteChat(chatId)
 
     override suspend fun scheduleSend(chatId: String, text: String, at: Long) {
         val id = UUID.randomUUID().toString()
@@ -623,14 +634,14 @@ class RustBackend(
             delay((at - System.currentTimeMillis()).coerceAtLeast(0))
             // Only fire if it's still queued - it may have been sent early or
             // cancelled while we were waiting.
-            if (_messages.value.any { it.id == id && it.scheduledFor != null }) {
+            if (store.message(id)?.scheduledFor != null) {
                 resolveScheduled(id, send = true)
             }
         }
     }
 
     override suspend fun resolveScheduled(messageId: String, send: Boolean) {
-        val message = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val message = store.message(messageId) ?: return
         if (!send) {
             delete(messageId)
             return
@@ -654,7 +665,7 @@ class RustBackend(
             append(question)
             poll.options.forEachIndexed { i, option -> append("\n${i + 1}. ${option.label}") }
         }
-        val chat = _chats.value.firstOrNull { it.id == chatId } ?: return
+        val chat = store.chat(chatId) ?: return
         val localId = UUID.randomUUID().toString()
         append(
             Message(
@@ -772,7 +783,11 @@ class RustBackend(
                     },
                 )
                 val watching = appVisible && chatId == openChatId
-                append(message, incrementUnread = !fromMe && !watching)
+                // Apple re-delivers a message if the first acknowledgement was
+                // lost, so the same GUID genuinely arrives twice. Everything
+                // below - the unread badge, the read receipt, the attachment
+                // fetch - must not happen a second time.
+                if (!store.insert(message, incrementUnread = !fromMe && !watching)) return
 
                 // A message landing clears the typing bubble - the sender has
                 // finished typing by definition, and iMessage sends no
@@ -864,16 +879,12 @@ class RustBackend(
     }
 
     private suspend fun markOwnMessages(chatId: String, state: DeliveryState) {
-        mutate { chats, messages ->
-            chats to messages.map { msg ->
-                // Never walk a receipt backwards: a late "delivered" arriving
-                // after a "read" would otherwise un-read the thread.
-                if (msg.chatId == chatId && msg.isFromMe && msg.deliveryState < state) {
-                    msg.copy(deliveryState = state)
-                } else {
-                    msg
-                }
-            }
+        store.updateOwnMessages(chatId) { msg ->
+            // Never walk a receipt backwards: a late "delivered" arriving
+            // after a "read" would otherwise un-read the thread. Returning
+            // null leaves the message alone, so a receipt for a thread that
+            // was already read rewrites nothing at all.
+            if (msg.deliveryState < state) msg.copy(deliveryState = state) else null
         }
     }
 
@@ -894,102 +905,39 @@ class RustBackend(
     }
 
     private suspend fun ensureChat(chatId: String, event: IncomingEvent) {
-        if (_chats.value.any { it.id == chatId }) return
+        if (store.chat(chatId) != null) return
         val participants = participantsOf(event).map { contactFor(it) }
-        mutate { chats, messages ->
-            chats + Chat(
+        store.addChat(
+            Chat(
                 id = chatId,
                 displayName = event.conversation.groupName
                     ?: participants.joinToString(", ") { it.displayName },
                 participants = participants,
                 lastMessage = null,
-            ) to messages
-        }
+            )
+        )
     }
 
     // --- Store plumbing -----------------------------------------------------
-
-    private suspend fun mutate(
-        block: (List<Chat>, List<Message>) -> Pair<List<Chat>, List<Message>>,
-    ) {
-        store.update(block)
-        _chats.value = store.chats
-        _messages.value = store.messages
-    }
+    //
+    // Thin wrappers over the store, which owns the database, the lock and the
+    // change notifications. They exist so the call sites above read as intent
+    // ("append this", "update that") rather than as storage mechanics.
 
     private suspend fun append(message: Message, incrementUnread: Boolean = false) {
-        mutate { chats, messages ->
-            // Apple re-delivers a message if the first acknowledgement was
-            // lost, so the same GUID can arrive twice.
-            if (messages.any { it.id == message.id }) return@mutate chats to messages
-            val updated = messages + message
-            chats.map { chat ->
-                if (chat.id != message.chatId) chat
-                else chat.withLatest(updated).let {
-                    if (incrementUnread) it.copy(unreadCount = it.unreadCount + 1) else it
-                }
-            } to updated
-        }
+        store.insert(message, incrementUnread)
     }
 
     private suspend fun updateMessage(id: String, block: (Message) -> Message) {
-        mutate { chats, messages ->
-            val updated = messages.map { if (it.id == id) block(it) else it }
-            chats.map { it.withLatest(updated) } to updated
-        }
+        store.updateMessage(id, block)
     }
 
     private suspend fun updateChat(id: String, block: (Chat) -> Chat) {
-        mutate { chats, messages ->
-            chats.map { if (it.id == id) block(it) else it } to messages
-        }
+        store.updateChat(id, block)
     }
 
-    /**
-     * Swaps a locally-minted id for the GUID Apple assigned.
-     *
-     * The collision this guards against is easy to hit and fatal: send a
-     * message, and Apple can fan its own copy back to us before this runs.
-     * The echo is appended under the real GUID, and renaming the local
-     * placeholder to that same GUID then leaves two messages sharing an id -
-     * which the transcript keys by, so it crashes outright.
-     *
-     * The echo is authoritative, so when one is already present the
-     * placeholder is dropped rather than renamed. Local-only fields are
-     * carried across first, since the copy from Apple has never heard of the
-     * bookmark or note you put on it.
-     */
     private suspend fun replaceId(oldId: String, newId: String, state: DeliveryState) {
-        mutate { chats, messages ->
-            val local = messages.firstOrNull { it.id == oldId }
-            val existing = messages.firstOrNull { it.id == newId }
-
-            val updated = when {
-                local == null -> messages
-                existing != null -> messages
-                    .filterNot { it.id == oldId }
-                    .map {
-                        if (it.id != newId) it else it.copy(
-                            // Delivery only moves forward, so keep whichever
-                            // of the two got further.
-                            deliveryState = maxOf(it.deliveryState, state),
-                            isBookmarked = it.isBookmarked || local.isBookmarked,
-                            isPinned = it.isPinned || local.isPinned,
-                            note = it.note ?: local.note,
-                            remindAt = it.remindAt ?: local.remindAt,
-                            poll = it.poll ?: local.poll,
-                            // The echo comes back without the local file URIs,
-                            // so a sent photo would otherwise lose its preview.
-                            attachments = if (it.attachments.isEmpty()) local.attachments
-                            else it.attachments,
-                        )
-                    }
-                else -> messages.map {
-                    if (it.id == oldId) it.copy(id = newId, deliveryState = state) else it
-                }
-            }
-            chats.map { it.withLatest(updated) } to updated
-        }
+        store.adoptGuid(oldId, newId, state)
     }
 
     /** True on Wi-Fi, or anything else the system doesn't bill by the byte. */
@@ -1011,9 +959,6 @@ class RustBackend(
 }
 
 // --- Mapping helpers ---------------------------------------------------------
-
-private fun Chat.withLatest(messages: List<Message>): Chat =
-    copy(lastMessage = messages.filter { it.chatId == id }.maxByOrNull { it.timestamp })
 
 /** The handles to address a message to. */
 private fun Chat.sendTargets(): List<String> = participants.map { Handles.normalize(it.handle) }

@@ -459,45 +459,31 @@ object OpenBubblesImport {
         parsed: Parsed,
         attachmentUris: Map<String, String>,
     ): Result {
-        var duplicates = 0
-        var newChats = 0
-        var newMessages = 0
         var withBytes = 0
 
-        store.update { existingChats, existingMessages ->
-            val haveMessage = existingMessages.mapTo(HashSet()) { it.id }
-            val haveChat = existingChats.associateBy { it.id }
-
-            val addedChats = parsed.chats.filterNot { haveChat.containsKey(it.id) }
-            newChats = addedChats.size
-
-            val addedMessages = parsed.messages
-                .filter { it.id !in haveMessage }
-                .map { message ->
-                    val resolved = message.attachments.map { att ->
-                        val uri = attachmentUris[att.id]
-                        if (uri != null) withBytes++
-                        att.copy(uri = uri)
-                    }
-                    message.copy(attachments = resolved)
+        // Asked of the database one id at a time rather than by loading every
+        // message to build a set. The lookup is a primary-key hit, and the
+        // whole point of the storage layer is that an import of fifty thousand
+        // messages never has to hold fifty thousand messages.
+        val addedMessages = parsed.messages
+            .filterNot { store.hasMessage(it.id) }
+            .map { message ->
+                val resolved = message.attachments.map { att ->
+                    val uri = attachmentUris[att.id]
+                    if (uri != null) withBytes++
+                    att.copy(uri = uri)
                 }
-            duplicates = parsed.messages.size - addedMessages.size
-            newMessages = addedMessages.size
-
-            val allMessages = existingMessages + addedMessages
-            // Grouped once rather than filtered per chat. A real export runs to
-            // tens of thousands of messages, and scanning all of them for every
-            // conversation turns the import into a visible freeze.
-            val newestPerChat = allMessages
-                .groupingBy { it.chatId }
-                .reduce { _, best, next -> if (next.timestamp > best.timestamp) next else best }
-            val allChats = (existingChats + addedChats).map { chat ->
-                chat.copy(lastMessage = newestPerChat[chat.id])
+                message.copy(attachments = resolved)
             }
-            allChats to allMessages
-        }
-        store.flush()
-        return Result(newChats, newMessages, withBytes, duplicates)
+        val addedChats = parsed.chats.filter { store.chat(it.id) == null }
+
+        // `lastMessage` is derived on read, so nothing here has to work out
+        // which message is newest - the conversation list picks it up from the
+        // index the moment these rows land.
+        store.importInto(addedChats, addedMessages)
+
+        val duplicates = parsed.messages.size - addedMessages.size
+        return Result(addedChats.size, addedMessages.size, withBytes, duplicates)
     }
 
     // --- Stream helpers -----------------------------------------------------

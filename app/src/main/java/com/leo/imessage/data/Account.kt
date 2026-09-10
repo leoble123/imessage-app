@@ -99,9 +99,16 @@ class AccountManager(context: Context) {
         ImessageCore(File(appContext.filesDir, "imessage").absolutePath)
     }
 
-    private val store: MessageStore by lazy {
-        MessageStore(File(appContext.filesDir, "history.json"))
+    /**
+     * Opening the store migrates the old history file and touches the disk, so
+     * it is deliberately lazy - and the delegate is held rather than only the
+     * value, so [summary] can ask whether it has been opened instead of
+     * opening it from whatever thread happens to draw Settings.
+     */
+    private val storeDelegate = lazy {
+        MessageStore(appContext, File(appContext.filesDir, "history.json"))
     }
+    private val store: MessageStore by storeDelegate
 
     /** The address book. Public so the New Message screen can list it. */
     val contacts: Contacts by lazy { Contacts(appContext) }
@@ -260,7 +267,7 @@ class AccountManager(context: Context) {
             otherHandles = handles.drop(1),
             relay = relayHost,
             lastSend = backend.lastSendReport,
-            historyProblem = store.loadFailure,
+            historyProblem = if (storeDelegate.isInitialized()) store.loadFailure else null,
             servicesComplete = runCatching { !core.needsServiceRefresh() }.getOrDefault(true),
         )
     }
