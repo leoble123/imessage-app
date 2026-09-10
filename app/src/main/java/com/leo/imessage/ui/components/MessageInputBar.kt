@@ -430,7 +430,6 @@ fun MessageInputBar(
                                 scaleY = sc
                                 translationY = 4.dp.toPx() * (1f - a)
                             }
-                            .underglow(palette.accent, radius = 10.dp, alpha = 0.45f)
                             .clip(CircleShape)
                             .background(palette.accent),
                         contentAlignment = Alignment.Center,

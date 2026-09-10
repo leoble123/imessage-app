@@ -51,7 +51,6 @@ import dev.chrisbanes.haze.HazeState
 import com.leo.imessage.ui.components.GroupAvatar
 import com.leo.imessage.ui.components.SwipeAction
 import com.leo.imessage.ui.components.SwipeableRow
-import com.leo.imessage.ui.components.underglow
 import com.leo.imessage.ui.theme.AppleColors
 import com.leo.imessage.ui.theme.LocalPalette
 import com.leo.imessage.ui.theme.Motion
@@ -529,7 +528,6 @@ private fun ChatRow(
                     Box(
                         Modifier
                             .size(9.dp)
-                            .underglow(palette.accent, radius = 7.dp, alpha = 0.5f)
                             .clip(CircleShape)
                             .background(palette.accent)
                     )

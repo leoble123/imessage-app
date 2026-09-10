@@ -244,13 +244,6 @@ fun MessageBubble(
                 backgroundIsDark -> Color.White
                 else -> Color.Black
             }
-            // The bubble's own colour, so the light matches the object.
-            val glowTint = when {
-                msg.service == Service.SMS -> palette.smsBubbleFlat
-                settings.colorfulBubbles ->
-                    com.leo.imessage.ui.theme.colorfulBubbleFor(colorSeed, palette.isDark).first()
-                else -> palette.outgoingBubbleFlat
-            }
             val playedEffect = if (settings.playEffects) msg.effect
                 else com.leo.imessage.data.MessageEffect.NONE
             val glassDark = when {
@@ -369,20 +362,6 @@ fun MessageBubble(
                                     scaleY = s
                                 }
                                 .widthIn(max = 290.dp)
-                                // Only outgoing bubbles glow. Incoming ones
-                                // are near-neutral, so light spilling off
-                                // them would come from nowhere - and if
-                                // everything glows, nothing reads as lit.
-                                .then(
-                                    if (outgoing && glass) {
-                                        Modifier.glow(
-                                            shape = shape,
-                                            color = glowTint,
-                                            radius = 14.dp,
-                                            alpha = if (palette.isDark) 0.22f else 0.16f,
-                                        )
-                                    } else Modifier
-                                )
                                 .liquidGlass(
                                     shape = shape,
                                     fill = fill,
