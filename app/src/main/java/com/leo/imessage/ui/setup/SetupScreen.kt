@@ -142,8 +142,8 @@ fun SetupScreen(
             ) { _ ->
                 when (state) {
                     AccountState.NeedsRelay -> Step(
-                        title = "Connect your relay",
-                        detail = "Enter the address of the registration relay and the " +
+                        title = "Connect your server",
+                        detail = "Enter the address of your registration server and the " +
                             "pairing code it printed. This is what lets the app " +
                             "register with Apple.",
                         action = "Continue",

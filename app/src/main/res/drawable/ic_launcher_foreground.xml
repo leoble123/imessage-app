@@ -1,21 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  A speech bubble made of glass.
+    Two overlapping speech bubbles - a conversation, not a single message.
 
-  Built the same way the bubbles inside the app are, and in the same order,
-  because that is what makes an icon look like it came from its app rather
-  than being drawn for it:
+    The back bubble is translucent and the front one solid, so where they cross
+    the colour deepens on its own rather than being painted in. That overlap is
+    the whole idea: it only works because the shapes are genuinely see-through,
+    which is the same material the app's own surfaces use.
 
-    1. a translucent body, so the gradient behind reads through it
-    2. a caustic pool at the bottom, where light refracts back up
-    3. a lit rim - bright along the top-left, gone by the bottom-right
-    4. one specular streak across the shoulder
-
-  Vector drawables cannot blur, so the softness has to come from gradient
-  stops rather than from a real blur pass. That constraint is why the rim is
-  drawn as a stroked path with its own gradient instead of a glow.
-
-  Everything sits inside the 72dp safe zone so no launcher mask clips it.
+    Drawn inside the middle 72dp of the 108dp canvas, since the launcher crops
+    an adaptive icon to varying shapes and anything outside that can be cut.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -23,71 +16,19 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Contact shadow, so the bubble sits on the surface rather than in it -->
-    <path android:pathData="M26,44m0,20a28,14 0 1,0 56,0a28,14 0 1,0 -56,0">
-        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
-            <gradient
-                android:type="radial"
-                android:centerX="54" android:centerY="64" android:gradientRadius="30">
-                <item android:offset="0.0" android:color="#40000000" />
-                <item android:offset="1.0" android:color="#00000000" />
-            </gradient>
-        </aapt:attr>
-    </path>
+    <!-- Back bubble: pale, translucent, tail to the lower right. -->
+    <group android:name="back">
+        <path
+            android:pathData="M55,30h26a11,11 0,0 1,11 11v16a11,11 0,0 1,-11 11h-8l0,9 -8,-9h-10a11,11 0,0 1,-11 -11v-16a11,11 0,0 1,11 -11z"
+            android:fillColor="#4A8CFF"
+            android:fillAlpha="0.28" />
+    </group>
 
-    <!-- Body: translucent, brighter at the top where it faces the light -->
-    <path android:pathData="M35,26 L73,26 A17,17 0 0 1 90,43 L90,58 A17,17 0 0 1 73,75 L52,75 L36,88 L39,75 L35,75 A17,17 0 0 1 18,58 L18,43 A17,17 0 0 1 35,26 Z">
-        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="30" android:startY="24"
-                android:endX="80" android:endY="90">
-                <item android:offset="0.0" android:color="#E6FFFFFF" />
-                <item android:offset="0.45" android:color="#9EFFFFFF" />
-                <item android:offset="1.0" android:color="#5CFFFFFF" />
-            </gradient>
-        </aapt:attr>
-    </path>
-
-    <!-- Caustic: light that went through the body and bounced back up -->
-    <path android:pathData="M35,26 L73,26 A17,17 0 0 1 90,43 L90,58 A17,17 0 0 1 73,75 L52,75 L36,88 L39,75 L35,75 A17,17 0 0 1 18,58 L18,43 A17,17 0 0 1 35,26 Z">
-        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="54" android:startY="52"
-                android:endX="54" android:endY="88">
-                <item android:offset="0.0" android:color="#00FFFFFF" />
-                <item android:offset="1.0" android:color="#54FFFFFF" />
-            </gradient>
-        </aapt:attr>
-    </path>
-
-    <!-- Lit rim: bright top-left, gone by bottom-right -->
-    <path
-        android:pathData="M35,26 L73,26 A17,17 0 0 1 90,43 L90,58 A17,17 0 0 1 73,75 L52,75 L36,88 L39,75 L35,75 A17,17 0 0 1 18,58 L18,43 A17,17 0 0 1 35,26 Z"
-        android:strokeWidth="2">
-        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:strokeColor">
-            <gradient
-                android:type="linear"
-                android:startX="24" android:startY="24"
-                android:endX="86" android:endY="86">
-                <item android:offset="0.0" android:color="#FFFFFFFF" />
-                <item android:offset="0.45" android:color="#66FFFFFF" />
-                <item android:offset="1.0" android:color="#14FFFFFF" />
-            </gradient>
-        </aapt:attr>
-    </path>
-
-    <!-- Specular streak across the shoulder -->
-    <path android:pathData="M31,36 A13,13 0 0 1 44,33 L64,33 A5,5 0 0 1 64,41 L40,41 A9,9 0 0 0 33,45 Z">
-        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="31" android:startY="33"
-                android:endX="66" android:endY="43">
-                <item android:offset="0.0" android:color="#C4FFFFFF" />
-                <item android:offset="1.0" android:color="#1AFFFFFF" />
-            </gradient>
-        </aapt:attr>
-    </path>
+    <!-- Front bubble: solid, tail to the lower left. Drawn second so the
+         overlap darkens naturally where the two meet. -->
+    <group android:name="front">
+        <path
+            android:pathData="M27,44h26a11,11 0,0 1,11 11v16a11,11 0,0 1,-11 11h-16l-8,9 0,-9h-2a11,11 0,0 1,-11 -11v-16a11,11 0,0 1,11 -11z"
+            android:fillColor="#2F7CF6" />
+    </group>
 </vector>

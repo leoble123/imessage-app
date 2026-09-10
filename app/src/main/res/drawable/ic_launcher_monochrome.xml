@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Themed-icon variant. One flat silhouette only - the launcher recolours this
-  wholesale, and any gradient or partial alpha comes out as mud once tinted.
+    The themed-icon version. Android tints this single shape to match the
+    user's wallpaper, so it has to read as one silhouette - the translucency
+    and the two-tone overlap are both lost here, and a shape that relies on
+    them turns into a blob.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -9,6 +11,10 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:pathData="M35,26 L73,26 A17,17 0 0 1 90,43 L90,58 A17,17 0 0 1 73,75 L52,75 L36,88 L39,75 L35,75 A17,17 0 0 1 18,58 L18,43 A17,17 0 0 1 35,26 Z"
-        android:fillColor="#FFFFFFFF" />
+        android:pathData="M55,30h26a11,11 0,0 1,11 11v16a11,11 0,0 1,-11 11h-8l0,9 -8,-9h-10a11,11 0,0 1,-11 -11v-16a11,11 0,0 1,11 -11z"
+        android:fillColor="#000000"
+        android:fillAlpha="0.45" />
+    <path
+        android:pathData="M27,44h26a11,11 0,0 1,11 11v16a11,11 0,0 1,-11 11h-16l-8,9 0,-9h-2a11,11 0,0 1,-11 -11v-16a11,11 0,0 1,11 -11z"
+        android:fillColor="#000000" />
 </vector>

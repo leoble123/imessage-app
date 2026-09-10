@@ -176,7 +176,7 @@ class ConnectionService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.sym_action_chat)
-            .setContentTitle("Echo")
+            .setContentTitle("Relay")
             .setContentText(text)
             .setContentIntent(open)
             .setOngoing(true)

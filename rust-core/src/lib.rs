@@ -1214,19 +1214,19 @@ fn relay_error(e: PushError) -> CoreError {
         // The relay answered. It just didn't like the request - almost always
         // a pairing code that doesn't match the one the server was started with.
         PushError::RelayError(401, _) | PushError::RelayError(403, _) =>
-            "The relay is running, but rejected that pairing code. It has to match \
-             the RELAY_CODE the server was started with."
+            "The server is running, but rejected that pairing code. It has to match \
+             the RELAY_CODE it was started with."
                 .to_string(),
         PushError::RelayError(status, body) => {
             let detail = body.chars().take(200).collect::<String>();
-            format!("The relay answered with HTTP {status}. {detail}")
+            format!("The server answered with HTTP {status}. {detail}")
         }
         // Its own 404 for this endpoint - reachable, but not this API.
         PushError::DeviceNotFound =>
-            "Reached the server, but it has no registration relay at that address."
+            "Reached that address, but nothing there answers as a registration server."
                 .to_string(),
         // Anything else really is a connection problem.
-        other => format!("Couldn't reach the relay: {other}"),
+        other => format!("Couldn't reach the server: {other}"),
     })
 }
 

@@ -94,7 +94,7 @@ fun SettingsScreen(
                         )
                     }
                     SettingsDivider()
-                    SettingsRow("Relay", value = account.relay ?: "Not set", showChevron = false)
+                    SettingsRow("Server", value = account.relay ?: "Not set", showChevron = false)
                     SettingsDivider()
                     SettingsRow(
                         "Services",
@@ -495,7 +495,7 @@ private fun shareDiagnostics(
         appendLine("Theme: ${settings.themeMode}")
         appendLine("Bubble style: ${settings.bubbleStyle}")
         appendLine("Reduce motion: ${settings.lowPowerAnimations}")
-        appendLine("Relay server: ${settings.relayServer.ifBlank { "not set" }}")
+        appendLine("Server: ${settings.relayServer.ifBlank { "not set" }}")
     }
     runCatching {
         val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
