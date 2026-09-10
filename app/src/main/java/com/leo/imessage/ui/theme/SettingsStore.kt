@@ -43,7 +43,20 @@ class SettingsStore(context: Context) {
             .apply()
     }
 
+    /**
+     * The build whose changes have already been shown.
+     *
+     * 0 means never - a fresh install, which still gets the card: it doubles
+     * as an introduction, and it is the only way the person who has been
+     * sideloading every build sees the first one after the feature lands.
+     */
+    fun lastSeenVersion(): Int = prefs.getInt(KEY_LAST_SEEN_VERSION, 0)
+
+    fun markVersionSeen(versionCode: Int) =
+        prefs.edit().putInt(KEY_LAST_SEEN_VERSION, versionCode).apply()
+
     private companion object {
         const val KEY_BACKGROUNDS = "chat_backgrounds"
+        const val KEY_LAST_SEEN_VERSION = "last_seen_version"
     }
 }

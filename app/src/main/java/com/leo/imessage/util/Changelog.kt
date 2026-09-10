@@ -1,0 +1,365 @@
+package com.leo.imessage.util
+
+/** How a line in a release reads: something gained, something repaired, or something sharpened. */
+enum class ChangeKind(val label: String) {
+    NEW("New"),
+    FIXED("Fixed"),
+    BETTER("Better"),
+}
+
+data class Change(val kind: ChangeKind, val text: String)
+
+data class Release(
+    val versionCode: Int,
+    val versionName: String,
+    /** Written out rather than a timestamp - this is read, not sorted. */
+    val date: String,
+    /** One line on what this build was for. */
+    val headline: String,
+    val changes: List<Change>,
+)
+
+/**
+ * What every build of this app changed, newest first.
+ *
+ * Written by hand rather than generated from commits on purpose. A commit
+ * message is addressed to whoever maintains the code; this is addressed to
+ * whoever uses it, and the two are rarely the same sentence. It also has to
+ * stay readable offline and inside a release build, which rules out reaching
+ * for the repository at runtime.
+ *
+ * Add the new release to the top of this list in the same commit that bumps
+ * `versionCode` - the What's New card is driven off the first entry, so a
+ * build that forgets shows the previous version's notes under a new number.
+ */
+object Changelog {
+
+    val releases: List<Release> = listOf(
+        Release(
+            versionCode = 39,
+            versionName = "0.39.0",
+            date = "10 September 2026",
+            headline = "The app can now tell you what it changed.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "What's New: after an update, the first launch says what changed. " +
+                        "Once, then it gets out of the way.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Release Notes in Settings, under About - every version this app has " +
+                        "ever been, so you can see where it's going.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Settings claimed the backend was \"Mock\" and Export Diagnostics " +
+                        "reported version 0.1.0. Both had been wrong for eighteen builds.",
+                ),
+            ),
+        ),
+        Release(
+            versionCode = 38,
+            versionName = "0.38.0",
+            date = "10 September 2026",
+            headline = "Your messages moved into a real database.",
+            changes = listOf(
+                Change(
+                    ChangeKind.BETTER,
+                    "Every message used to live in one list in memory, rewritten to disk " +
+                        "in full a few times a minute. That's fine at three hundred " +
+                        "messages and fatal at fifty thousand. They're in SQLite now, read " +
+                        "a page at a time.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "A message arriving in one conversation no longer makes every other " +
+                        "one re-read itself.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Apple resends a message when it doesn't hear the acknowledgement. " +
+                        "The second copy was raising the unread badge again and " +
+                        "re-downloading the attachments.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Opening an already-read conversation rewrote every message in it.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "The first 26 tests. They cover the part where a bug can't be undone: " +
+                        "iMessage never resends history, so this is the only copy there is.",
+                ),
+            ),
+        ),
+        Release(
+            versionCode = 37,
+            versionName = "0.37.0",
+            date = "10 September 2026",
+            headline = "A full audit, and everything it found.",
+            changes = listOf(
+                Change(ChangeKind.FIXED, "A hang on launch when the connection didn't come up."),
+                Change(
+                    ChangeKind.FIXED,
+                    "The microphone stayed live after some calls ended.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Importing an OpenBubbles export said \"not readable\" for large files. " +
+                        "It had actually run out of memory - the file is now read as a " +
+                        "stream instead of three times over.",
+                ),
+                Change(ChangeKind.FIXED, "Several failures that happened silently now say so."),
+                Change(
+                    ChangeKind.BETTER,
+                    "Received attachments are cleaned up when nothing points at them any " +
+                        "more, instead of growing forever.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "Big attachments wait to be tapped unless you're on Wi-Fi.",
+                ),
+            ),
+        ),
+        Release(
+            versionCode = 36,
+            versionName = "0.36.0",
+            date = "10 September 2026",
+            headline = "Echo is now Relay.",
+            changes = listOf(
+                Change(ChangeKind.NEW, "New name and a new icon."),
+            ),
+        ),
+        Release(
+            versionCode = 35,
+            versionName = "0.35.0",
+            date = "10 September 2026",
+            headline = "Stop provoking Apple's rate limiter.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "The app re-registered with Apple on every single launch, which is " +
+                        "exactly the pattern that turns a temporary rate limit into a " +
+                        "lasting one. Now at most once a day.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Phone numbers were shown with the country code cut off.",
+                ),
+            ),
+        ),
+        Release(
+            versionCode = 34,
+            versionName = "0.34.0",
+            date = "10 September 2026",
+            headline = "A failed send now says why.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "The reason sits under the bubble. \"Not Delivered\" makes every " +
+                        "failure look the same, when the difference between \"they aren't " +
+                        "on iMessage\" and \"the connection dropped\" is the whole diagnosis.",
+                ),
+                Change(ChangeKind.NEW, "Tap a failed message to send it again."),
+            ),
+        ),
+        Release(
+            versionCode = 33,
+            versionName = "0.33.0",
+            date = "10 September 2026",
+            headline = "Starting a conversation stopped crashing.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "Messaging anyone new took the app down. A brand-new conversation has " +
+                        "no messages in it, and sorting it beside conversations that do " +
+                        "compared two different kinds of number.",
+                ),
+                Change(ChangeKind.NEW, "A FaceTime button on the conversation list."),
+            ),
+        ),
+        Release(
+            versionCode = 32,
+            versionName = "0.32.0",
+            date = "10 September 2026",
+            headline = "Crashes can now be read off the phone.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "A crash writes itself down and shows you the whole thing on the next " +
+                        "launch, with a Copy button. Guessing at a crash from a " +
+                        "description is how two builds went to the wrong fix.",
+                ),
+            ),
+        ),
+        Release(
+            versionCode = 31,
+            versionName = "0.31.0",
+            date = "10 September 2026",
+            headline = "Attachments actually leave the phone.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "Photos and files were sent as plain text - the recipient got your " +
+                        "caption and nothing else, with no sign anything had gone wrong.",
+                ),
+                Change(ChangeKind.FIXED, "Six smaller bugs found alongside it."),
+            ),
+        ),
+        Release(
+            versionCode = 30,
+            versionName = "0.30.0",
+            date = "10 September 2026",
+            headline = "Messages to yourself land somewhere real.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "A message addressed only to your own account had that address " +
+                        "filtered out as \"us\", leaving a conversation with nobody in it " +
+                        "that could neither send nor receive.",
+                ),
+            ),
+        ),
+        Release(
+            versionCode = 29,
+            versionName = "0.29.0",
+            date = "10 September 2026",
+            headline = "FaceTime carries sound.",
+            changes = listOf(
+                Change(ChangeKind.NEW, "Microphone in, earpiece out, encoded as AAC."),
+            ),
+        ),
+        Release(
+            versionCode = 28,
+            versionName = "0.28.0",
+            date = "10 September 2026",
+            headline = "FaceTime.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "Registration, ringing, answering and hanging up. Incoming calls ring " +
+                        "over the lock screen.",
+                ),
+            ),
+        ),
+        Release(
+            versionCode = 27,
+            versionName = "0.27.0",
+            date = "10 September 2026",
+            headline = "Bring your old conversations with you.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "Import an OpenBubbles export from Settings. Worth having because " +
+                        "iMessage sends a new device nothing that came before it - " +
+                        "whatever client had your history is the only place it exists.",
+                ),
+            ),
+        ),
+        Release(
+            versionCode = 26,
+            versionName = "0.26.0",
+            date = "10 September 2026",
+            headline = "You can message people again.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "Every number and address except your own came back \"not on " +
+                        "iMessage\". Two separate causes: numbers were being sent without " +
+                        "a country code, and a lookup that should have been a hint was " +
+                        "being treated as a gate.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "The address book, so conversations are titled with names.",
+                ),
+            ),
+        ),
+        Release(
+            versionCode = 25,
+            versionName = "0.25.0",
+            date = "10 September 2026",
+            headline = "The two-factor code actually arrives.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "The app waited on a six-digit code it had never asked Apple to send.",
+                ),
+                Change(ChangeKind.NEW, "Get the code by SMS when no device has it."),
+            ),
+        ),
+        Release(
+            versionCode = 24,
+            versionName = "0.24.0",
+            date = "10 September 2026",
+            headline = "Say what actually went wrong.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "Every server problem reported itself as \"couldn't reach the relay\", " +
+                        "including the ones where the relay answered fine and said no.",
+                ),
+            ),
+        ),
+        Release(
+            versionCode = 23,
+            versionName = "0.23.0",
+            date = "10 September 2026",
+            headline = "Groundwork.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "The build pieces for running Apple's validation code on the phone " +
+                        "itself one day, instead of asking a server to do it.",
+                ),
+            ),
+        ),
+        Release(
+            versionCode = 22,
+            versionName = "0.22.0",
+            date = "10 September 2026",
+            headline = "Real iMessage, end to end.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "Signing in with an Apple ID, registering, sending and receiving - all " +
+                        "of it against Apple's own servers.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Messages keep arriving while the app is closed.",
+                ),
+                Change(ChangeKind.BETTER, "A smaller download."),
+            ),
+        ),
+        Release(
+            versionCode = 21,
+            versionName = "0.21.0",
+            date = "10 September 2026",
+            headline = "The app, before it could send anything.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "Everything you see: the conversation list, the transcript, bubbles " +
+                        "with real tails, tapbacks, replies and threads, editing and " +
+                        "unsending, effects, the attachment tray, voice messages, polls, " +
+                        "Catch Up, quick replies, and per-chat backgrounds.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Real backdrop blur rather than transparency pretending to be glass, " +
+                        "and springs tuned to the numbers iOS actually uses.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "A version number that tells the truth. It had said 0.1.0 for twenty " +
+                        "builds.",
+                ),
+            ),
+        ),
+    )
+
+    /** The build being run, if it's described here. */
+    fun current(versionCode: Int): Release? = releases.firstOrNull { it.versionCode == versionCode }
+}

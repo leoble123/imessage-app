@@ -66,6 +66,7 @@ fun AppRoot(
     val context = androidx.compose.ui.platform.LocalContext.current
     var openChatId by remember { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(false) }
+    var showReleaseNotes by remember { mutableStateOf(false) }
     var showCompose by remember { mutableStateOf(false) }
     var composeError by remember { mutableStateOf<String?>(null) }
     // Whether the picker is choosing someone to message or to call.
@@ -79,6 +80,16 @@ fun AppRoot(
     val store = remember(context) { com.leo.imessage.ui.theme.SettingsStore(context) }
     val backgrounds = remember {
         mutableStateMapOf<String, String>().apply { putAll(store.backgrounds()) }
+    }
+    // What changed in the build that just replaced the one you had, if this
+    // is the first launch of it. Read once, so acknowledging it can't make
+    // the card come back on the next recomposition.
+    var whatsNew by remember {
+        mutableStateOf(
+            com.leo.imessage.util.Changelog
+                .current(com.leo.imessage.BuildConfig.VERSION_CODE)
+                ?.takeIf { store.lastSeenVersion() != it.versionCode }
+        )
     }
     // Unsent text per conversation, so leaving a thread mid-sentence and
     // coming back finds the sentence still there.
@@ -130,10 +141,11 @@ fun AppRoot(
 
     BackHandler(
         enabled = openChatId != null || showSettings || showCompose ||
-            showDetails || detailsViewing != null
+            showDetails || detailsViewing != null || showReleaseNotes
     ) {
         when {
             detailsViewing != null -> detailsViewing = null
+            showReleaseNotes -> showReleaseNotes = false
             showDetails -> showDetails = false
             showCompose -> showCompose = false
             showSettings -> showSettings = false
@@ -403,6 +415,28 @@ fun AppRoot(
                     account = accountSummary,
                     onSignOut = onSignOut,
                     onImport = onImport,
+                    onOpenReleaseNotes = { showReleaseNotes = true },
+                )
+            }
+        }
+
+        // Release Notes pushes on top of Settings, the way a sub-screen does.
+        val notesProgress by androidx.compose.animation.core.animateFloatAsState(
+            targetValue = if (showReleaseNotes) 1f else 0f,
+            animationSpec = Motion.standard(),
+            label = "notesPush",
+        )
+        if (notesProgress > 0.001f) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        translationX = screenWidthPx * (1f - notesProgress)
+                        shadowElevation = 18f * notesProgress
+                    }
+            ) {
+                com.leo.imessage.ui.screens.ReleaseNotesScreen(
+                    onBack = { showReleaseNotes = false },
                 )
             }
         }
@@ -502,6 +536,22 @@ fun AppRoot(
                             }
                         }
                     }
+            )
+        }
+
+        // Above everything, including the conversation and Settings: this is
+        // the first thing the build has to say, and it says it once.
+        whatsNew?.let { release ->
+            com.leo.imessage.ui.components.WhatsNewSheet(
+                release = release,
+                onSeeAll = {
+                    showSettings = true
+                    showReleaseNotes = true
+                },
+                onDismiss = {
+                    store.markVersionSeen(release.versionCode)
+                    whatsNew = null
+                },
             )
         }
     }

@@ -57,6 +57,8 @@ fun SettingsScreen(
     onSignOut: () -> Unit = {},
     /** Runs an OpenBubbles import and reports what it found. */
     onImport: (suspend (android.net.Uri) -> String)? = null,
+    /** Opens the full version history. */
+    onOpenReleaseNotes: () -> Unit = {},
 ) {
     val palette = LocalPalette.current
     val hazeState = remember { HazeState() }
@@ -414,7 +416,19 @@ fun SettingsScreen(
                     showChevron = false,
                 )
                 SettingsDivider()
-                SettingsRow("Backend", value = "Mock", showChevron = false)
+                SettingsRow(
+                    "What's New",
+                    value = com.leo.imessage.BuildConfig.VERSION_NAME,
+                    onClick = onOpenReleaseNotes,
+                )
+                SettingsDivider()
+                SettingsRow(
+                    "Backend",
+                    // This said "Mock" for eighteen builds after the app
+                    // started talking to Apple for real.
+                    value = if (account == null) "Sample data" else "rustpush",
+                    showChevron = false,
+                )
                 SettingsDivider()
                 SettingsRow(
                     "Quick Replies",
@@ -502,9 +516,12 @@ private fun shareDiagnostics(
     settings: com.leo.imessage.ui.theme.AppSettings,
 ) {
     val report = buildString {
-        appendLine("Messages diagnostics")
-        appendLine("App version: 0.1.0")
-        appendLine("Backend: Mock")
+        appendLine("Relay diagnostics")
+        appendLine(
+            "App version: " + com.leo.imessage.BuildConfig.VERSION_NAME +
+                " (" + com.leo.imessage.BuildConfig.VERSION_CODE + ")"
+        )
+        appendLine("Built: " + com.leo.imessage.util.buildDate())
         appendLine("Android: ${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})")
         appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
         appendLine("Theme: ${settings.themeMode}")
@@ -515,7 +532,7 @@ private fun shareDiagnostics(
     runCatching {
         val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(android.content.Intent.EXTRA_SUBJECT, "Messages diagnostics")
+            putExtra(android.content.Intent.EXTRA_SUBJECT, "Relay diagnostics")
             putExtra(android.content.Intent.EXTRA_TEXT, report)
         }
         context.startActivity(
