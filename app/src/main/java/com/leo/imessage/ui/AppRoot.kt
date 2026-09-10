@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,10 +47,13 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun AppRoot(backend: MessagingBackend) {
-    val chats by backend.chats.collectAsState(initial = emptyList())
+    val chats by backend.chats.collectAsState(initial = remember { backend.chatsNow() })
     var openChatId by remember { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(false) }
     var showCompose by remember { mutableStateOf(false) }
+    var showDetails by remember { mutableStateOf(false) }
+    // Per-chat background choice, kept for the session.
+    val backgrounds = remember { mutableStateMapOf<String, String>() }
     val openChat = chats.firstOrNull { it.id == openChatId }
 
     val scope = rememberCoroutineScope()
@@ -64,8 +68,9 @@ fun AppRoot(backend: MessagingBackend) {
         progress.animateTo(if (openChatId != null) 1f else 0f, Motion.standard())
     }
 
-    BackHandler(enabled = openChatId != null || showSettings || showCompose) {
+    BackHandler(enabled = openChatId != null || showSettings || showCompose || showDetails) {
         when {
+            showDetails -> showDetails = false
             showCompose -> showCompose = false
             showSettings -> showSettings = false
             else -> openChatId = null
@@ -100,7 +105,7 @@ fun AppRoot(backend: MessagingBackend) {
             val chat = openChat ?: chats.firstOrNull()
             if (chat != null) {
                 val messages by remember(chat.id) { backend.messages(chat.id) }
-                    .collectAsState(initial = emptyList())
+                    .collectAsState(initial = remember(chat.id) { backend.messagesNow(chat.id) })
 
                 Box(
                     Modifier
@@ -128,8 +133,34 @@ fun AppRoot(backend: MessagingBackend) {
                         onUnsend = { messageId ->
                             scope.launch { backend.unsend(messageId) }
                         },
+                        onOpenDetails = { showDetails = true },
+                        backgroundId = backgrounds[chat.id] ?: "none",
                     )
                 }
+            }
+        }
+
+        // Conversation details push over the thread.
+        val detailsProgress by androidx.compose.animation.core.animateFloatAsState(
+            targetValue = if (showDetails) 1f else 0f,
+            animationSpec = Motion.standard(),
+            label = "detailsPush",
+        )
+        if (detailsProgress > 0.001f && openChat != null) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        translationX = screenWidthPx * (1f - detailsProgress)
+                        shadowElevation = 18f * detailsProgress
+                    }
+            ) {
+                com.leo.imessage.ui.screens.ChatDetailsScreen(
+                    chat = openChat,
+                    selectedBackgroundId = backgrounds[openChat.id] ?: "none",
+                    onSelectBackground = { backgrounds[openChat.id] = it },
+                    onBack = { showDetails = false },
+                )
             }
         }
 

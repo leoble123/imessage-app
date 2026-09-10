@@ -48,6 +48,9 @@ import com.leo.imessage.ui.components.SwipeAction
 import com.leo.imessage.ui.components.SwipeableRow
 import com.leo.imessage.ui.theme.AppleColors
 import com.leo.imessage.ui.theme.LocalPalette
+import com.leo.imessage.ui.theme.Motion
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import com.leo.imessage.util.relativeTimeLabel
 
 @Composable
@@ -223,6 +226,16 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
 private fun ChatRow(chat: Chat, onOpen: (Chat) -> Unit) {
     val palette = LocalPalette.current
 
+    // iOS highlights a row the instant you touch it and clears the moment you
+    // lift - no ripple, no delay. That immediacy is most of why taps feel
+    // direct rather than laggy.
+    var pressed by remember { mutableStateOf(false) }
+    val pressTint by androidx.compose.animation.animateColorAsState(
+        targetValue = if (pressed) palette.fieldBackground else palette.background,
+        animationSpec = if (pressed) Motion.fade(40) else Motion.fade(220),
+        label = "rowPress",
+    )
+
     SwipeableRow(
         trailingActions = listOf(
             SwipeAction("Delete", AppleColors.Red) {},
@@ -231,8 +244,17 @@ private fun ChatRow(chat: Chat, onOpen: (Chat) -> Unit) {
     ) {
         Row(
             Modifier
-                .background(palette.background)
-                .clickable { onOpen(chat) }
+                .background(pressTint)
+                .pointerInput(chat.id) {
+                    detectTapGestures(
+                        onPress = {
+                            pressed = true
+                            tryAwaitRelease()
+                            pressed = false
+                        },
+                        onTap = { onOpen(chat) },
+                    )
+                }
                 .padding(start = 16.dp, end = 16.dp, top = 9.dp, bottom = 9.dp),
             verticalAlignment = Alignment.Top,
         ) {

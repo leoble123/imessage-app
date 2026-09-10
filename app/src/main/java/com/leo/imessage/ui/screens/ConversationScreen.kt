@@ -63,6 +63,7 @@ import com.leo.imessage.ui.components.glassSource
 import dev.chrisbanes.haze.HazeState
 import com.leo.imessage.ui.components.GroupAvatar
 import com.leo.imessage.ui.components.MessageBubble
+import com.leo.imessage.ui.components.MessageInputBar
 import com.leo.imessage.ui.components.TypingIndicator
 import com.leo.imessage.ui.theme.LocalPalette
 import com.leo.imessage.ui.theme.Motion
@@ -121,6 +122,8 @@ fun ConversationScreen(
     onTapback: (String, com.leo.imessage.data.TapbackKind) -> Unit = { _, _ -> },
     onEmojiTapback: (String, String) -> Unit = { _, _ -> },
     onUnsend: (String) -> Unit = {},
+    onOpenDetails: () -> Unit = {},
+    backgroundId: String = "none",
 ) {
     val palette = LocalPalette.current
     val listState = rememberLazyListState()
@@ -128,15 +131,34 @@ fun ConversationScreen(
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val rows = remember(messages) { buildRows(messages, chat.isGroup) }
     var menuFor by remember { mutableStateOf<MessageRow?>(null) }
+    var replyingTo by remember { mutableStateOf<Message?>(null) }
     // Swipe the thread left to uncover per-message timestamps.
     val stampReveal = remember { androidx.compose.animation.core.Animatable(0f) }
 
-    // Keep the newest message in view as the thread grows.
-    LaunchedEffect(rows.size, chat.isTyping) {
-        if (rows.isNotEmpty()) listState.animateScrollToItem(rows.size)
+    // Keep the newest message in view. The first pass jumps without
+    // animating - animating into position on open is what made entering a
+    // thread feel like it lurched.
+    val firstLayout = remember { booleanArrayOf(true) }
+    LaunchedEffect(rows.size) {
+        if (rows.isEmpty()) return@LaunchedEffect
+        val target = rows.lastIndex
+        if (firstLayout[0]) {
+            firstLayout[0] = false
+            listState.scrollToItem(target)
+        } else {
+            listState.animateScrollToItem(target)
+        }
     }
 
-    Box(Modifier.fillMaxSize().background(palette.background)) {
+    val background = com.leo.imessage.ui.theme.backgroundById(backgroundId)
+    Box(
+        Modifier
+            .fillMaxSize()
+            .then(
+                background.brush?.let { Modifier.background(it) }
+                    ?: Modifier.background(palette.background)
+            )
+    ) {
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -179,17 +201,21 @@ fun ConversationScreen(
                     ?.displayName
                     ?.substringBefore(' ')
 
-                MessageBubble(
-                    row = row,
-                    senderName = senderName,
-                    onLongPress = { menuFor = row },
-                    timestampReveal = stampReveal.value,
+                com.leo.imessage.ui.components.SwipeToReply(
+                    onReply = { replyingTo = row.message },
                     modifier = Modifier.padding(
                         top = if (row.groupPosition == GroupPosition.SINGLE ||
                             row.groupPosition == GroupPosition.FIRST
                         ) 6.dp else 0.dp
                     ),
-                )
+                ) {
+                    MessageBubble(
+                        row = row,
+                        senderName = senderName,
+                        onLongPress = { menuFor = row },
+                        timestampReveal = stampReveal.value,
+                    )
+                }
             }
 
             if (chat.isTyping) {
@@ -228,7 +254,10 @@ fun ConversationScreen(
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.clickable { onOpenDetails() },
+                ) {
                     if (chat.isGroup) {
                         GroupAvatar(chat.participants, 34.dp)
                     } else {
@@ -247,7 +276,12 @@ fun ConversationScreen(
         }
 
         MessageInputBar(
-            onSend = onSend,
+            replyingTo = replyingTo,
+            onCancelReply = { replyingTo = null },
+            onSend = { text, effect ->
+                onSend(text, effect)
+                replyingTo = null
+            },
             hazeState = hazeState,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
@@ -290,164 +324,4 @@ fun ConversationScreen(
     }
 }
 
-@Composable
-private fun MessageInputBar(
-    onSend: (String, com.leo.imessage.data.MessageEffect) -> Unit,
-    hazeState: HazeState,
-    modifier: Modifier = Modifier,
-) {
-    val palette = LocalPalette.current
-    val haptics = LocalHapticFeedback.current
-    var text by remember { mutableStateOf("") }
-    var showEffects by remember { mutableStateOf(false) }
-    val canSend = text.isNotBlank()
 
-    if (showEffects) {
-        EffectPicker(
-            onPick = { effect ->
-                onSend(text.trim(), effect)
-                text = ""
-                showEffects = false
-            },
-            onDismiss = { showEffects = false },
-        )
-    }
-
-    GlassSurface(
-        modifier = modifier.fillMaxWidth(),
-        hazeState = hazeState,
-        hairlineAtTop = true,
-    ) {
-        Row(
-            Modifier
-                .imePadding()
-                .navigationBarsPadding()
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            Box(
-                Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(palette.fieldBackground)
-                    .padding(horizontal = 14.dp, vertical = 9.dp),
-            ) {
-                if (text.isEmpty()) {
-                    Text(
-                        text = "iMessage",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = palette.tertiaryLabel,
-                    )
-                }
-                BasicTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = palette.label),
-                    cursorBrush = SolidColor(palette.accent),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            Spacer(Modifier.width(8.dp))
-
-            // The send button scales in only when there's something to send -
-            // the same little pop iOS does. Long-pressing it opens the send
-            // effects, as on iOS.
-            AnimatedVisibility(
-                visible = canSend,
-                enter = scaleIn(com.leo.imessage.ui.theme.Motion.bouncy()) + fadeIn(),
-                exit = scaleOut(com.leo.imessage.ui.theme.Motion.snappy()) + fadeOut(),
-            ) {
-                Box(
-                    Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(palette.outgoingBubble)
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onTap = {
-                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    onSend(text.trim(), com.leo.imessage.data.MessageEffect.NONE)
-                                    text = ""
-                                },
-                                onLongPress = {
-                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    showEffects = true
-                                },
-                            )
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Filled.ArrowUpward,
-                        contentDescription = "Send",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * Send-effect chooser, reached by long-pressing send. Each row previews what
- * the effect does to the bubble rather than just naming it.
- */
-@Composable
-private fun EffectPicker(
-    onPick: (com.leo.imessage.data.MessageEffect) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val palette = LocalPalette.current
-    val options = listOf(
-        com.leo.imessage.data.MessageEffect.SLAM to "Slam",
-        com.leo.imessage.data.MessageEffect.LOUD to "Loud",
-        com.leo.imessage.data.MessageEffect.GENTLE to "Gentle",
-        com.leo.imessage.data.MessageEffect.INVISIBLE_INK to "Invisible Ink",
-        com.leo.imessage.data.MessageEffect.NONE to "Send without effect",
-    )
-
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.45f))
-            .clickable(
-                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                indication = null,
-            ) { onDismiss() },
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            Modifier
-                .padding(horizontal = 32.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(palette.surfaceElevated),
-        ) {
-            options.forEachIndexed { i, (effect, label) ->
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (effect == com.leo.imessage.data.MessageEffect.NONE) {
-                        palette.secondaryLabel
-                    } else {
-                        palette.accent
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onPick(effect) }
-                        .padding(horizontal = 20.dp, vertical = 15.dp),
-                )
-                if (i != options.lastIndex) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(0.5.dp)
-                            .background(palette.separator)
-                    )
-                }
-            }
-        }
-    }
-}

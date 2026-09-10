@@ -82,14 +82,26 @@ fun TapbackRail(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ClassicTapbacks.forEach { kind ->
-                TapbackButton(kind.glyph()) {
+                TapbackButton(onClick = {
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     onPickClassic(kind)
+                }) {
+                    TapbackIcon(
+                        kind = kind,
+                        color = palette.secondaryLabel,
+                        modifier = Modifier.size(19.dp),
+                    )
                 }
             }
-            TapbackButton(if (expanded) "×" else "+") {
+            TapbackButton(onClick = {
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                 expanded = !expanded
+            }) {
+                Text(
+                    text = if (expanded) "\u00d7" else "+",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = palette.secondaryLabel,
+                )
             }
         }
 
@@ -130,7 +142,10 @@ fun TapbackRail(
 }
 
 @Composable
-private fun TapbackButton(label: String, onClick: () -> Unit) {
+private fun TapbackButton(
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
     val palette = LocalPalette.current
     var pressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
@@ -152,10 +167,6 @@ private fun TapbackButton(label: String, onClick: () -> Unit) {
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleMedium,
-            color = palette.secondaryLabel,
-        )
+        content()
     }
 }

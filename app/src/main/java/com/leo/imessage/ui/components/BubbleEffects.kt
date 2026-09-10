@@ -14,79 +14,90 @@ import com.leo.imessage.ui.theme.Motion
 import kotlinx.coroutines.launch
 
 /**
- * Plays iMessage's send effects when a bubble first appears.
+ * Tracks which messages have already played their send effect.
  *
- * These are deliberately physical rather than decorative: SLAM lands hard and
- * rebounds, LOUD swells past its size before settling, GENTLE creeps up from
- * nothing. Each one runs once, on first composition of that message.
+ * Without this, a LazyColumn re-composes items as they scroll back into view
+ * and every old bubble replays its effect - so scrolling a thread becomes a
+ * slideshow of slamming bubbles. Effects are a one-time event per message
+ * for the life of the process, not a property of being on screen.
+ */
+private val playedEffects = mutableSetOf<String>()
+
+/**
+ * Plays iMessage's send effects the first time a message appears.
+ *
+ * SLAM lands hard and rebounds, LOUD swells past its size before settling,
+ * GENTLE creeps up from nothing, INVISIBLE INK fades in from a smudge.
  */
 @Composable
 fun Modifier.bubbleEffect(effect: MessageEffect, messageId: String): Modifier {
     if (effect == MessageEffect.NONE) return this
+
+    val alreadyPlayed = remember(messageId) { messageId in playedEffects }
+    if (alreadyPlayed) return this
 
     val scale = remember(messageId) { Animatable(1f) }
     val rotation = remember(messageId) { Animatable(0f) }
     val alpha = remember(messageId) { Animatable(1f) }
 
     LaunchedEffect(messageId) {
+        playedEffects += messageId
         when (effect) {
             MessageEffect.SLAM -> {
-                scale.snapTo(2.6f)
-                rotation.snapTo(-7f)
-                alpha.snapTo(0.4f)
-                launch { alpha.animateTo(1f, tween(120)) }
+                scale.snapTo(2.4f)
+                rotation.snapTo(-6f)
+                alpha.snapTo(0.5f)
+                launch { alpha.animateTo(1f, tween(110)) }
                 launch { rotation.animateTo(0f, Motion.bouncy()) }
                 scale.animateTo(
                     1f,
                     keyframes {
-                        durationMillis = 520
-                        2.6f at 0
-                        0.86f at 180
-                        1.06f at 300
-                        0.98f at 400
-                        1f at 520
+                        durationMillis = 460
+                        2.4f at 0
+                        0.9f at 170
+                        1.04f at 290
+                        1f at 460
                     },
                 )
             }
 
             MessageEffect.LOUD -> {
-                scale.snapTo(0.8f)
+                scale.snapTo(0.85f)
                 launch { alpha.animateTo(1f, tween(80)) }
                 launch {
                     rotation.animateTo(
                         0f,
                         keyframes {
-                            durationMillis = 700
+                            durationMillis = 620
                             0f at 0
-                            -3f at 220
-                            3f at 320
-                            -2f at 420
-                            0f at 700
+                            -2.5f at 210
+                            2.5f at 310
+                            0f at 620
                         },
                     )
                 }
                 scale.animateTo(
                     1f,
                     keyframes {
-                        durationMillis = 700
-                        0.8f at 0
-                        1.45f at 260
-                        1.12f at 420
-                        1f at 700
+                        durationMillis = 620
+                        0.85f at 0
+                        1.35f at 240
+                        1.08f at 390
+                        1f at 620
                     },
                 )
             }
 
             MessageEffect.GENTLE -> {
-                scale.snapTo(0.35f)
+                scale.snapTo(0.4f)
                 alpha.snapTo(0.5f)
-                launch { alpha.animateTo(1f, tween(600)) }
-                scale.animateTo(1f, tween(760, easing = Motion.AppleEase))
+                launch { alpha.animateTo(1f, tween(560)) }
+                scale.animateTo(1f, tween(700, easing = Motion.AppleEase))
             }
 
             MessageEffect.INVISIBLE_INK -> {
                 alpha.snapTo(0.06f)
-                alpha.animateTo(1f, tween(1400, easing = Motion.AppleEase))
+                alpha.animateTo(1f, tween(1300, easing = Motion.AppleEase))
             }
 
             MessageEffect.NONE -> Unit

@@ -293,10 +293,11 @@ private fun TapbackCluster(
                     .border(1.5.dp, palette.background, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = tb.emoji ?: tb.kind.glyph(),
+                TapbackIcon(
+                    kind = tb.kind,
+                    emoji = tb.emoji,
                     color = if (outgoing) palette.incomingText else Color.White,
-                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.size(14.dp),
                 )
             }
         }

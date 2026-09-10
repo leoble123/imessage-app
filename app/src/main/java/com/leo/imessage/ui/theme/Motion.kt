@@ -1,54 +1,54 @@
 package com.leo.imessage.ui.theme
 
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 
 /**
- * Motion specs tuned to feel like UIKit rather than Material.
+ * Motion specs tuned to UIKit.
  *
- * Everything interactive is a spring with visible overshoot. Damping ratios
- * here are deliberately lower than Compose's defaults - Material's springs
- * settle without ever crossing their target, which reads as "smooth but
- * dead". iOS lets things overshoot and come back, and that little rebound is
- * most of what people mean by "bouncy".
+ * The thing that reads as "buttery" on iOS is not bounce - it's that
+ * animations are *fast* and *well damped*: they arrive quickly, overshoot by
+ * a hair, and stop. A low damping ratio wobbles, and a wobble reads as cheap
+ * and jolty rather than lively. So damping sits high here (0.8-1.0) and
+ * liveliness comes from stiffness instead, with real overshoot reserved for
+ * the few moments that should feel physical.
+ *
+ * For reference, SwiftUI's default `.spring()` is roughly dampingFraction
+ * 0.825 - notably tame. These match that neighbourhood.
  */
 object Motion {
-    /** Standard UI spring. Overshoots slightly, settles fast. */
+    /** Default for view transitions. Arrives fast, barely overshoots. */
     fun <T> standard() = spring<T>(
-        dampingRatio = 0.68f,
-        stiffness = 340f,
-    )
-
-    /** Direct-manipulation follow-through (drags, swipes). Barely overshoots. */
-    fun <T> snappy() = spring<T>(
-        dampingRatio = 0.78f,
-        stiffness = 620f,
-    )
-
-    /** Things that should feel alive - bubble send, tapbacks, buttons. */
-    fun <T> bouncy() = spring<T>(
-        dampingRatio = 0.42f,
-        stiffness = 480f,
-    )
-
-    /** Maximum personality, for one-shot celebratory moments. */
-    fun <T> springy() = spring<T>(
-        dampingRatio = 0.34f,
+        dampingRatio = 0.88f,
         stiffness = 420f,
     )
 
-    /** Large surfaces moving (sheet presentation). Soft, no bounce. */
-    fun <T> gentle() = spring<T>(
-        dampingRatio = 0.9f,
-        stiffness = 260f,
+    /** Follows a finger (drags, swipes, scrubbing). No perceptible bounce. */
+    fun <T> snappy() = spring<T>(
+        dampingRatio = 0.95f,
+        stiffness = 900f,
     )
 
-    /** iOS's standard ease curve, for pure opacity/color changes. */
+    /**
+     * Small controls that should feel physical when tapped - send button,
+     * tapbacks. Overshoots visibly but settles in one pass, no wobble.
+     */
+    fun <T> bouncy() = spring<T>(
+        dampingRatio = 0.7f,
+        stiffness = 650f,
+    )
+
+    /** Large surfaces (sheets, modals). Critically damped - never bounces. */
+    fun <T> gentle() = spring<T>(
+        dampingRatio = 1f,
+        stiffness = 340f,
+    )
+
+    /** iOS's standard ease curve, for opacity and color. */
     val AppleEase = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f)
 
-    fun <T> fade(durationMillis: Int = 200) = tween<T>(
+    fun <T> fade(durationMillis: Int = 180) = tween<T>(
         durationMillis = durationMillis,
         easing = AppleEase,
     )

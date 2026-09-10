@@ -48,6 +48,14 @@ class MockBackend : MessagingBackend {
             all.filter { it.chatId == chatId }.sortedBy { it.timestamp }
         }
 
+    override fun chatsNow(): List<Chat> = _chats.value.sortedWith(
+        compareByDescending<Chat> { it.isPinned }
+            .thenByDescending { it.lastMessage?.timestamp ?: 0 }
+    )
+
+    override fun messagesNow(chatId: String): List<Message> =
+        _messages.value.filter { it.chatId == chatId }.sortedBy { it.timestamp }
+
     override suspend fun send(chatId: String, text: String, effect: MessageEffect) {
         val msg = Message(
             id = UUID.randomUUID().toString(),

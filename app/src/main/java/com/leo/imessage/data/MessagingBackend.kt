@@ -15,6 +15,18 @@ interface MessagingBackend {
 
     fun messages(chatId: String): Flow<List<Message>>
 
+    /**
+     * Current values, read synchronously.
+     *
+     * Collecting a Flow always yields one frame of the `initial` value first,
+     * which renders an empty screen and then pops content in - that single
+     * frame is what reads as a "flash" when opening a thread. These let the
+     * first composition start from real data instead.
+     */
+    fun chatsNow(): List<Chat>
+
+    fun messagesNow(chatId: String): List<Message>
+
     suspend fun send(chatId: String, text: String, effect: MessageEffect = MessageEffect.NONE)
 
     suspend fun setTapback(messageId: String, kind: TapbackKind)
