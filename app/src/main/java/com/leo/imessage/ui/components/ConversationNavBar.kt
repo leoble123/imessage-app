@@ -136,15 +136,11 @@ private fun CircleGlassButton(
 ) {
     val palette = LocalPalette.current
     var pressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.9f else 1f,
-        animationSpec = Motion.bouncy(),
-        label = "navButtonPress",
-    )
+    val scale = pressScale(pressed, pressedScale = 0.9f, label = "navButtonPress")
     Box(
         modifier
             .size(34.dp)
-            .scale(scale)
+            .scaleFrom(scale)
             .clip(CircleShape)
             .background(palette.fieldBackground.copy(alpha = 0.8f))
             .pointerInput(Unit) {

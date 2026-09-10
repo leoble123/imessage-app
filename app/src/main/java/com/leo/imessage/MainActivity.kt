@@ -1,6 +1,8 @@
 package com.leo.imessage
 
+import android.os.Build
 import android.os.Bundle
+import android.view.Display
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -19,9 +21,52 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        requestHighestRefreshRate()
         setContent {
             iMessageTheme(settings) {
                 AppRoot(backend)
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Some launchers/OEM power paths reset the mode when the window is
+        // re-shown, so re-assert it rather than only asking once.
+        requestHighestRefreshRate()
+    }
+
+    /**
+     * Asks the compositor for the panel's fastest mode.
+     *
+     * Android does *not* give apps the high-refresh mode by default. On
+     * adaptive-refresh panels (the S24's 120Hz LTPO among them) the system
+     * parks the display at 60Hz and only steps up for apps that ask - so
+     * without this every animation in the app is capped at 60fps no matter
+     * how well tuned it is, which is exactly the "60hz" feel.
+     *
+     * Only modes at the current resolution are considered: switching
+     * resolution mid-session would force a full surface reallocation and a
+     * visible flicker.
+     */
+    private fun requestHighestRefreshRate() {
+        val display: Display? =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display
+            else @Suppress("DEPRECATION") windowManager.defaultDisplay
+        val active = display?.mode ?: return
+
+        val best = display.supportedModes
+            .filter {
+                it.physicalWidth == active.physicalWidth &&
+                    it.physicalHeight == active.physicalHeight
+            }
+            .maxByOrNull { it.refreshRate }
+            ?: return
+
+        window.attributes = window.attributes.apply {
+            preferredDisplayModeId = best.modeId
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                preferredRefreshRate = best.refreshRate
             }
         }
     }

@@ -78,10 +78,28 @@ fun MessageInputBar(
     onCancelEdit: () -> Unit = {},
     onCommitEdit: (String) -> Unit = {},
     focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
+    /** "iMessage" in a transcript, "Reply" inside a reply thread. */
+    placeholder: String = "iMessage",
+    /** Opens the keyboard as soon as the bar appears. */
+    autoFocus: Boolean = false,
 ) {
     val palette = LocalPalette.current
     val haptics = LocalHapticFeedback.current
     var text by remember { mutableStateOf("") }
+    val ownFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val focus = focusRequester ?: ownFocus
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(autoFocus) {
+        if (autoFocus) {
+            // One frame of grace: the FocusRequester isn't attached to a node
+            // until the modifier has been applied, and requesting before that
+            // throws rather than focusing.
+            androidx.compose.runtime.withFrameNanos {}
+            focus.requestFocus()
+            keyboard?.show()
+        }
+    }
 
     // Entering edit mode loads the existing text so it can be changed in place.
     LaunchedEffect(editing?.id) {
@@ -203,7 +221,7 @@ fun MessageInputBar(
                 ) {
                     if (text.isEmpty()) {
                         Text(
-                            text = "iMessage",
+                            text = placeholder,
                             style = MaterialTheme.typography.bodyLarge,
                             color = palette.tertiaryLabel,
                         )
@@ -211,9 +229,7 @@ fun MessageInputBar(
                     BasicTextField(
                         value = text,
                         onValueChange = { text = it },
-                        modifier = if (focusRequester != null) {
-                            Modifier.fillMaxWidth().focusRequester(focusRequester)
-                        } else Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = palette.label),
                         cursorBrush = SolidColor(palette.accent),
                     )
@@ -273,15 +289,11 @@ fun MessageInputBar(
 private fun PlusButton(onClick: () -> Unit) {
     val palette = LocalPalette.current
     var pressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.88f else 1f,
-        animationSpec = Motion.bouncy(),
-        label = "plusPress",
-    )
+    val scale = pressScale(pressed, pressedScale = 0.88f, spec = Motion.bouncy(), label = "plusPress")
     Box(
         Modifier
             .size(32.dp)
-            .scale(scale)
+            .scaleFrom(scale)
             .clip(CircleShape)
             .background(palette.fieldBackground)
             .pointerInput(Unit) {
@@ -309,15 +321,11 @@ private fun PlusButton(onClick: () -> Unit) {
 private fun SendButton(onSend: () -> Unit, onLongPress: () -> Unit) {
     val palette = LocalPalette.current
     var pressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.86f else 1f,
-        animationSpec = Motion.bouncy(),
-        label = "sendPress",
-    )
+    val scale = pressScale(pressed, pressedScale = 0.86f, spec = Motion.bouncy(), label = "sendPress")
     Box(
         Modifier
             .size(28.dp)
-            .scale(scale)
+            .scaleFrom(scale)
             .clip(CircleShape)
             .background(palette.outgoingBubble)
             .pointerInput(Unit) {

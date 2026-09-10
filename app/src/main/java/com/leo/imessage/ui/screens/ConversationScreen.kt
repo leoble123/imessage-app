@@ -80,22 +80,34 @@ fun buildRows(messages: List<Message>, isGroup: Boolean): List<MessageRow> {
     val groupWindowMs = 60_000L * 3
     val headerGapMs = 60_000L * 45
 
-    val lastReceiptIndex = messages.indexOfLast { it.isFromMe }
+    // Replies are hoisted out of the transcript and shown only inside their
+    // thread, exactly as Messages does it - the original grows a "N Replies"
+    // link instead of the conversation filling up with duplicated quotes.
+    val replyCounts = messages.groupingBy { it.replyToId }.eachCount()
+    // A lone reply keeps its place in the transcript and carries a dimmed
+    // copy of what it answers; two or more collapse into a thread and only
+    // the original stays, marked with a count.
+    fun threaded(id: String?) = (replyCounts[id] ?: 0) >= 2
+    val transcript = messages.filter { it.replyToId == null || !threaded(it.replyToId) }
 
-    return messages.mapIndexed { i, msg ->
-        val prev = messages.getOrNull(i - 1)
-        val next = messages.getOrNull(i + 1)
+    val lastReceiptIndex = transcript.indexOfLast { it.isFromMe }
+
+    return transcript.mapIndexed { i, msg ->
+        val prev = transcript.getOrNull(i - 1)
+        val next = transcript.getOrNull(i + 1)
 
         val samePrev = prev != null &&
             prev.isFromMe == msg.isFromMe &&
             prev.senderId == msg.senderId &&
             msg.timestamp - prev.timestamp < groupWindowMs &&
-            !prev.isUnsent && !msg.isUnsent
+            !prev.isUnsent && !msg.isUnsent &&
+            !threaded(prev.id)
         val sameNext = next != null &&
             next.isFromMe == msg.isFromMe &&
             next.senderId == msg.senderId &&
             next.timestamp - msg.timestamp < groupWindowMs &&
-            !next.isUnsent && !msg.isUnsent
+            !next.isUnsent && !msg.isUnsent &&
+            !threaded(msg.id)
 
         val position = when {
             !samePrev && !sameNext -> GroupPosition.SINGLE
@@ -111,6 +123,7 @@ fun buildRows(messages: List<Message>, isGroup: Boolean): List<MessageRow> {
             showSenderName = isGroup && !msg.isFromMe && !samePrev,
             showDeliveryReceipt = i == lastReceiptIndex,
             showAvatar = isGroup && !msg.isFromMe && !sameNext,
+            replyCount = if (threaded(msg.id)) replyCounts[msg.id] ?: 0 else 0,
         )
     }
 }
@@ -120,7 +133,7 @@ fun ConversationScreen(
     chat: Chat,
     messages: List<Message>,
     onBack: () -> Unit,
-    onSend: (String, com.leo.imessage.data.MessageEffect) -> Unit,
+    onSend: (String, com.leo.imessage.data.MessageEffect, String?) -> Unit,
     onTapback: (String, com.leo.imessage.data.TapbackKind) -> Unit = { _, _ -> },
     onEmojiTapback: (String, String) -> Unit = { _, _ -> },
     onUnsend: (String) -> Unit = {},
@@ -133,6 +146,7 @@ fun ConversationScreen(
     val hazeState = remember { HazeState() }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val rows = remember(messages) { buildRows(messages, chat.isGroup) }
+    val byId = remember(messages) { messages.associateBy { it.id } }
     var menuFor by remember { mutableStateOf<MessageRow?>(null) }
     var replyingTo by remember { mutableStateOf<Message?>(null) }
     var editingMessage by remember { mutableStateOf<Message?>(null) }
@@ -140,7 +154,13 @@ fun ConversationScreen(
     var threadRoot by remember { mutableStateOf<Message?>(null) }
     val composerFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-    val byId = remember(messages) { messages.associateBy { it.id } }
+    androidx.activity.compose.BackHandler(enabled = threadRoot != null || menuFor != null) {
+        when {
+            menuFor != null -> menuFor = null
+            else -> threadRoot = null
+        }
+    }
+
     // Swipe the thread left to uncover per-message timestamps.
     val stampReveal = remember { androidx.compose.animation.core.Animatable(0f) }
 
@@ -158,6 +178,10 @@ fun ConversationScreen(
             listState.animateScrollToItem(target)
         }
     }
+
+    // Nothing may ever end up behind the keyboard: the transcript rides up
+    // with it frame for frame instead of being clipped by it.
+    com.leo.imessage.ui.components.ScrollWithKeyboard(listState)
 
     val background = com.leo.imessage.ui.theme.backgroundById(backgroundId)
     Box(
@@ -234,7 +258,8 @@ fun ConversationScreen(
                         sender = chat.participants.firstOrNull { it.id == row.message.senderId },
                         senderName = senderName,
                         onLongPress = { menuFor = row },
-                        timestampReveal = stampReveal.value,
+                        timestampReveal = { stampReveal.value },
+                        replyCount = row.replyCount,
                         replyParent = row.message.replyToId?.let { byId[it] },
                         replyParentSender = row.message.replyToId
                             ?.let { byId[it] }
@@ -247,6 +272,7 @@ fun ConversationScreen(
                             },
                         onOpenThread = {
                             threadRoot = row.message.replyToId?.let { byId[it] }
+                                ?: row.message
                         },
                     )
                 }
@@ -265,7 +291,7 @@ fun ConversationScreen(
                 replyingTo = replyingTo,
                 onCancelReply = { replyingTo = null },
                 onSend = { text, effect ->
-                    onSend(text, effect)
+                    onSend(text, effect, replyingTo?.id)
                     replyingTo = null
                 },
                 hazeState = hazeState,
@@ -291,11 +317,14 @@ fun ConversationScreen(
 
         val root = threadRoot
         if (root != null) {
-            com.leo.imessage.ui.components.ReplyThreadSheet(
+            com.leo.imessage.ui.components.ReplyThreadView(
                 root = root,
                 replies = messages.filter { it.replyToId == root.id },
                 chat = chat,
+                hazeState = hazeState,
+                darkBase = if (background.brush != null) background.isDark else null,
                 onDismiss = { threadRoot = null },
+                onSendReply = { text, effect -> onSend(text, effect, root.id) },
             )
         }
 

@@ -41,16 +41,24 @@ fun SwipeToReply(
     val offset = remember { Animatable(0f) }
     val armed = remember { booleanArrayOf(false) }
 
-    Box(modifier) {
-        val triggerPx = with(androidx.compose.ui.platform.LocalDensity.current) { 64.dp.toPx() }
-        val progress = (offset.value / triggerPx).coerceIn(0f, 1f)
+    val triggerPx = with(androidx.compose.ui.platform.LocalDensity.current) { 64.dp.toPx() }
 
+    Box(modifier) {
+        // The drag offset is only ever read inside graphicsLayer blocks.
+        // Reading it in the composable body instead would recompose this
+        // node - and with it the entire bubble passed in as content - on
+        // every frame of the drag, which is precisely what stops a gesture
+        // from tracking the finger cleanly.
         Box(
             Modifier
                 .align(Alignment.CenterStart)
                 .size(30.dp)
-                .scale(0.5f + progress * 0.5f)
-                .alpha(progress),
+                .graphicsLayer {
+                    val p = (offset.value / triggerPx).coerceIn(0f, 1f)
+                    scaleX = 0.5f + p * 0.5f
+                    scaleY = 0.5f + p * 0.5f
+                    alpha = p
+                },
             contentAlignment = Alignment.Center,
         ) {
             ReplyArrow(color = palette.secondaryLabel, modifier = Modifier.size(19.dp))

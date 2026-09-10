@@ -45,6 +45,20 @@ object Motion {
         stiffness = 340f,
     )
 
+    /**
+     * Touch-down feedback on a large target (a bubble, a row).
+     *
+     * Slower and softer than [snappy] on purpose: a press that snaps in
+     * 80ms only ever paints two or three frames, and three frames of scale
+     * change reads as a step rather than a glide no matter what the panel is
+     * doing. Stretching it to roughly a quarter second gives the spring
+     * enough frames to actually look continuous.
+     */
+    fun <T> pressIn() = spring<T>(
+        dampingRatio = 0.85f,
+        stiffness = 700f,
+    )
+
     /** iOS's standard ease curve, for opacity and color. */
     val AppleEase = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1f)
 

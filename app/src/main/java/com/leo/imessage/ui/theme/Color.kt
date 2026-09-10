@@ -56,11 +56,14 @@ data class AppPalette(
     val tertiaryLabel: Color,
     val accent: Color,
     val outgoingBubble: Brush,
+    /** The gradient's stops, so translucent variants can be rebuilt from it. */
+    val outgoingBubbleColors: List<Color>,
     val outgoingBubbleFlat: Color,
     val outgoingText: Color,
     val incomingBubble: Color,
     val incomingText: Color,
     val smsBubble: Brush,
+    val smsBubbleColors: List<Color>,
     val smsBubbleFlat: Color,
     val fieldBackground: Color,
     val glassTint: Color,
@@ -81,6 +84,7 @@ data class AppPalette(
             outgoingBubble = Brush.verticalGradient(
                 listOf(Color(0xFF1E8FFF), Color(0xFF0A6CFF))
             ),
+            outgoingBubbleColors = listOf(Color(0xFF1E8FFF), Color(0xFF0A6CFF)),
             outgoingBubbleFlat = AppleColors.Blue,
             outgoingText = Color.White,
             incomingBubble = AppleColors.Gray5,
@@ -88,6 +92,7 @@ data class AppPalette(
             smsBubble = Brush.verticalGradient(
                 listOf(Color(0xFF4CD964), Color(0xFF2FB94E))
             ),
+            smsBubbleColors = listOf(Color(0xFF4CD964), Color(0xFF2FB94E)),
             smsBubbleFlat = AppleColors.Green,
             fieldBackground = Color(0xFFF2F2F7),
             glassTint = Color(0xCCFFFFFF),
@@ -108,6 +113,7 @@ data class AppPalette(
             outgoingBubble = Brush.verticalGradient(
                 listOf(Color(0xFF2B95FF), Color(0xFF0A72F5))
             ),
+            outgoingBubbleColors = listOf(Color(0xFF2B95FF), Color(0xFF0A72F5)),
             outgoingBubbleFlat = AppleColors.BlueDark,
             outgoingText = Color.White,
             incomingBubble = Color(0xFF26262A),
@@ -115,6 +121,7 @@ data class AppPalette(
             smsBubble = Brush.verticalGradient(
                 listOf(Color(0xFF3ADB58), Color(0xFF27A83F))
             ),
+            smsBubbleColors = listOf(Color(0xFF3ADB58), Color(0xFF27A83F)),
             smsBubbleFlat = AppleColors.GreenDark,
             fieldBackground = Color(0xFF1C1C1E),
             glassTint = Color(0xB3000000),

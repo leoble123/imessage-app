@@ -144,15 +144,16 @@ private fun TapbackButton(
 ) {
     val palette = LocalPalette.current
     var pressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 1.28f else 1f,
-        animationSpec = Motion.bouncy(),
+    val scale = pressScale(
+        pressed,
+        pressedScale = 1.28f,
+        spec = Motion.bouncy(),
         label = "tapbackPress",
     )
     Box(
         Modifier
             .size(36.dp)
-            .scale(scale)
+            .scaleFrom(scale)
             .clip(CircleShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },

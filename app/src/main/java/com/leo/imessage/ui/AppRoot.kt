@@ -121,8 +121,8 @@ fun AppRoot(backend: MessagingBackend) {
                         chat = chat,
                         messages = messages,
                         onBack = { openChatId = null },
-                        onSend = { text, effect ->
-                            scope.launch { backend.send(chat.id, text, effect) }
+                        onSend = { text, effect, replyToId ->
+                            scope.launch { backend.send(chat.id, text, effect, replyToId) }
                         },
                         onTapback = { messageId, kind ->
                             scope.launch { backend.setTapback(messageId, kind) }

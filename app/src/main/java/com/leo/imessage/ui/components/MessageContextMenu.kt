@@ -28,7 +28,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.leo.imessage.data.TapbackKind
@@ -56,13 +57,16 @@ fun MessageContextMenu(
 ) {
     val palette = LocalPalette.current
 
-    val scrim by animateFloatAsState(
+    // Both held as State and read inside draw-phase lambdas: unwrapping them
+    // here would recompose the whole menu - scrim, rail, bubble and every
+    // action row - on every frame of the spring.
+    val scrim = animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
         animationSpec = Motion.standard(),
         label = "ctxScrim",
     )
-    val pop by animateFloatAsState(
-        targetValue = if (visible) 1f else 0.92f,
+    val pop = animateFloatAsState(
+        targetValue = if (visible) 1f else 0.9f,
         animationSpec = Motion.bouncy(),
         label = "ctxPop",
     )
@@ -75,7 +79,9 @@ fun MessageContextMenu(
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.42f * scrim))
+                .drawBehind {
+                    drawRect(Color.Black.copy(alpha = 0.42f * scrim.value))
+                }
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -86,7 +92,11 @@ fun MessageContextMenu(
                 horizontalAlignment = Alignment.End,
                 modifier = Modifier
                     .padding(horizontal = 20.dp)
-                    .scale(pop),
+                    .graphicsLayer {
+                        val s = pop.value
+                        scaleX = s
+                        scaleY = s
+                    },
             ) {
                 TapbackRail(
                     onPickClassic = onTapback,

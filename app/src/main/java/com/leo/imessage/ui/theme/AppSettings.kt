@@ -7,7 +7,11 @@ import androidx.compose.runtime.staticCompositionLocalOf
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
-enum class BubbleStyle { GRADIENT, FLAT }
+/**
+ * GLASS is the iOS 26 material - translucent, lit rim, specular sheen.
+ * GRADIENT and FLAT are the older opaque looks, kept as options.
+ */
+enum class BubbleStyle { GLASS, GRADIENT, FLAT }
 
 /**
  * App-wide preferences, held in memory for now.
@@ -18,7 +22,7 @@ enum class BubbleStyle { GRADIENT, FLAT }
  */
 class AppSettings {
     var themeMode by mutableStateOf(ThemeMode.SYSTEM)
-    var bubbleStyle by mutableStateOf(BubbleStyle.GRADIENT)
+    var bubbleStyle by mutableStateOf(BubbleStyle.GLASS)
     var sendReadReceipts by mutableStateOf(true)
     var showTypingIndicators by mutableStateOf(true)
     var playEffects by mutableStateOf(true)

@@ -102,4 +102,11 @@ data class MessageRow(
     val showDeliveryReceipt: Boolean,
     /** Group threads show the sender's avatar beside the last bubble of a run. */
     val showAvatar: Boolean = false,
+    /**
+     * How many replies hang off this message.
+     *
+     * Replies are pulled out of the transcript entirely and live in the
+     * thread view; the original carries the count instead.
+     */
+    val replyCount: Int = 0,
 )

@@ -86,6 +86,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     )
                     com.leo.imessage.ui.components.SegmentedControl(
                         options = listOf(
+                            com.leo.imessage.ui.theme.BubbleStyle.GLASS to "Glass",
                             com.leo.imessage.ui.theme.BubbleStyle.GRADIENT to "Gradient",
                             com.leo.imessage.ui.theme.BubbleStyle.FLAT to "Flat",
                         ),

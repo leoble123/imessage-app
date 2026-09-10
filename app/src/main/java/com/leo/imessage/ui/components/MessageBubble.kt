@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -63,8 +64,23 @@ fun MessageBubble(
     onCustomBackground: Boolean = false,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
-    /** 0..1 - how far the swipe-for-timestamps gesture has been dragged. */
-    timestampReveal: Float = 0f,
+    /**
+     * 0..1 - how far the swipe-for-timestamps gesture has been dragged.
+     *
+     * Deliberately a lambda rather than a Float: as a value, every frame of
+     * the drag invalidates the parameter and recomposes every bubble on
+     * screen. Read inside a graphicsLayer block instead, it only re-runs the
+     * draw phase, which is what lets the gesture actually track at panel
+     * rate.
+     */
+    timestampReveal: () -> Float = { 0f },
+    /**
+     * Replies to this message, shown as a chain link beneath it. Only set
+     * once there are two or more - a single reply stays in the transcript
+     * with a quote above it instead.
+     */
+    replyCount: Int = 0,
+    /** Set on a lone reply, to render the dimmed original above it. */
     replyParent: Message? = null,
     replyParentSender: String? = null,
     onOpenThread: () -> Unit = {},
@@ -90,28 +106,31 @@ fun MessageBubble(
     }
 
     var pressed by remember { mutableStateOf(false) }
-    val pressScale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = Motion.snappy(),
+    // Held as State and read inside graphicsLayer rather than unwrapped with
+    // `by` here: unwrapping makes the whole bubble recompose on every frame
+    // of the spring, which is what made the long-press feel like it was
+    // stepping rather than gliding.
+    val pressScale = animateFloatAsState(
+        targetValue = if (pressed) 0.955f else 1f,
+        animationSpec = Motion.pressIn(),
         label = "bubblePress",
     )
 
     Box(modifier.fillMaxWidth()) {
       // The stamp sits under the bubble at the trailing edge and is uncovered
       // as the thread slides left, exactly like Messages.
-      if (timestampReveal > 0.01f) {
-          Text(
-              text = com.leo.imessage.util.messageStamp(msg.timestamp),
-              style = MaterialTheme.typography.labelSmall,
-              color = palette.tertiaryLabel,
-              modifier = Modifier
-                  .align(Alignment.CenterEnd)
-                  .graphicsLayer {
-                      translationX = 64.dp.toPx() * (1f - timestampReveal)
-                      alpha = timestampReveal
-                  },
-          )
-      }
+      Text(
+          text = com.leo.imessage.util.messageStamp(msg.timestamp),
+          style = MaterialTheme.typography.labelSmall,
+          color = palette.tertiaryLabel,
+          modifier = Modifier
+              .align(Alignment.CenterEnd)
+              .graphicsLayer {
+                  val r = timestampReveal()
+                  translationX = 64.dp.toPx() * (1f - r)
+                  alpha = r
+              },
+      )
       Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Bottom,
@@ -128,7 +147,7 @@ fun MessageBubble(
         modifier = Modifier
             .weight(1f)
             .graphicsLayer {
-                translationX = -64.dp.toPx() * timestampReveal
+                translationX = -64.dp.toPx() * timestampReveal()
                 // Springs up and scales out from the composer's corner.
                 translationY = 26.dp.toPx() * (1f - entry.value)
                 val s = 0.62f + 0.38f * entry.value
@@ -181,6 +200,31 @@ fun MessageBubble(
                     }
                 }
             } else {
+                val shape = BubbleShape(outgoing, row.groupPosition)
+                val style = settings.bubbleStyle
+                val glass = style == com.leo.imessage.ui.theme.BubbleStyle.GLASS
+                val transmission = when {
+                    !glass -> 1f
+                    outgoing && onCustomBackground -> GlassAlpha.OUTGOING_OVER_BACKGROUND
+                    outgoing -> GlassAlpha.OUTGOING
+                    onCustomBackground -> GlassAlpha.INCOMING_OVER_BACKGROUND
+                    else -> GlassAlpha.INCOMING
+                }
+                val fill: Brush = when {
+                    !outgoing -> glassFill(palette.incomingBubble, transmission)
+                    style == com.leo.imessage.ui.theme.BubbleStyle.FLAT ->
+                        glassFill(
+                            if (msg.service == Service.SMS) palette.smsBubbleFlat
+                            else palette.outgoingBubbleFlat,
+                            transmission,
+                        )
+                    else -> glassFill(
+                        if (msg.service == Service.SMS) palette.smsBubbleColors
+                        else palette.outgoingBubbleColors,
+                        transmission,
+                    )
+                }
+
                 Box(
                     modifier = Modifier
                         .bubbleEffect(
@@ -188,31 +232,17 @@ fun MessageBubble(
                             else com.leo.imessage.data.MessageEffect.NONE,
                             msg.id,
                         )
-                        .scale(pressScale)
+                        .graphicsLayer {
+                            val s = pressScale.value
+                            scaleX = s
+                            scaleY = s
+                        }
                         .widthIn(max = 290.dp)
-                        .clip(BubbleShape(outgoing, row.groupPosition))
-                        .then(
-                            if (outgoing) {
-                                val flat = settings.bubbleStyle ==
-                                    com.leo.imessage.ui.theme.BubbleStyle.FLAT
-                                if (flat) {
-                                    Modifier.background(
-                                        if (msg.service == Service.SMS) palette.smsBubbleFlat
-                                        else palette.outgoingBubbleFlat
-                                    )
-                                } else {
-                                    Modifier.background(
-                                        if (msg.service == Service.SMS) palette.smsBubble
-                                        else palette.outgoingBubble
-                                    )
-                                }
-                            } else if (onCustomBackground) {
-                                // Frosted rather than solid, so the background
-                                // reads through the way it does on iOS.
-                                Modifier.background(palette.incomingBubble.copy(alpha = 0.62f))
-                            } else {
-                                Modifier.background(palette.incomingBubble)
-                            }
+                        .liquidGlass(
+                            shape = shape,
+                            fill = fill,
+                            dark = if (outgoing) true else palette.isDark,
+                            enabled = glass,
                         )
                         .pointerInput(msg.id) {
                             detectTapGestures(
@@ -249,6 +279,14 @@ fun MessageBubble(
                         ),
                 )
             }
+        }
+
+        if (replyCount > 0) {
+            ReplyChainLink(
+                count = replyCount,
+                outgoing = outgoing,
+                onClick = onOpenThread,
+            )
         }
 
         if (msg.editedAt != null) {

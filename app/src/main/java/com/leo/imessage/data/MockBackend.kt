@@ -202,7 +202,7 @@ class MockBackend : MessagingBackend {
 
         return listOf(
             // --- Priya: recent, shows tapbacks + read receipt + unsent ---
-            Message(id(), "ch1", "did you see the new place on 5th?", minsAgo(52), false, priya.id),
+            Message("ch1-q", "ch1", "did you see the new place on 5th?", minsAgo(52), false, priya.id),
             Message(id(), "ch1", "the one with the patio?", minsAgo(50), true, me.id),
             Message(
                 id(), "ch1", "yes!! it's so nice inside", minsAgo(49), false, priya.id,
@@ -216,6 +216,12 @@ class MockBackend : MessagingBackend {
                 ),
             ),
             Message(id(), "ch1", "ok that patio is unreal", minsAgo(47), true, me.id),
+            // Exactly one reply, so it stays in the transcript carrying a
+            // dimmed copy of the original rather than collapsing to a link.
+            Message(
+                id(), "ch1", "walked past it twice and never noticed",
+                minsAgo(46), true, me.id, replyToId = "ch1-q",
+            ),
             Message(
                 id(), "ch1", "ok don't tell dev about the surprise yet",
                 minsAgo(24), false, priya.id,
@@ -238,7 +244,7 @@ class MockBackend : MessagingBackend {
             Message(id(), "ch2", "should be good now", minsAgo(38), false, dev.id),
 
             // --- Group thread ---
-            Message(id(), "ch3", "so are we doing saturday or sunday", hoursAgo(7), false, jordan.id),
+            Message("ch3-r", "ch3", "so are we doing saturday or sunday", hoursAgo(7), false, jordan.id),
             Message(id(), "ch3", "saturday works better for me", hoursAgo(7), false, casey.id),
             Message(id(), "ch3", "same", hoursAgo(6), false, sam.id),
             Message(id(), "ch3", "saturday it is", hoursAgo(6), true, me.id, deliveryState = DeliveryState.READ),
@@ -254,6 +260,25 @@ class MockBackend : MessagingBackend {
             Message(
                 id(), "ch3", "", minsAgo(52), false, casey.id,
                 attachments = listOf(Attachment("a3", "menu.jpg", "image/jpeg")),
+            ),
+            // A reply thread hanging off the opening question. These stay
+            // out of the transcript - the original carries "4 Replies".
+            Message(
+                id(), "ch3", "sunday is better for me tbh", hoursAgo(7), false, casey.id,
+                replyToId = "ch3-r",
+            ),
+            Message(
+                id(), "ch3", "i can do either honestly", hoursAgo(7), true, me.id,
+                replyToId = "ch3-r", deliveryState = DeliveryState.READ,
+            ),
+            Message(
+                id(), "ch3", "sunday i've got my sister's thing though",
+                hoursAgo(6), false, sam.id, replyToId = "ch3-r",
+            ),
+            Message(
+                id(), "ch3", "ok saturday then, settled", hoursAgo(6), false, jordan.id,
+                replyToId = "ch3-r",
+                tapbacks = listOf(Tapback(TapbackKind.THUMBS_UP, fromMe = true, senderId = "me")),
             ),
 
             // --- Mom ---
