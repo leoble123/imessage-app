@@ -34,3 +34,35 @@ answer, and it is the same route OpenBubbles takes.
 
 Requires: Rust with the `aarch64-linux-android` target
 (`rustup target add aarch64-linux-android`) and an Android NDK.
+
+## Where it currently stops
+
+Solved so far, in order, each a real blocker:
+
+1. **SSH submodule URLs** - `setup.sh` clones and rewrites them.
+2. **`icloud_auth` fails to compile with default features off** - `default_provider`
+   and `DefaultAnisetteProvider` live behind `remote-anisette-v3`. Enabled.
+3. **`certs/fairplay/` is not in the public repo** - ten FairPlay
+   activation keypairs, deliberately withheld. Patched to the
+   `certs/legacy-fairplay` pair the project does publish.
+4. **`build.rs` ran the UDL path against proc-macro source** - removed.
+
+Remaining, and it needs a toolchain change rather than a patch: rustpush's
+own `src/auth.rs` and `src/lib.rs` use `atomic_try_update`, which is an
+unstable library feature. **rustpush requires a nightly Rust toolchain.**
+Next step is `rustup toolchain install nightly`, add the Android target to
+it, and run `build.sh` with `cargo +nightly`. That is a long compile - a
+clean run is ~450 crates - so give it a proper window rather than a
+session tail.
+
+After the `.so` exists, the Kotlin side is a `RustBackend` implementing the
+existing `MessagingBackend` interface. Every screen is already written
+against that interface, so nothing in the UI changes when it lands.
+
+## The identity question, which matters more than the build
+
+Even once this compiles, registering a *new* device with Apple needs
+validation data, which is what the relay is for. But your phone already has
+a registered identity: the OpenBubbles install that works today. Reusing
+that identity is a far shorter path than activating a second one, and worth
+settling before spending another session on the compile.

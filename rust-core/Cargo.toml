@@ -30,5 +30,6 @@ tokio = { version = "1", features = ["rt-multi-thread"] }
 anyhow = "1.0"
 serde_json = "1.0"
 
-[build-dependencies]
-uniffi = { version = "0.28", features = ["build"] }
+# No build.rs: lib.rs uses UniFFI's proc-macro mode (setup_scaffolding!), and
+# generate_scaffolding() is the UDL-file path. Running both means the build
+# script tries to parse Rust source as IDL and dies on the first line.
