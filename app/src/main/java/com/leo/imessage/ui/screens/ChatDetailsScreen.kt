@@ -64,6 +64,7 @@ fun ChatDetailsScreen(
     onSetPinned: (Boolean) -> Unit = {},
     attachments: List<com.leo.imessage.data.Attachment> = emptyList(),
     onOpenAttachment: (com.leo.imessage.data.Attachment) -> Unit = {},
+    onExport: () -> Unit = {},
 ) {
     val palette = LocalPalette.current
     val hazeState = remember { HazeState() }
@@ -152,6 +153,10 @@ fun ChatDetailsScreen(
                 SettingsToggle("Send Read Receipts", settings.sendReadReceipts) {
                     settings.sendReadReceipts = it
                 }
+            }
+
+            ListSection(header = "Conversation Tools") {
+                SettingsRow("Export Conversation", onClick = { onExport() })
             }
 
             if (photos.isNotEmpty()) {

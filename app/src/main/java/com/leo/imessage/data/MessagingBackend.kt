@@ -54,6 +54,11 @@ interface MessagingBackend {
     /** Sends a scheduled message immediately, or cancels it outright. */
     suspend fun resolveScheduled(messageId: String, send: Boolean)
 
+    suspend fun sendPoll(chatId: String, question: String, options: List<String>)
+
+    /** Casts or withdraws a vote. Single-choice polls move the vote. */
+    suspend fun votePoll(messageId: String, optionId: String)
+
     /** Edits a message you sent, keeping the prior text in its history. */
     suspend fun edit(messageId: String, newText: String)
 

@@ -69,6 +69,7 @@ fun MessageBubble(
     /** Identifies the conversation, for per-chat bubble colour. */
     colorSeed: String = "",
     onReply: () -> Unit = {},
+    onVotePoll: (String) -> Unit = {},
     onShowInfo: () -> Unit = {},
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
@@ -306,7 +307,29 @@ fun MessageBubble(
                         isJumboEmoji(msg.text)
                     val link = if (jumbo) null else firstLinkIn(msg.text)
 
-                    if (jumbo) {
+                    val poll = msg.poll
+                    if (poll != null) {
+                        Box(
+                            Modifier
+                                .liquidGlass(shape, fill, glassDark, glass)
+                                .pointerInput(msg.id) {
+                                    detectTapGestures(
+                                        onLongPress = {
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onLongPress()
+                                        },
+                                    )
+                                }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                        ) {
+                            PollCard(
+                                poll = poll,
+                                myId = "me",
+                                onVote = onVotePoll,
+                                outgoing = outgoing,
+                            )
+                        }
+                    } else if (jumbo) {
                         // No bubble at all, just the emoji at triple size.
                         Text(
                             text = msg.text.trim(),

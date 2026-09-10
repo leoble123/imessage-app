@@ -72,6 +72,33 @@ data class Attachment(
     val isVisual: Boolean get() = kind == MediaKind.IMAGE || kind == MediaKind.VIDEO
 }
 
+/**
+ * A poll attached to a message.
+ *
+ * Votes are stored per option as the set of people who chose it, rather than
+ * as counts. Counts cannot answer "did I already vote", cannot be changed
+ * without double-counting, and cannot show you who picked what - and all
+ * three are things a group chat asks within about ten seconds of a poll
+ * appearing.
+ */
+@Immutable
+data class Poll(
+    val question: String,
+    val options: List<PollOption>,
+    val allowsMultiple: Boolean = false,
+    val closesAt: Long? = null,
+) {
+    val totalVotes: Int get() = options.sumOf { it.voters.size }
+    val isClosed: Boolean get() = closesAt != null && closesAt < System.currentTimeMillis()
+}
+
+@Immutable
+data class PollOption(
+    val id: String,
+    val label: String,
+    val voters: List<String> = emptyList(),
+)
+
 @Immutable
 data class Message(
     val id: String,
@@ -108,6 +135,7 @@ data class Message(
     val remindAt: Long? = null,
     /** Set while a message is queued to send later, cleared when it goes. */
     val scheduledFor: Long? = null,
+    val poll: Poll? = null,
 ) {
     val hasContent: Boolean get() = text.isNotBlank() || attachments.isNotEmpty()
 }

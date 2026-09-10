@@ -12,8 +12,9 @@ android {
         applicationId = "com.leo.imessage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 21
+        versionName = "0.21.0"
+        buildConfigField("long", "BUILD_TIME", "${System.currentTimeMillis()}L")
         ndk {
             // Only the ABI we actually target - keeps the APK lean.
             abiFilters += "arm64-v8a"
@@ -40,6 +41,9 @@ android {
 
     buildFeatures {
         compose = true
+        // So Settings can report the real version instead of a literal that
+        // drifts - the old hardcoded "0.1.0" had been wrong for ten builds.
+        buildConfig = true
     }
 
     sourceSets {

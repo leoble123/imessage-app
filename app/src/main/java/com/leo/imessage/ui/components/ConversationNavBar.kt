@@ -53,6 +53,8 @@ fun ConversationNavBar(
     onOpenDetails: () -> Unit,
     onFaceTime: () -> Unit = {},
     onSearch: () -> Unit = {},
+    onCatchUp: () -> Unit = {},
+    hasUnread: Boolean = false,
     modifier: Modifier = Modifier,
     darkBase: Boolean? = null,
 ) {
@@ -132,13 +134,32 @@ fun ConversationNavBar(
                 }
             }
 
-            CircleGlassButton(
-                onClick = onFaceTime,
-                hazeState = hazeState,
-                darkBase = darkBase,
-                modifier = Modifier.align(Alignment.TopEnd),
+            Row(
+                Modifier.align(Alignment.TopEnd),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                VideoIcon(color = palette.accent, modifier = Modifier.size(19.dp))
+                // Only offered when there is a backlog. A permanent button for
+                // "catch me up" on a thread you have already read is clutter
+                // pretending to be a feature.
+                if (hasUnread) {
+                    CircleGlassButton(
+                        onClick = onCatchUp,
+                        hazeState = hazeState,
+                        darkBase = darkBase,
+                    ) {
+                        Text(
+                            "\u2728",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                }
+                CircleGlassButton(
+                    onClick = onFaceTime,
+                    hazeState = hazeState,
+                    darkBase = darkBase,
+                ) {
+                    VideoIcon(color = palette.accent, modifier = Modifier.size(19.dp))
+                }
             }
         }
     }

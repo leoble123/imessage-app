@@ -65,3 +65,43 @@ fun tomorrowAt(hour: Int, minute: Int): Long =
         set(java.util.Calendar.SECOND, 0)
         set(java.util.Calendar.MILLISECOND, 0)
     }.timeInMillis
+
+/** When this build was produced, so "is this the new one" is answerable. */
+fun buildDate(): String = java.text.SimpleDateFormat(
+    "d MMM yyyy, HH:mm",
+    java.util.Locale.getDefault(),
+).format(java.util.Date(com.leo.imessage.BuildConfig.BUILD_TIME))
+
+/**
+ * A conversation as plain text.
+ *
+ * Plain text rather than a bespoke archive format: an export you cannot open
+ * without the app that made it is not really an export. This pastes into
+ * anything, and stays readable in ten years.
+ */
+fun exportTranscript(
+    chat: com.leo.imessage.data.Chat,
+    messages: List<com.leo.imessage.data.Message>,
+): String = buildString {
+    appendLine(chat.displayName)
+    appendLine("Exported ${buildDate()}")
+    appendLine("${messages.size} messages")
+    appendLine()
+
+    messages.sortedBy { it.timestamp }.forEach { m ->
+        val who = when {
+            m.isFromMe -> "You"
+            else -> chat.participants.firstOrNull { it.id == m.senderId }?.displayName ?: "Them"
+        }
+        val body = when {
+            m.isUnsent -> "(unsent)"
+            m.poll != null -> "Poll: ${m.poll.question}"
+            m.text.isNotBlank() -> m.text
+            m.attachments.isNotEmpty() ->
+                m.attachments.joinToString(", ") { "[${it.fileName}]" }
+            else -> ""
+        }
+        appendLine("[${messageStamp(m.timestamp)}] $who: $body")
+        m.note?.let { appendLine("    note: $it") }
+    }
+}

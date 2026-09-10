@@ -79,6 +79,8 @@ import java.util.UUID
 fun AttachmentTray(
     onAttach: (List<Attachment>) -> Unit,
     onRequestEffects: () -> Unit,
+    onRequestPoll: () -> Unit = {},
+    onQuickReply: (String) -> Unit = {},
     onDismiss: () -> Unit,
     /** Attaches the user's current position as a shareable map link. */
     onShareLocation: () -> Unit = {},
@@ -243,7 +245,11 @@ fun AttachmentTray(
                     TrayRow("Files", 5, { progress() }) {
                         pickDocument.launch(arrayOf("*/*"))
                     }
-                    TrayRow("Effects", 6, { progress() }) {
+                    TrayRow("Polls", 6, { progress() }) {
+                        onRequestPoll()
+                        onDismiss()
+                    }
+                    TrayRow("Effects", 7, { progress() }) {
                         // Handed up to the screen rather than opened here:
                         // nesting a picker inside the tray meant stacking a
                         // second blurred scrim on top of the tray's own, and
@@ -309,7 +315,6 @@ private fun TrayRow(
                 translationX = -14.dp.toPx() * (1f - a)
             }
             .scaleFrom(scale)
-            .liquidRipple(maxRadius = 150.dp)
             .pointerInput(label) {
                 detectTapGestures(
                     onPress = {
@@ -349,6 +354,7 @@ private fun trayTint(label: String): Color = when (label) {
     "Audio" -> Color(0xFFFF5A4E)
     "Location" -> Color(0xFF34C759)
     "Files" -> Color(0xFFFFB300)
+    "Polls" -> Color(0xFF00B3A6)
     else -> Color(0xFF5E5CE6)
 }
 
@@ -461,6 +467,26 @@ private fun TrayGlyph(label: String, color: Color) {
                     topLeft = Offset(w * 0.18f, h * 0.34f),
                     size = androidx.compose.ui.geometry.Size(w * 0.64f, h * 0.44f),
                     style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = StrokeCap.Round),
+                )
+            }
+            "Polls" -> {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(w * 0.1f, h * 0.52f),
+                    size = androidx.compose.ui.geometry.Size(w * 0.18f, h * 0.4f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.05f),
+                )
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(w * 0.41f, h * 0.28f),
+                    size = androidx.compose.ui.geometry.Size(w * 0.18f, h * 0.64f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.05f),
+                )
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(w * 0.72f, h * 0.08f),
+                    size = androidx.compose.ui.geometry.Size(w * 0.18f, h * 0.84f),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.05f),
                 )
             }
             "Location" -> {

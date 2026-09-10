@@ -130,6 +130,54 @@ class MockBackend : MessagingBackend {
         _messages.value.firstOrNull { it.id == messageId }?.let { touchChat(it.chatId, it) }
     }
 
+    override suspend fun sendPoll(chatId: String, question: String, options: List<String>) {
+        val msg = Message(
+            id = UUID.randomUUID().toString(),
+            chatId = chatId,
+            text = "",
+            timestamp = System.currentTimeMillis(),
+            isFromMe = true,
+            senderId = me.id,
+            deliveryState = DeliveryState.DELIVERED,
+            poll = Poll(
+                question = question,
+                options = options.filter { it.isNotBlank() }.map {
+                    PollOption(id = UUID.randomUUID().toString(), label = it.trim())
+                },
+            ),
+        )
+        _messages.value = _messages.value + msg
+        touchChat(chatId, msg)
+    }
+
+    override suspend fun votePoll(messageId: String, optionId: String) {
+        updateMessage(messageId) { msg ->
+            val poll = msg.poll ?: return@updateMessage msg
+            val already = poll.options.firstOrNull { it.id == optionId }
+                ?.voters?.contains(me.id) == true
+
+            msg.copy(
+                poll = poll.copy(
+                    options = poll.options.map { option ->
+                        when {
+                            // Tapping your own choice again takes it back.
+                            option.id == optionId && already ->
+                                option.copy(voters = option.voters - me.id)
+                            option.id == optionId ->
+                                option.copy(voters = option.voters + me.id)
+                            // Single-choice: picking one clears the others,
+                            // so a change of mind moves the vote instead of
+                            // quietly adding a second.
+                            !poll.allowsMultiple ->
+                                option.copy(voters = option.voters - me.id)
+                            else -> option
+                        }
+                    }
+                )
+            )
+        }
+    }
+
     override suspend fun setPinned(chatId: String, pinned: Boolean) {
         _chats.value = _chats.value.map {
             if (it.id == chatId) it.copy(isPinned = pinned) else it

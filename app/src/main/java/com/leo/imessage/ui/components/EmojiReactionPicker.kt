@@ -153,7 +153,6 @@ private fun TapbackButton(
         Modifier
             .size(36.dp)
             .scaleFrom(scale)
-            .liquidRipple(maxRadius = 90.dp)
             .clip(CircleShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },

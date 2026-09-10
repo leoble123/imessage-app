@@ -161,6 +161,8 @@ fun ConversationScreen(
     onSetNote: (String, String?) -> Unit = { _, _ -> },
     onSetReminder: (String, Long?) -> Unit = { _, _ -> },
     onScheduleSend: (String, Long) -> Unit = { _, _ -> },
+    onSendPoll: (String, List<String>) -> Unit = { _, _ -> },
+    onVotePoll: (String) -> Unit = {},
     onResolveScheduled: (String, Boolean) -> Unit = { _, _ -> },
     draft: String = "",
     onDraftChange: (String) -> Unit = {},
@@ -199,6 +201,8 @@ fun ConversationScreen(
     var noteFor by remember { mutableStateOf<Message?>(null) }
     var remindFor by remember { mutableStateOf<Message?>(null) }
     var showSendLater by remember { mutableStateOf(false) }
+    var showCatchUp by remember { mutableStateOf(false) }
+    var showPollComposer by remember { mutableStateOf(false) }
     var pendingLater by remember { mutableStateOf("") }
     var searching by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -240,12 +244,15 @@ fun ConversationScreen(
     androidx.activity.compose.BackHandler(
         enabled = threadRoot != null || menuFor != null || viewing != null ||
             infoFor != null || showTray || replyingTo != null || showEffectPicker ||
-            searching || noteFor != null || remindFor != null || showSendLater
+            searching || noteFor != null || remindFor != null || showSendLater ||
+            showCatchUp || showPollComposer
     ) {
         when {
             viewing != null -> viewing = null
             infoFor != null -> infoFor = null
             showEffectPicker -> showEffectPicker = false
+            showCatchUp -> showCatchUp = false
+            showPollComposer -> showPollComposer = false
             noteFor != null -> noteFor = null
             remindFor != null -> remindFor = null
             showSendLater -> showSendLater = false
@@ -421,6 +428,7 @@ fun ConversationScreen(
                             keyboard?.show()
                         },
                         onShowInfo = { infoFor = row.message },
+                        onVotePoll = { optionId -> onVotePoll(optionId) },
                         sender = chat.participants.firstOrNull { it.id == row.message.senderId },
                         senderName = senderName,
                         onLongPress = { showMenuFor(row) },
@@ -516,6 +524,7 @@ fun ConversationScreen(
                 com.leo.imessage.ui.components.AttachmentTray(
                     onAttach = { added -> staged = staged + added },
                     onRequestEffects = { showEffectPicker = true },
+                    onRequestPoll = { showPollComposer = true },
                     onDismiss = {
                         showTray = false
                         trayRecording = false
@@ -560,6 +569,8 @@ fun ConversationScreen(
             onOpenDetails = onOpenDetails,
             onFaceTime = onFaceTime,
             onSearch = { searching = true },
+            onCatchUp = { showCatchUp = true },
+            hasUnread = chat.unreadCount > 0,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .onSizeChanged { navBarHeight = with(density) { it.height.toDp() } },
@@ -586,6 +597,50 @@ fun ConversationScreen(
                 .align(Alignment.BottomEnd)
                 .padding(end = 18.dp, bottom = composerHeight + 12.dp),
         )
+
+        if (showPollComposer) {
+            com.leo.imessage.ui.components.GlassPrompt(
+                title = "New Poll",
+                initial = "",
+                // One field rather than a question box plus an option list
+                // that grows: typing four short lines is faster than tapping
+                // "add option" three times, and it is obvious what to do.
+                placeholder = "Question, then one option per line",
+                confirmLabel = "Post",
+                hazeState = hazeState,
+                darkBase = if (background.brush != null) background.isDark else null,
+                onConfirm = { raw ->
+                    val lines = raw.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                    if (lines.size >= 2) {
+                        onSendPoll(lines.first(), lines.drop(1))
+                    }
+                },
+                onDismiss = { showPollComposer = false },
+            )
+        }
+
+        if (showCatchUp) {
+            val summary = remember(messages, chat.unreadCount) {
+                com.leo.imessage.util.buildCatchUp(chat, messages)
+            }
+            com.leo.imessage.ui.components.CatchUpSheet(
+                summary = summary,
+                hazeState = hazeState,
+                darkBase = if (background.brush != null) background.isDark else null,
+                onJumpToFirstUnread = {
+                    scope.launch {
+                        listState.animateScrollToItem(
+                            summary.firstUnreadIndex.coerceIn(0, rows.lastIndex.coerceAtLeast(0))
+                        )
+                    }
+                },
+                onJumpTo = { id ->
+                    val index = rows.indexOfFirst { it.message.id == id }
+                    if (index >= 0) scope.launch { listState.animateScrollToItem(index) }
+                },
+                onDismiss = { showCatchUp = false },
+            )
+        }
 
         if (showEffectPicker) {
             com.leo.imessage.ui.components.EffectPicker(

@@ -53,6 +53,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     val settings = com.leo.imessage.ui.theme.LocalSettings.current
     val context = androidx.compose.ui.platform.LocalContext.current
     var editing by remember { mutableStateOf<EditableSetting?>(null) }
+    var editingTemplates by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize().background(palette.groupedBackground)) {
         Column(
@@ -288,9 +289,26 @@ fun SettingsScreen(onBack: () -> Unit) {
                 header = "About",
                 footer = "Built on the rustpush protocol core. Not affiliated with Apple.",
             ) {
-                SettingsRow("Version", value = "0.1.0", showChevron = false)
+                SettingsRow(
+                    "Version",
+                    value = com.leo.imessage.BuildConfig.VERSION_NAME +
+                        " (" + com.leo.imessage.BuildConfig.VERSION_CODE + ")",
+                    showChevron = false,
+                )
+                SettingsDivider()
+                SettingsRow(
+                    "Built",
+                    value = com.leo.imessage.util.buildDate(),
+                    showChevron = false,
+                )
                 SettingsDivider()
                 SettingsRow("Backend", value = "Mock", showChevron = false)
+                SettingsDivider()
+                SettingsRow(
+                    "Quick Replies",
+                    value = "${settings.templates.size}",
+                    onClick = { editingTemplates = true },
+                )
                 SettingsDivider()
                 SettingsRow(
                     "Export Diagnostics",
@@ -336,6 +354,17 @@ fun SettingsScreen(onBack: () -> Unit) {
                     modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
                 )
             }
+        }
+
+        if (editingTemplates) {
+            com.leo.imessage.ui.components.GlassPrompt(
+                title = "Quick Replies",
+                initial = settings.templates.joinToString("\n"),
+                placeholder = "One per line",
+                confirmLabel = "Save",
+                onConfirm = { settings.templates = it.lines().filter { l -> l.isNotBlank() } },
+                onDismiss = { editingTemplates = false },
+            )
         }
 
         editing?.let { field ->

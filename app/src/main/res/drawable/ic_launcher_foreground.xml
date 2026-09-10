@@ -1,15 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Icon mark: a droplet, with the ripple it just made.
+  A speech bubble made of glass.
 
-  The droplet is the app's whole motion language - panels swell into place,
-  the push lands like something liquid pulling into shape - so the icon says
-  the same thing the animations do. Two arcs, not four: at 48dp on a home
-  screen anything finer turns to mush, and an icon that only works at full
-  size is an illustration, not an icon.
+  Built the same way the bubbles inside the app are, and in the same order,
+  because that is what makes an icon look like it came from its app rather
+  than being drawn for it:
 
-  Everything sits inside the 72dp safe zone, so no launcher's mask can clip
-  the mark itself.
+    1. a translucent body, so the gradient behind reads through it
+    2. a caustic pool at the bottom, where light refracts back up
+    3. a lit rim - bright along the top-left, gone by the bottom-right
+    4. one specular streak across the shoulder
+
+  Vector drawables cannot blur, so the softness has to come from gradient
+  stops rather than from a real blur pass. That constraint is why the rim is
+  drawn as a stroked path with its own gradient instead of a glow.
+
+  Everything sits inside the 72dp safe zone so no launcher mask clips it.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -17,37 +23,71 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Outer ripple -->
-    <path
-        android:pathData="M28,74 A26,26 0 0 0 80,74"
-        android:strokeColor="#59FFFFFF"
-        android:strokeWidth="3.5"
-        android:strokeLineCap="round" />
-
-    <!-- Inner ripple -->
-    <path
-        android:pathData="M37,74 A17,17 0 0 0 71,74"
-        android:strokeColor="#8CFFFFFF"
-        android:strokeWidth="3.5"
-        android:strokeLineCap="round" />
-
-    <!-- The droplet -->
-    <path android:pathData="M54,26 C54,26 74,48 74,60 A20,20 0 0 1 34,60 C34,48 54,26 54,26 Z">
+    <!-- Contact shadow, so the bubble sits on the surface rather than in it -->
+    <path android:pathData="M26,44m0,20a28,14 0 1,0 56,0a28,14 0 1,0 -56,0">
         <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
             <gradient
-                android:type="linear"
-                android:startX="40" android:startY="28"
-                android:endX="68" android:endY="80">
-                <item android:offset="0.0" android:color="#FFFFFFFF" />
-                <item android:offset="1.0" android:color="#FFD8E4FF" />
+                android:type="radial"
+                android:centerX="54" android:centerY="64" android:gradientRadius="30">
+                <item android:offset="0.0" android:color="#40000000" />
+                <item android:offset="1.0" android:color="#00000000" />
             </gradient>
         </aapt:attr>
     </path>
 
-    <!-- Highlight on the droplet's shoulder, so it reads as wet rather than flat -->
+    <!-- Body: translucent, brighter at the top where it faces the light -->
+    <path android:pathData="M35,26 L73,26 A17,17 0 0 1 90,43 L90,58 A17,17 0 0 1 73,75 L52,75 L36,88 L39,75 L35,75 A17,17 0 0 1 18,58 L18,43 A17,17 0 0 1 35,26 Z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="30" android:startY="24"
+                android:endX="80" android:endY="90">
+                <item android:offset="0.0" android:color="#E6FFFFFF" />
+                <item android:offset="0.45" android:color="#9EFFFFFF" />
+                <item android:offset="1.0" android:color="#5CFFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Caustic: light that went through the body and bounced back up -->
+    <path android:pathData="M35,26 L73,26 A17,17 0 0 1 90,43 L90,58 A17,17 0 0 1 73,75 L52,75 L36,88 L39,75 L35,75 A17,17 0 0 1 18,58 L18,43 A17,17 0 0 1 35,26 Z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54" android:startY="52"
+                android:endX="54" android:endY="88">
+                <item android:offset="0.0" android:color="#00FFFFFF" />
+                <item android:offset="1.0" android:color="#54FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Lit rim: bright top-left, gone by bottom-right -->
     <path
-        android:pathData="M47,47 C44,53 44,60 47,65"
-        android:strokeColor="#73FFFFFF"
-        android:strokeWidth="4"
-        android:strokeLineCap="round" />
+        android:pathData="M35,26 L73,26 A17,17 0 0 1 90,43 L90,58 A17,17 0 0 1 73,75 L52,75 L36,88 L39,75 L35,75 A17,17 0 0 1 18,58 L18,43 A17,17 0 0 1 35,26 Z"
+        android:strokeWidth="2">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="24" android:startY="24"
+                android:endX="86" android:endY="86">
+                <item android:offset="0.0" android:color="#FFFFFFFF" />
+                <item android:offset="0.45" android:color="#66FFFFFF" />
+                <item android:offset="1.0" android:color="#14FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Specular streak across the shoulder -->
+    <path android:pathData="M31,36 A13,13 0 0 1 44,33 L64,33 A5,5 0 0 1 64,41 L40,41 A9,9 0 0 0 33,45 Z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="31" android:startY="33"
+                android:endX="66" android:endY="43">
+                <item android:offset="0.0" android:color="#C4FFFFFF" />
+                <item android:offset="1.0" android:color="#1AFFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
 </vector>

@@ -235,6 +235,20 @@ fun AppRoot(
                         onResolveScheduled = { id, send ->
                             scope.launch { backend.resolveScheduled(id, send) }
                         },
+                        onSendPoll = { q, opts ->
+                            scope.launch { backend.sendPoll(chat.id, q, opts) }
+                        },
+                        onVotePoll = { optionId ->
+                            scope.launch {
+                                // The vote arrives with only the option id, so
+                                // find the poll that owns it.
+                                backend.messagesNow(chat.id)
+                                    .firstOrNull { m ->
+                                        m.poll?.options?.any { it.id == optionId } == true
+                                    }
+                                    ?.let { backend.votePoll(it.id, optionId) }
+                            }
+                        },
                         onShareLocation = {
                             scope.launch {
                                 val link = com.leo.imessage.media.currentLocationLink(context)
@@ -308,6 +322,36 @@ fun AppRoot(
                     onSetPinned = { scope.launch { backend.setPinned(openChat.id, it) } },
                     attachments = backend.messagesNow(openChat.id).flatMap { it.attachments },
                     onOpenAttachment = { detailsViewing = it },
+                    onExport = {
+                        val transcript = com.leo.imessage.util.exportTranscript(
+                            openChat,
+                            backend.messagesNow(openChat.id),
+                        )
+                        runCatching {
+                            context.startActivity(
+                                android.content.Intent.createChooser(
+                                    android.content.Intent(
+                                        android.content.Intent.ACTION_SEND
+                                    ).apply {
+                                        type = "text/plain"
+                                        putExtra(
+                                            android.content.Intent.EXTRA_SUBJECT,
+                                            openChat.displayName,
+                                        )
+                                        putExtra(
+                                            android.content.Intent.EXTRA_TEXT,
+                                            transcript,
+                                        )
+                                    },
+                                    "Export Conversation",
+                                ).apply {
+                                    addFlags(
+                                        android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                    )
+                                }
+                            )
+                        }
+                    },
                 )
             }
         }

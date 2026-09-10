@@ -51,7 +51,6 @@ import dev.chrisbanes.haze.HazeState
 import com.leo.imessage.ui.components.GroupAvatar
 import com.leo.imessage.ui.components.SwipeAction
 import com.leo.imessage.ui.components.SwipeableRow
-import com.leo.imessage.ui.components.liquidRipple
 import com.leo.imessage.ui.components.underglow
 import com.leo.imessage.ui.theme.AppleColors
 import com.leo.imessage.ui.theme.LocalPalette
@@ -479,7 +478,6 @@ private fun ChatRow(
         Row(
             Modifier
                 .background(pressTint)
-                .liquidRipple(maxRadius = 240.dp)
                 .pointerInput(chat.id) {
                     detectTapGestures(
                         onPress = {

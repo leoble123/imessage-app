@@ -142,6 +142,22 @@ class AppSettings(private val store: SettingsStore? = null) {
     var accentColor by enum("accent_color", AccentColor.BLUE)
     var density by enum("density", Density.COMFORTABLE)
     var doubleTapAction by enum("double_tap", DoubleTapAction.TAPBACK)
+
+    /**
+     * Canned replies, kept as one newline-separated blob.
+     *
+     * A list of strings in SharedPreferences means a StringSet, which is
+     * unordered - and the order of your own quick replies is the whole point,
+     * since the one you use most should be first.
+     */
+    var templates: List<String>
+        get() = templatesRaw.lines().filter { it.isNotBlank() }
+        set(value) { templatesRaw = value.joinToString("\n") }
+
+    private var templatesRaw by text(
+        "templates",
+        "On my way\nRunning a few minutes late\nCan I call you later?\nThanks!",
+    )
     var notificationsEnabled by bool("notifications", true)
 
     // Account details. Nothing consumes these yet - the rustpush core will -
