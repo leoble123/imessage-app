@@ -32,7 +32,7 @@ use rustpush::{
     APSConnectionResource, ConversationData, IDSNGMIdentity, IDSUser, IMClient,
     LoginDelegate, Message, MessageInst, MessageType, NormalMessage, OSConfig, ReactMessage,
     ReactMessageType, Reaction, RelayConfig, UnsendMessage, EditMessage, MessageParts, PushError,
-    MessagePart, IndexedMessagePart, MADRID_SERVICE,
+    MessagePart, IndexedMessagePart, VerifyBody, MADRID_SERVICE,
 };
 use tokio::sync::Mutex;
 
@@ -70,6 +70,10 @@ struct Inner {
     users: Vec<IDSUser>,
     identity: Option<IDSNGMIdentity>,
     client: Option<Arc<IMClient>>,
+    /// Apple hands back a body with the SMS challenge in it, and verifying
+    /// the code requires handing that same body back. Only set when the
+    /// account went down the SMS path rather than the trusted-device one.
+    sms_verify: Option<VerifyBody>,
     /// Set once the receive loop is running, so starting twice is a no-op
     /// rather than two loops racing to consume the same broadcast channel.
     receiving: bool,
@@ -212,39 +216,46 @@ impl ImessageCore {
             .await
             .map_err(|e| CoreError::new(format!("sign-in failed: {e}")))?;
 
-        let step = classify(&result);
         inner.account = Some(account);
-        Ok(step)
+        self.drive_login(&mut inner, result).await
     }
 
     /// Submits a six-digit code from a trusted device.
     pub async fn submit_device_code(&self, code: String) -> Result<LoginStep, CoreError> {
         let mut inner = self.inner.lock().await;
+
+        // An SMS code is verified against the challenge body Apple issued when
+        // it sent the message; a trusted-device code is not. Using the wrong
+        // one rejects a perfectly good code.
+        let pending = inner.sms_verify.take();
         let account = inner
             .account
             .as_mut()
             .ok_or_else(|| CoreError::new("no sign-in is in progress"))?;
 
-        let result = account
-            .verify_2fa(code)
-            .await
-            .map_err(|e| CoreError::new(format!("that code didn't work: {e}")))?;
-        Ok(classify(&result))
+        let result = match pending {
+            Some(body) => account.verify_sms_2fa(code, body).await,
+            None => account.verify_2fa(code).await,
+        }
+        .map_err(|e| CoreError::new(format!("That code didn't work: {e}")))?;
+
+        self.drive_login(&mut inner, result).await
     }
 
     /// Asks Apple to text a code to one of the account's trusted numbers.
     pub async fn request_sms_code(&self, phone_id: u32) -> Result<LoginStep, CoreError> {
-        let inner = self.inner.lock().await;
-        let account = inner
-            .account
-            .as_ref()
-            .ok_or_else(|| CoreError::new("no sign-in is in progress"))?;
-
-        let result = account
-            .send_sms_2fa_to_devices(phone_id)
-            .await
-            .map_err(|e| CoreError::new(format!("couldn't send the code: {e}")))?;
-        Ok(classify(&result))
+        let mut inner = self.inner.lock().await;
+        let result = {
+            let account = inner
+                .account
+                .as_ref()
+                .ok_or_else(|| CoreError::new("no sign-in is in progress"))?;
+            account
+                .send_sms_2fa_to_devices(phone_id)
+                .await
+                .map_err(|e| CoreError::new(format!("Couldn't send the code: {e}")))?
+        };
+        self.drive_login(&mut inner, result).await
     }
 
     /// Finishes sign-in: authenticates against IDS and registers this device.
@@ -587,6 +598,73 @@ impl ImessageCore {
 }
 
 impl ImessageCore {
+    /// Advances Apple's sign-in state machine until it needs something from
+    /// the user, and reports what that is.
+    ///
+    /// The important part is that several states are *actions*, not screens.
+    /// `NeedsDevice2FA` does not mean "a code is on its way" - it means Apple
+    /// is willing to send one and is waiting to be asked. Showing a code entry
+    /// box on that state, without calling `send_2fa_to_devices`, leaves the
+    /// user staring at a field waiting for a message that was never requested.
+    async fn drive_login(
+        &self,
+        inner: &mut Inner,
+        mut state: LoginState,
+    ) -> Result<LoginStep, CoreError> {
+        // Bounded rather than `loop`: each hop is a network round trip, and a
+        // state that advances to itself would otherwise hammer Apple forever.
+        for _ in 0..6 {
+            let account = inner
+                .account
+                .as_ref()
+                .ok_or_else(|| CoreError::new("no sign-in is in progress"))?;
+
+            state = match state {
+                LoginState::LoggedIn => return Ok(LoginStep::Complete),
+
+                // Apple has sent something and is waiting for the digits.
+                LoginState::Needs2FAVerification => return Ok(LoginStep::NeedsDeviceCode),
+
+                LoginState::NeedsSMS2FAVerification(body) => {
+                    inner.sms_verify = Some(body);
+                    return Ok(LoginStep::NeedsSmsCode { phone_numbers: vec![] });
+                }
+
+                // Ask for the push. This is the call whose absence meant no
+                // code ever arrived.
+                LoginState::NeedsDevice2FA => account
+                    .send_2fa_to_devices()
+                    .await
+                    .map_err(|e| CoreError::new(format!("Couldn't ask Apple for a code: {e}")))?,
+
+                // Phone id 1 is Apple's first trusted number. An account with
+                // no trusted number fails here, and the error says so rather
+                // than looking like a rejected password.
+                LoginState::NeedsSMS2FA => account
+                    .send_sms_2fa_to_devices(1)
+                    .await
+                    .map_err(|e| CoreError::new(format!("Couldn't send a code by text: {e}")))?,
+
+                // Apple sometimes reports an extra step it has already let us
+                // past - if the PET token is in hand, we are actually signed in.
+                LoginState::NeedsExtraStep(step) => {
+                    return if account.get_pet().is_some() {
+                        Ok(LoginStep::Complete)
+                    } else {
+                        Ok(LoginStep::NeedsWebStep { url: step })
+                    };
+                }
+
+                LoginState::NeedsLogin => {
+                    return Err(CoreError::new(
+                        "Apple didn't accept that Apple ID or password.",
+                    ));
+                }
+            };
+        }
+        Err(CoreError::new("Sign-in didn't settle. Try again."))
+    }
+
     /// Pulls the three things every authenticated call needs, with one error
     /// message covering the single cause of all three being absent.
     fn session(
@@ -671,23 +749,6 @@ impl ImessageCore {
             .await
             .map_err(|e| CoreError::new(format!("couldn't send: {e}")))?;
         Ok(instance.id)
-    }
-}
-
-/// Maps Apple's login state onto the screen the app should show next.
-fn classify(state: &LoginState) -> LoginStep {
-    match state {
-        LoginState::LoggedIn => LoginStep::Complete,
-        LoginState::NeedsDevice2FA | LoginState::Needs2FAVerification => {
-            LoginStep::NeedsDeviceCode
-        }
-        LoginState::NeedsSMS2FA | LoginState::NeedsSMS2FAVerification(_) => {
-            LoginStep::NeedsSmsCode { phone_numbers: vec![] }
-        }
-        LoginState::NeedsExtraStep(url) => LoginStep::NeedsWebStep { url: url.clone() },
-        LoginState::NeedsLogin => LoginStep::NeedsWebStep {
-            url: String::new(),
-        },
     }
 }
 

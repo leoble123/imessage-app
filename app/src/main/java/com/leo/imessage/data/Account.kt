@@ -244,7 +244,11 @@ class AccountManager(context: Context) {
  * vague "something went wrong" is worse than an odd but specific one.
  */
 private fun CoreException.friendlyMessage(): String {
-    val raw = message ?: return "Something went wrong."
+    // UniFFI builds the exception message out of the error variant's fields,
+    // so it arrives as "reason=..." rather than as the sentence itself.
+    val raw = message?.removePrefix("reason=")?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?: return "Something went wrong."
     return when {
         // Apple's own numbered failures. These are checked first and matched
         // narrowly - an earlier version tested for the word "password"
