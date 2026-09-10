@@ -59,6 +59,14 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        jniLibs {
+            // The Rust core is ~20MB uncompressed, and modern AGP stores
+            // native libs uncompressed so they can be mapped straight out of
+            // the APK. That's the better runtime trade, but it makes the
+            // download about three times the size - which matters a lot more
+            // when the APK is sideloaded by hand than a few ms of load time.
+            useLegacyPackaging = true
+        }
     }
 }
 
