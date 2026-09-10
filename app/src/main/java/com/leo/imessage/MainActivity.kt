@@ -27,6 +27,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         requestHighestRefreshRate()
         com.leo.imessage.notify.Notifier.ensureChannel(this)
+        // Lets notification Reply / Mark as Read reach the same backend the
+        // UI uses, so a reply from the shade lands in the transcript.
+        com.leo.imessage.notify.NotificationActionReceiver.backendProvider = backend
         requestNotificationPermission()
         setContent {
             iMessageTheme(settings) {

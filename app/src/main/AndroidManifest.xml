@@ -31,6 +31,15 @@
             </intent-filter>
         </activity>
 
+        <receiver
+            android:name=".notify.NotificationActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.leo.imessage.REPLY" />
+                <action android:name="com.leo.imessage.MARK_READ" />
+            </intent-filter>
+        </receiver>
+
         <!-- Lets the camera write a capture into our cache and hand it back. -->
         <provider
             android:name="androidx.core.content.FileProvider"

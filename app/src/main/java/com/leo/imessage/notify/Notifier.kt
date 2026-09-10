@@ -91,7 +91,54 @@ object Notifier {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
+        // Reply and Mark as Read, so the whole exchange can happen without
+        // opening anything. Both are broadcasts rather than activities -
+        // launching the app to answer a notification defeats the point.
+        val replyIntent = PendingIntent.getBroadcast(
+            context,
+            chat.id.hashCode() * 31 + 1,
+            Intent(context, NotificationActionReceiver::class.java).apply {
+                action = NotificationActionReceiver.ACTION_REPLY
+                putExtra(EXTRA_CHAT_ID, chat.id)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+        )
+        val replyAction = NotificationCompat.Action.Builder(
+            android.R.drawable.ic_menu_send,
+            "Reply",
+            replyIntent,
+        )
+            .addRemoteInput(
+                androidx.core.app.RemoteInput
+                    .Builder(NotificationActionReceiver.KEY_REPLY_TEXT)
+                    .setLabel("Message")
+                    .build()
+            )
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+            .setShowsUserInterface(false)
+            .build()
+
+        val markReadIntent = PendingIntent.getBroadcast(
+            context,
+            chat.id.hashCode() * 31 + 2,
+            Intent(context, NotificationActionReceiver::class.java).apply {
+                action = NotificationActionReceiver.ACTION_MARK_READ
+                putExtra(EXTRA_CHAT_ID, chat.id)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val markReadAction = NotificationCompat.Action.Builder(
+            android.R.drawable.ic_menu_view,
+            "Mark as Read",
+            markReadIntent,
+        )
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+            .setShowsUserInterface(false)
+            .build()
+
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .addAction(replyAction)
+            .addAction(markReadAction)
             .setSmallIcon(android.R.drawable.sym_action_chat)
             .setStyle(style)
             .setCategory(Notification.CATEGORY_MESSAGE)

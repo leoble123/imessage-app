@@ -205,6 +205,20 @@ fun AppRoot(backend: MessagingBackend) {
                             scope.launch { backend.unsend(messageId) }
                         },
                         onMarkRead = { scope.launch { backend.markRead(chat.id) } },
+                        onSetBookmarked = { id, v ->
+                            scope.launch { backend.setBookmarked(id, v) }
+                        },
+                        onSetMessagePinned = { id, v ->
+                            scope.launch { backend.setMessagePinned(id, v) }
+                        },
+                        onSetNote = { id, note -> scope.launch { backend.setNote(id, note) } },
+                        onSetReminder = { id, at -> scope.launch { backend.setReminder(id, at) } },
+                        onScheduleSend = { text, at ->
+                            scope.launch { backend.scheduleSend(chat.id, text, at) }
+                        },
+                        onResolveScheduled = { id, send ->
+                            scope.launch { backend.resolveScheduled(id, send) }
+                        },
                         onShareLocation = {
                             scope.launch {
                                 val link = com.leo.imessage.media.currentLocationLink(context)

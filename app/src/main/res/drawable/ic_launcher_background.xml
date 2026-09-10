@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Icon background.
+
+  A deep blue-to-violet field rather than a flat colour: an adaptive icon is
+  masked to a different shape on every launcher, and a gradient keeps it
+  reading as one object whichever shape it ends up as. The lighter corner sits
+  top-left because that is where every other surface in this app is lit from,
+  and an icon lit from somewhere else looks like it came from another app.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="6" android:startY="0"
+                android:endX="102" android:endY="108">
+                <item android:offset="0.0" android:color="#FF2E6BFF" />
+                <item android:offset="0.55" android:color="#FF4B34E8" />
+                <item android:offset="1.0" android:color="#FF7A1FD0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Specular sweep across the upper third, same lighting as the glass. -->
+    <path android:pathData="M0,0h108v54c-30,16 -78,16 -108,-4z">
+        <aapt:attr xmlns:aapt="http://schemas.android.com/aapt" name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54" android:startY="0"
+                android:endX="54" android:endY="60">
+                <item android:offset="0.0" android:color="#33FFFFFF" />
+                <item android:offset="1.0" android:color="#00FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

@@ -94,6 +94,8 @@ fun MessageInputBar(
     onDraftChange: (String) -> Unit = {},
     /** Tapping the mic hands off to the recorder rather than sending. */
     onRecordAudio: () -> Unit = {},
+    /** Long-pressing send with text queues it instead. */
+    onSendLater: (String) -> Unit = {},
     /** Attachments staged by the tray, hoisted so the tray can outlive this. */
     staged: List<com.leo.imessage.data.Attachment> = emptyList(),
     onRemoveStaged: (com.leo.imessage.data.Attachment) -> Unit = {},
@@ -391,7 +393,15 @@ fun MessageInputBar(
                                 },
                                 onLongPress = {
                                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    if (canSend) showEffects = true else onRecordAudio()
+                                    when {
+                                        text.isNotBlank() -> {
+                                            onSendLater(text.trim())
+                                            text = ""
+                                            onDraftChange("")
+                                        }
+                                        canSend -> showEffects = true
+                                        else -> onRecordAudio()
+                                    }
                                 },
                             )
                         },
@@ -420,6 +430,7 @@ fun MessageInputBar(
                                 scaleY = sc
                                 translationY = 4.dp.toPx() * (1f - a)
                             }
+                            .underglow(palette.accent, radius = 10.dp, alpha = 0.45f)
                             .clip(CircleShape)
                             .background(palette.accent),
                         contentAlignment = Alignment.Center,

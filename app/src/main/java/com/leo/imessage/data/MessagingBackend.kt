@@ -38,6 +38,22 @@ interface MessagingBackend {
     /** Removes a message locally, the way Messages' Delete action does. */
     suspend fun delete(messageId: String)
 
+    suspend fun setBookmarked(messageId: String, bookmarked: Boolean)
+
+    suspend fun setMessagePinned(messageId: String, pinned: Boolean)
+
+    /** A private note on a message. Null clears it. */
+    suspend fun setNote(messageId: String, note: String?)
+
+    /** Reminds you about a message at a wall-clock time. Null clears it. */
+    suspend fun setReminder(messageId: String, at: Long?)
+
+    /** Queues a message to send at a given time. */
+    suspend fun scheduleSend(chatId: String, text: String, at: Long)
+
+    /** Sends a scheduled message immediately, or cancels it outright. */
+    suspend fun resolveScheduled(messageId: String, send: Boolean)
+
     /** Edits a message you sent, keeping the prior text in its history. */
     suspend fun edit(messageId: String, newText: String)
 

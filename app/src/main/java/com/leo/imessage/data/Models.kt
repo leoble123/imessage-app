@@ -92,6 +92,22 @@ data class Message(
     val editHistory: List<String> = emptyList(),
     val isUnsent: Boolean = unsentText != null,
     val editedAt: Long? = null,
+    /** Saved to your bookmarks. Private - the sender never learns. */
+    val isBookmarked: Boolean = false,
+    /** Pinned to the conversation's board. */
+    val isPinned: Boolean = false,
+    /**
+     * A note only you can see, attached to somebody else's message.
+     *
+     * The whole point is that nothing is sent: it's for the context you'd
+     * otherwise keep in your head or in a separate app - what a price was
+     * before they changed it, which of two plans this was about.
+     */
+    val note: String? = null,
+    /** When to be reminded about this message. */
+    val remindAt: Long? = null,
+    /** Set while a message is queued to send later, cleared when it goes. */
+    val scheduledFor: Long? = null,
 ) {
     val hasContent: Boolean get() = text.isNotBlank() || attachments.isNotEmpty()
 }

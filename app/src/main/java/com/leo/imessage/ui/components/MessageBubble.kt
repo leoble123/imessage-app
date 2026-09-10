@@ -236,6 +236,13 @@ fun MessageBubble(
                 backgroundIsDark -> Color.White
                 else -> Color.Black
             }
+            // The bubble's own colour, so the light matches the object.
+            val glowTint = when {
+                msg.service == Service.SMS -> palette.smsBubbleFlat
+                settings.colorfulBubbles ->
+                    com.leo.imessage.ui.theme.colorfulBubbleFor(colorSeed, palette.isDark).first()
+                else -> palette.outgoingBubbleFlat
+            }
             val playedEffect = if (settings.playEffects) msg.effect
                 else com.leo.imessage.data.MessageEffect.NONE
             val glassDark = when {
@@ -332,6 +339,20 @@ fun MessageBubble(
                                     scaleY = s
                                 }
                                 .widthIn(max = 290.dp)
+                                // Only outgoing bubbles glow. Incoming ones
+                                // are near-neutral, so light spilling off
+                                // them would come from nowhere - and if
+                                // everything glows, nothing reads as lit.
+                                .then(
+                                    if (outgoing && glass) {
+                                        Modifier.glow(
+                                            shape = shape,
+                                            color = glowTint,
+                                            radius = 14.dp,
+                                            alpha = if (palette.isDark) 0.22f else 0.16f,
+                                        )
+                                    } else Modifier
+                                )
                                 .liquidGlass(
                                     shape = shape,
                                     fill = fill,
@@ -405,6 +426,8 @@ fun MessageBubble(
                 )
             }
         }
+
+        MessageMarkers(msg)
 
         if (replyCount > 0) {
             ReplyChainLink(
@@ -568,26 +591,144 @@ private fun highlighted(
     active: Boolean,
     accent: androidx.compose.ui.graphics.Color,
 ): androidx.compose.ui.text.AnnotatedString {
-    if (term.isNullOrBlank()) return androidx.compose.ui.text.AnnotatedString(text)
+    val formatted = formatted(text)
+    if (term.isNullOrBlank()) return formatted
 
     return androidx.compose.ui.text.buildAnnotatedString {
+        append(formatted)
         var index = 0
+        val plain = formatted.text
         while (true) {
-            val hit = text.indexOf(term, index, ignoreCase = true)
-            if (hit < 0) {
-                append(text.substring(index))
-                break
-            }
-            append(text.substring(index, hit))
-            withStyle(
+            val hit = plain.indexOf(term, index, ignoreCase = true)
+            if (hit < 0) break
+            addStyle(
                 androidx.compose.ui.text.SpanStyle(
                     background = accent.copy(alpha = if (active) 0.55f else 0.26f),
                     fontWeight = FontWeight.SemiBold,
-                )
-            ) {
-                append(text.substring(hit, hit + term.length))
-            }
+                ),
+                hit,
+                hit + term.length,
+            )
             index = hit + term.length
         }
+    }
+}
+
+private val FORMAT_PATTERN = Regex(
+    "\\*(.+?)\\*" + "|_(.+?)_" + "|~(.+?)~" + "|`(.+?)`"
+)
+
+/**
+ * Inline formatting, written the way people already type it.
+ *
+ * *bold*, _italic_, ~strikethrough~, `code`. Deliberately the conventions
+ * from every chat app rather than a toolbar: a toolbar makes formatting
+ * something you stop and go and do, and nobody stops mid-sentence to bold a
+ * word.
+ *
+ * The markers are consumed so the message reads clean, which means the
+ * styled string and the plain text have to be built together - every offset
+ * after a removed marker has shifted.
+ */
+private fun formatted(text: String): androidx.compose.ui.text.AnnotatedString =
+    androidx.compose.ui.text.buildAnnotatedString {
+        var cursor = 0
+        FORMAT_PATTERN.findAll(text).forEach { match ->
+            if (match.range.first < cursor) return@forEach
+            append(text.substring(cursor, match.range.first))
+
+            val bold = match.groupValues[1]
+            val italic = match.groupValues[2]
+            val strike = match.groupValues[3]
+            val code = match.groupValues[4]
+
+            val content: String
+            val style: androidx.compose.ui.text.SpanStyle
+            when {
+                bold.isNotEmpty() -> {
+                    content = bold
+                    style = androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)
+                }
+                italic.isNotEmpty() -> {
+                    content = italic
+                    style = androidx.compose.ui.text.SpanStyle(
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    )
+                }
+                strike.isNotEmpty() -> {
+                    content = strike
+                    style = androidx.compose.ui.text.SpanStyle(
+                        textDecoration =
+                            androidx.compose.ui.text.style.TextDecoration.LineThrough
+                    )
+                }
+                else -> {
+                    content = code
+                    style = androidx.compose.ui.text.SpanStyle(
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                }
+            }
+            withStyle(style) { append(content) }
+            cursor = match.range.last + 1
+        }
+        append(text.substring(cursor))
+    }
+
+
+/**
+ * The small marks under a message that carry its private state.
+ *
+ * Saved, pinned, noted, reminded and scheduled are all things *you* did to a
+ * message rather than things that happened to it, so they read as notes in
+ * the margin - quiet, secondary, never mistaken for part of what was said.
+ */
+@Composable
+private fun MessageMarkers(msg: Message) {
+    val palette = LocalPalette.current
+    if (!msg.isBookmarked && !msg.isPinned && msg.note == null &&
+        msg.remindAt == null && msg.scheduledFor == null
+    ) return
+
+    Row(
+        Modifier.padding(top = 3.dp, start = 6.dp, end = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (msg.isBookmarked) Marker("\uD83D\uDD16", "Saved", palette.secondaryLabel)
+        if (msg.isPinned) Marker("\uD83D\uDCCC", "Pinned", palette.secondaryLabel)
+        msg.remindAt?.let {
+            Marker("\u23F0", com.leo.imessage.util.messageStamp(it), palette.accent)
+        }
+        msg.scheduledFor?.let {
+            Marker("\uD83D\uDD52", com.leo.imessage.util.messageStamp(it), palette.accent)
+        }
+    }
+
+    msg.note?.let { note ->
+        Row(
+            Modifier
+                .padding(top = 4.dp)
+                .widthIn(max = 270.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(palette.accent.copy(alpha = 0.13f))
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Text("\uD83D\uDCDD  ", style = MaterialTheme.typography.labelSmall)
+            Text(
+                text = note,
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.secondaryLabel,
+            )
+        }
+    }
+}
+
+@Composable
+private fun Marker(glyph: String, label: String, tint: androidx.compose.ui.graphics.Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(glyph, style = MaterialTheme.typography.labelSmall)
+        Text("  " + label, style = MaterialTheme.typography.labelSmall, color = tint)
     }
 }

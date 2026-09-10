@@ -1,6 +1,7 @@
 package com.leo.imessage.data
 
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -70,6 +71,63 @@ class MockBackend : MessagingBackend {
         _chats.value = _chats.value.map {
             if (it.id == chatId) it.copy(unreadCount = maxOf(it.unreadCount, 1)) else it
         }
+    }
+
+    override suspend fun setBookmarked(messageId: String, bookmarked: Boolean) {
+        updateMessage(messageId) { it.copy(isBookmarked = bookmarked) }
+    }
+
+    override suspend fun setMessagePinned(messageId: String, pinned: Boolean) {
+        updateMessage(messageId) { it.copy(isPinned = pinned) }
+    }
+
+    override suspend fun setNote(messageId: String, note: String?) {
+        updateMessage(messageId) { it.copy(note = note?.takeIf { n -> n.isNotBlank() }) }
+    }
+
+    override suspend fun setReminder(messageId: String, at: Long?) {
+        updateMessage(messageId) { it.copy(remindAt = at) }
+    }
+
+    override suspend fun scheduleSend(chatId: String, text: String, at: Long) {
+        val msg = Message(
+            id = UUID.randomUUID().toString(),
+            chatId = chatId,
+            text = text,
+            timestamp = at,
+            isFromMe = true,
+            senderId = me.id,
+            deliveryState = DeliveryState.SENDING,
+            scheduledFor = at,
+        )
+        _messages.value = _messages.value + msg
+
+        // Fires while the app is alive. A real implementation hands this to
+        // WorkManager so it survives a reboot - the shape of the API is the
+        // same either way, which is the part that matters now.
+        val wait = (at - System.currentTimeMillis()).coerceAtLeast(0)
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+            delay(wait)
+            val stillQueued = _messages.value.any {
+                it.id == msg.id && it.scheduledFor != null
+            }
+            if (stillQueued) resolveScheduled(msg.id, send = true)
+        }
+    }
+
+    override suspend fun resolveScheduled(messageId: String, send: Boolean) {
+        if (!send) {
+            _messages.value = _messages.value.filterNot { it.id == messageId }
+            return
+        }
+        updateMessage(messageId) {
+            it.copy(
+                scheduledFor = null,
+                timestamp = System.currentTimeMillis(),
+                deliveryState = DeliveryState.DELIVERED,
+            )
+        }
+        _messages.value.firstOrNull { it.id == messageId }?.let { touchChat(it.chatId, it) }
     }
 
     override suspend fun setPinned(chatId: String, pinned: Boolean) {

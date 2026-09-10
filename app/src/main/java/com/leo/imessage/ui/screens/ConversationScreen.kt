@@ -156,6 +156,12 @@ fun ConversationScreen(
     onDelete: (String) -> Unit = {},
     onMarkRead: () -> Unit = {},
     onShareLocation: () -> Unit = {},
+    onSetBookmarked: (String, Boolean) -> Unit = { _, _ -> },
+    onSetMessagePinned: (String, Boolean) -> Unit = { _, _ -> },
+    onSetNote: (String, String?) -> Unit = { _, _ -> },
+    onSetReminder: (String, Long?) -> Unit = { _, _ -> },
+    onScheduleSend: (String, Long) -> Unit = { _, _ -> },
+    onResolveScheduled: (String, Boolean) -> Unit = { _, _ -> },
     draft: String = "",
     onDraftChange: (String) -> Unit = {},
     onFaceTime: () -> Unit = {},
@@ -190,6 +196,10 @@ fun ConversationScreen(
     var showTray by remember { mutableStateOf(false) }
     var trayRecording by remember { mutableStateOf(false) }
     var showEffectPicker by remember { mutableStateOf(false) }
+    var noteFor by remember { mutableStateOf<Message?>(null) }
+    var remindFor by remember { mutableStateOf<Message?>(null) }
+    var showSendLater by remember { mutableStateOf(false) }
+    var pendingLater by remember { mutableStateOf("") }
     var searching by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var matchIndex by remember { mutableStateOf(0) }
@@ -228,12 +238,16 @@ fun ConversationScreen(
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     androidx.activity.compose.BackHandler(
         enabled = threadRoot != null || menuFor != null || viewing != null ||
-            infoFor != null || showTray || replyingTo != null || showEffectPicker || searching
+            infoFor != null || showTray || replyingTo != null || showEffectPicker ||
+            searching || noteFor != null || remindFor != null || showSendLater
     ) {
         when {
             viewing != null -> viewing = null
             infoFor != null -> infoFor = null
             showEffectPicker -> showEffectPicker = false
+            noteFor != null -> noteFor = null
+            remindFor != null -> remindFor = null
+            showSendLater -> showSendLater = false
             searching -> {
                 searching = false
                 searchQuery = ""
@@ -473,6 +487,10 @@ fun ConversationScreen(
                         showTray = true
                     }
                 },
+                onSendLater = { text ->
+                    pendingLater = text
+                    showSendLater = true
+                },
                 onRecordAudio = {
                     keyboard?.hide()
                     trayRecording = true
@@ -577,6 +595,52 @@ fun ConversationScreen(
                 onDismiss = { showEffectPicker = false },
                 hazeState = hazeState,
                 darkBase = if (background.brush != null) background.isDark else null,
+            )
+        }
+
+        noteFor?.let { message ->
+            com.leo.imessage.ui.components.GlassPrompt(
+                title = "Private Note",
+                initial = message.note.orEmpty(),
+                placeholder = "Only you will see this",
+                hazeState = hazeState,
+                darkBase = if (background.brush != null) background.isDark else null,
+                onConfirm = { onSetNote(message.id, it.ifBlank { null }) },
+                onDismiss = { noteFor = null },
+            )
+        }
+
+        remindFor?.let { message ->
+            val now = System.currentTimeMillis()
+            com.leo.imessage.ui.components.GlassChoice(
+                title = "Remind me about this",
+                hazeState = hazeState,
+                darkBase = if (background.brush != null) background.isDark else null,
+                options = listOf(
+                    "In 1 hour" to { onSetReminder(message.id, now + 3_600_000L) },
+                    "Tonight" to { onSetReminder(message.id, now + 6 * 3_600_000L) },
+                    "Tomorrow" to { onSetReminder(message.id, now + 24 * 3_600_000L) },
+                    "Clear reminder" to { onSetReminder(message.id, null) },
+                ),
+                onDismiss = { remindFor = null },
+            )
+        }
+
+        if (showSendLater) {
+            val now = System.currentTimeMillis()
+            com.leo.imessage.ui.components.GlassChoice(
+                title = "Send this later",
+                hazeState = hazeState,
+                darkBase = if (background.brush != null) background.isDark else null,
+                options = listOf(
+                    "In 1 hour" to { onScheduleSend(pendingLater, now + 3_600_000L) },
+                    "Tonight at 8" to { onScheduleSend(pendingLater, now + 6 * 3_600_000L) },
+                    "Tomorrow morning" to { onScheduleSend(pendingLater, now + 20 * 3_600_000L) },
+                ),
+                onDismiss = {
+                    showSendLater = false
+                    pendingLater = ""
+                },
             )
         }
 
