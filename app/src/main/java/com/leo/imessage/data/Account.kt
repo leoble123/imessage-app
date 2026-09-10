@@ -201,6 +201,27 @@ class AccountManager(context: Context) {
         )
     }
 
+    /**
+     * Pulls old conversations out of an OpenBubbles export.
+     *
+     * Worth having because iMessage never sends history: everything before
+     * this device registered exists only in whatever client had it before.
+     */
+    suspend fun importFromOpenBubbles(uri: android.net.Uri): OpenBubblesImport.Result =
+        withContext(Dispatchers.IO) {
+            val result = OpenBubblesImport.import(
+                context = appContext,
+                uri = uri,
+                store = store,
+                contacts = contacts,
+                myHandles = backend?.handles().orEmpty(),
+            )
+            // The backend is holding its own snapshot of the store, so it has
+            // to be told rather than discovering the new rows on next launch.
+            backend?.reloadFromStore()
+            result
+        }
+
     /** Called when the app goes to the background, so nothing is left unsaved. */
     suspend fun flush() = runCatching { store.flush() }
 

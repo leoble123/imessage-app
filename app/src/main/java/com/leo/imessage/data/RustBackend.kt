@@ -68,6 +68,16 @@ class RustBackend(
     private fun contactFor(handle: String): Contact =
         Handles.contact(handle, contacts?.nameFor(handle))
 
+    /**
+     * Re-reads the store after something outside the backend changed it, such
+     * as an import. The flows hold a snapshot, so without this the new rows
+     * exist on disk and nowhere on screen.
+     */
+    fun reloadFromStore() {
+        _chats.value = store.chats
+        _messages.value = store.messages
+    }
+
     /** Re-titles existing chats after contacts load or permission is granted. */
     suspend fun refreshContactNames() {
         val source = contacts ?: return

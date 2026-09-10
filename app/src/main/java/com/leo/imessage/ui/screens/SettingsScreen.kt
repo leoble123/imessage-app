@@ -44,6 +44,8 @@ import com.leo.imessage.ui.components.ListSection
 import com.leo.imessage.ui.components.SettingsDivider
 import com.leo.imessage.ui.components.SettingsRow
 import com.leo.imessage.ui.components.SettingsToggle
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.leo.imessage.data.AccountSummary
 import com.leo.imessage.ui.theme.LocalPalette
 
@@ -53,6 +55,8 @@ fun SettingsScreen(
     /** The account this app is signed into, or null when running on sample data. */
     account: AccountSummary? = null,
     onSignOut: () -> Unit = {},
+    /** Runs an OpenBubbles import and reports what it found. */
+    onImport: (suspend (android.net.Uri) -> String)? = null,
 ) {
     val palette = LocalPalette.current
     val hazeState = remember { HazeState() }
@@ -98,6 +102,58 @@ fun SettingsScreen(
                     showChevron = false,
                     destructive = account != null,
                     onClick = onSignOut,
+                )
+            }
+
+            if (onImport != null) {
+                val scope = rememberCoroutineScope()
+                var status by remember { mutableStateOf<String?>(null) }
+                var running by remember { mutableStateOf(false) }
+                val picker = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+                ) { uri ->
+                    if (uri == null) return@rememberLauncherForActivityResult
+                    running = true
+                    status = "Importing…"
+                    scope.launch {
+                        status = try {
+                            onImport(uri)
+                        } catch (e: Exception) {
+                            e.message ?: "That import didn't work."
+                        }
+                        running = false
+                    }
+                }
+
+                ListSection(header = "Messages") {
+                    SettingsRow(
+                        "Import from OpenBubbles",
+                        value = if (running) "Working…" else null,
+                        onClick = {
+                            if (!running) {
+                                // The export has no registered type, so filter
+                                // by nothing and let the file name speak.
+                                picker.launch(arrayOf("*/*"))
+                            }
+                        },
+                    )
+                    status?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = palette.secondaryLabel,
+                            modifier = Modifier.padding(
+                                start = 16.dp, end = 16.dp, bottom = 12.dp,
+                            ),
+                        )
+                    }
+                }
+                Text(
+                    "In OpenBubbles: Settings → Backup & Restore → Export Messages. " +
+                        "Then pick the BlueBubbles-chats file from your Downloads.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = palette.tertiaryLabel,
+                    modifier = Modifier.padding(horizontal = 32.dp),
                 )
             }
 

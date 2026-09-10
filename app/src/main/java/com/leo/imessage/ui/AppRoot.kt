@@ -56,6 +56,8 @@ fun AppRoot(
     onSignOut: () -> Unit = {},
     /** The phone's address book, for the New Message screen. */
     addressBook: List<com.leo.imessage.data.Contacts.SavedContact> = emptyList(),
+    /** Imports an OpenBubbles export, returning a line about what it found. */
+    onImport: (suspend (android.net.Uri) -> String)? = null,
 ) {
     val chats by backend.chats.collectAsState(initial = remember { backend.chatsNow() })
     val settings = com.leo.imessage.ui.theme.LocalSettings.current
@@ -380,6 +382,7 @@ fun AppRoot(
                     onBack = { showSettings = false },
                     account = accountSummary,
                     onSignOut = onSignOut,
+                    onImport = onImport,
                 )
             }
         }

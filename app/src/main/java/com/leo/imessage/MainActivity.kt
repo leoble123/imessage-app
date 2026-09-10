@@ -87,6 +87,20 @@ class MainActivity : ComponentActivity() {
                             onChatRequestHandled = { pendingChatId.value = null },
                             accountSummary = account.summary(),
                             addressBook = account.contacts.all(),
+                            onImport = { uri ->
+                                val r = account.importFromOpenBubbles(uri)
+                                if (r.messages == 0 && r.duplicates > 0) {
+                                    "Already imported - nothing new."
+                                } else {
+                                    buildString {
+                                        append("Imported ${r.messages} messages")
+                                        if (r.chats > 0) append(" across ${r.chats} conversations")
+                                        if (r.attachments > 0) append(", ${r.attachments} attachments")
+                                        append(".")
+                                        if (r.duplicates > 0) append(" Skipped ${r.duplicates} already here.")
+                                    }
+                                }
+                            },
                             onSignOut = {
                                 lifecycleScope.launch {
                                     account.signOut()
