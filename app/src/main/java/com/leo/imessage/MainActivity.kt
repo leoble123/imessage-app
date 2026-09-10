@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
@@ -69,6 +70,20 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             iMessageTheme(settings) {
+                // Before anything else: if the last run ended badly, say so
+                // and hand over the trace rather than starting up as if
+                // nothing happened.
+                var crash by androidx.compose.runtime.remember {
+                    androidx.compose.runtime.mutableStateOf(CrashReporter.lastCrash(this))
+                }
+                crash?.let { report ->
+                    com.leo.imessage.ui.CrashScreen(report) {
+                        CrashReporter.clear(this)
+                        crash = null
+                    }
+                    return@iMessageTheme
+                }
+
                 val state by account.state.collectAsState()
                 // Declared here so the overlay below can see it regardless of
                 // which branch rendered.

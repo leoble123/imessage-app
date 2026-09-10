@@ -423,11 +423,17 @@ fun AppRoot(
                                 showCompose = false
                                 composeError = null
                                 openChatId = id
-                            } catch (e: Exception) {
-                                // Shown in place rather than as a toast: the
-                                // fix is to edit what's in the field, which is
-                                // right there.
-                                composeError = e.message ?: "Couldn't start that conversation."
+                            } catch (e: Throwable) {
+                                // Throwable, not Exception. A missing class or
+                                // a failed static initialiser arrives as an
+                                // Error, which Exception does not catch - so
+                                // it escaped the coroutine and took the whole
+                                // app down instead of showing a message here.
+                                composeError = buildString {
+                                    append(e::class.java.simpleName)
+                                    e.message?.let { append(": ").append(it) }
+                                }
+                                android.util.Log.e("AppRoot", "startChat failed", e)
                             }
                         }
                     },

@@ -47,5 +47,9 @@ class EchoApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // Installed first, so a crash during the rest of startup is still
+        // captured. This app is sideloaded with no tools attached, so without
+        // it a crash report is "it closed".
+        CrashReporter.install(this)
     }
 }
