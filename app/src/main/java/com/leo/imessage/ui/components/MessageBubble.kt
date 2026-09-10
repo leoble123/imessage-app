@@ -222,6 +222,13 @@ fun MessageBubble(
                         else palette.outgoingBubbleFlat,
                         transmission,
                     )
+                // Colourful mode only recolours iMessage bubbles. Green
+                // means SMS and always has, so repainting it would trade real
+                // information for decoration.
+                settings.colorfulBubbles && msg.service != Service.SMS -> glassFill(
+                    com.leo.imessage.ui.theme.colorfulBubbleFor(colorSeed, palette.isDark),
+                    transmission,
+                )
                 else -> glassFill(
                     if (msg.service == Service.SMS) palette.smsBubbleColors
                     else palette.outgoingBubbleColors,

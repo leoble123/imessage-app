@@ -46,7 +46,12 @@ import kotlinx.coroutines.launch
  * playing a canned one.
  */
 @Composable
-fun AppRoot(backend: MessagingBackend) {
+fun AppRoot(
+    backend: MessagingBackend,
+    /** Conversation to jump straight into, from a tapped notification. */
+    openChatRequest: String? = null,
+    onChatRequestHandled: () -> Unit = {},
+) {
     val chats by backend.chats.collectAsState(initial = remember { backend.chatsNow() })
     val settings = com.leo.imessage.ui.theme.LocalSettings.current
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -70,6 +75,17 @@ fun AppRoot(backend: MessagingBackend) {
     val density = LocalDensity.current
     val haptics = com.leo.imessage.ui.components.rememberHaptics()
     val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
+
+    LaunchedEffect(openChatRequest) {
+        val requested = openChatRequest ?: return@LaunchedEffect
+        if (chats.any { it.id == requested }) {
+            showSettings = false
+            showCompose = false
+            showDetails = false
+            openChatId = requested
+        }
+        onChatRequestHandled()
+    }
 
     // Notify on anything that arrives while you're not looking at it.
     // Keyed on the newest inbound message id rather than on the chat list, so

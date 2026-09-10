@@ -309,6 +309,7 @@ private fun TrayRow(
                 translationX = -14.dp.toPx() * (1f - a)
             }
             .scaleFrom(scale)
+            .liquidRipple(maxRadius = 150.dp)
             .pointerInput(label) {
                 detectTapGestures(
                     onPress = {

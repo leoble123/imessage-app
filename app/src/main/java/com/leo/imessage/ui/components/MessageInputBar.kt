@@ -431,6 +431,7 @@ fun MessageInputBar(
                                 translationY = 4.dp.toPx() * (1f - a)
                             }
                             .underglow(palette.accent, radius = 10.dp, alpha = 0.45f)
+                            .liquidRipple(color = palette.accent, maxRadius = 80.dp)
                             .clip(CircleShape)
                             .background(palette.accent),
                         contentAlignment = Alignment.Center,

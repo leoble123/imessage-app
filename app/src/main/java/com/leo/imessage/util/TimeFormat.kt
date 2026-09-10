@@ -41,3 +41,27 @@ fun conversationTimestampHeader(ms: Long, now: Long = System.currentTimeMillis()
 /** Compact stamp shown by the swipe-for-timestamps gesture. */
 fun messageStamp(ms: Long): String =
     SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(ms))
+
+/** Today at a given wall-clock time, rolled to tomorrow if already past. */
+fun todayAt(hour: Int, minute: Int): Long {
+    val cal = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, hour)
+        set(java.util.Calendar.MINUTE, minute)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }
+    if (cal.timeInMillis <= System.currentTimeMillis()) {
+        cal.add(java.util.Calendar.DAY_OF_MONTH, 1)
+    }
+    return cal.timeInMillis
+}
+
+/** Tomorrow at a given wall-clock time. */
+fun tomorrowAt(hour: Int, minute: Int): Long =
+    java.util.Calendar.getInstance().apply {
+        add(java.util.Calendar.DAY_OF_MONTH, 1)
+        set(java.util.Calendar.HOUR_OF_DAY, hour)
+        set(java.util.Calendar.MINUTE, minute)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis

@@ -51,6 +51,7 @@ import dev.chrisbanes.haze.HazeState
 import com.leo.imessage.ui.components.GroupAvatar
 import com.leo.imessage.ui.components.SwipeAction
 import com.leo.imessage.ui.components.SwipeableRow
+import com.leo.imessage.ui.components.liquidRipple
 import com.leo.imessage.ui.components.underglow
 import com.leo.imessage.ui.theme.AppleColors
 import com.leo.imessage.ui.theme.LocalPalette
@@ -125,7 +126,11 @@ fun ChatListScreen(
             val pinned = visibleChats.filter { it.isPinned }
             val rest = visibleChats.filterNot { it.isPinned }
 
-            if (pinned.isNotEmpty()) {
+            // Edit mode flattens the pins back into rows. As circles they
+            // have nowhere to put a checkbox, so half the list simply could
+            // not be selected - which is why only the unpinned chats
+            // responded.
+            if (pinned.isNotEmpty() && !editing) {
                 item(key = "pins") {
                     com.leo.imessage.ui.components.PinnedChatsRow(
                         pinned = pinned,
@@ -175,8 +180,9 @@ fun ChatListScreen(
                 }
             }
 
+            val rows = if (editing) visibleChats else rest
             items(
-                items = rest,
+                items = rows,
                 key = { it.id },
                 contentType = { "chat" },
             ) { chat ->
@@ -270,6 +276,22 @@ fun ChatListScreen(
                         },
                     )
                     Spacer(Modifier.weight(1f))
+                    if (editing) {
+                        Text(
+                            text = if (selected.size == visibleChats.size) "None" else "All",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = palette.accent,
+                            modifier = Modifier
+                                .clickable {
+                                    if (selected.size == visibleChats.size) selected.clear()
+                                    else {
+                                        selected.clear()
+                                        selected.addAll(visibleChats.map { it.id })
+                                    }
+                                }
+                                .padding(end = 16.dp),
+                        )
+                    }
                     if (editing && selected.isNotEmpty()) {
                         Text(
                             text = "Delete (${selected.size})",
@@ -457,6 +479,7 @@ private fun ChatRow(
         Row(
             Modifier
                 .background(pressTint)
+                .liquidRipple(maxRadius = 240.dp)
                 .pointerInput(chat.id) {
                     detectTapGestures(
                         onPress = {

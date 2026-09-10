@@ -12,6 +12,15 @@ import com.leo.imessage.ui.theme.iMessageTheme
 
 class MainActivity : ComponentActivity() {
 
+    /**
+     * Which conversation to open on launch.
+     *
+     * Held as state rather than read once, so a notification tapped while the
+     * app is already running reopens the right thread through onNewIntent
+     * instead of dropping you wherever you happened to be.
+     */
+    private val pendingChatId = androidx.compose.runtime.mutableStateOf<String?>(null)
+
     // Swapped for the rustpush-backed implementation once the Rust core is
     // wired in; every screen is written against the MessagingBackend
     // interface, so nothing above this line changes when that happens.
@@ -31,10 +40,26 @@ class MainActivity : ComponentActivity() {
         // UI uses, so a reply from the shade lands in the transcript.
         com.leo.imessage.notify.NotificationActionReceiver.backendProvider = backend
         requestNotificationPermission()
+        pendingChatId.value = intent?.getStringExtra(
+            com.leo.imessage.notify.Notifier.EXTRA_CHAT_ID
+        )
+
         setContent {
             iMessageTheme(settings) {
-                AppRoot(backend)
+                AppRoot(
+                    backend = backend,
+                    openChatRequest = pendingChatId.value,
+                    onChatRequestHandled = { pendingChatId.value = null },
+                )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra(com.leo.imessage.notify.Notifier.EXTRA_CHAT_ID)?.let {
+            pendingChatId.value = it
         }
     }
 

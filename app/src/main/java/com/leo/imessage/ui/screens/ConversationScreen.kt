@@ -236,6 +236,7 @@ fun ConversationScreen(
     val composerFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     androidx.activity.compose.BackHandler(
         enabled = threadRoot != null || menuFor != null || viewing != null ||
             infoFor != null || showTray || replyingTo != null || showEffectPicker ||
@@ -618,8 +619,18 @@ fun ConversationScreen(
                 darkBase = if (background.brush != null) background.isDark else null,
                 options = listOf(
                     "In 1 hour" to { onSetReminder(message.id, now + 3_600_000L) },
-                    "Tonight" to { onSetReminder(message.id, now + 6 * 3_600_000L) },
-                    "Tomorrow" to { onSetReminder(message.id, now + 24 * 3_600_000L) },
+                    "Tonight at 8" to {
+                        onSetReminder(message.id, com.leo.imessage.util.todayAt(20, 0))
+                    },
+                    "Tomorrow at 9" to {
+                        onSetReminder(message.id, com.leo.imessage.util.tomorrowAt(9, 0))
+                    },
+                    "Pick a date & time…" to {
+                        val id = message.id
+                        com.leo.imessage.ui.components.pickDateTime(context) { at ->
+                            onSetReminder(id, at)
+                        }
+                    },
                     "Clear reminder" to { onSetReminder(message.id, null) },
                 ),
                 onDismiss = { remindFor = null },
@@ -634,8 +645,18 @@ fun ConversationScreen(
                 darkBase = if (background.brush != null) background.isDark else null,
                 options = listOf(
                     "In 1 hour" to { onScheduleSend(pendingLater, now + 3_600_000L) },
-                    "Tonight at 8" to { onScheduleSend(pendingLater, now + 6 * 3_600_000L) },
-                    "Tomorrow morning" to { onScheduleSend(pendingLater, now + 20 * 3_600_000L) },
+                    "Tonight at 8" to {
+                        onScheduleSend(pendingLater, com.leo.imessage.util.todayAt(20, 0))
+                    },
+                    "Tomorrow at 9" to {
+                        onScheduleSend(pendingLater, com.leo.imessage.util.tomorrowAt(9, 0))
+                    },
+                    "Pick a date & time…" to {
+                        val text = pendingLater
+                        com.leo.imessage.ui.components.pickDateTime(context) { at ->
+                            onScheduleSend(text, at)
+                        }
+                    },
                 ),
                 onDismiss = {
                     showSendLater = false
