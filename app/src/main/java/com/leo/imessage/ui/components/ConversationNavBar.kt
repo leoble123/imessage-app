@@ -119,7 +119,13 @@ fun ConversationNavBar(
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
                     Text(
-                        text = chat.displayName.substringBefore(' '),
+                        // First name only for people, whole thing otherwise.
+                        // A formatted number is full of spaces, so trimming at
+                        // the first one turns "+1 815 555 0123" into "+1".
+                        text = chat.displayName.let { name ->
+                            if (name.count { it.isDigit() } >= 5) name
+                            else name.substringBefore(' ')
+                        },
                         style = MaterialTheme.typography.labelLarge,
                         color = palette.label,
                         maxLines = 1,

@@ -145,7 +145,17 @@ class AccountManager(context: Context) {
             // only, and Apple silently never routes calls to it. Repaired here
             // rather than forcing a full sign-in, since the saved credentials
             // are enough to re-register on their own.
-            if (core.needsServiceRefresh()) {
+            // Deliberately at most once a day, even if it doesn't take.
+            //
+            // Apple rate-limits registrations, and its own error text warns
+            // that re-registering to "fix" a problem gets the account
+            // temporarily blocked from iMessage. Retrying on every launch is
+            // exactly that pattern, and it would turn a passing rate limit
+            // into a lasting one.
+            val lastAttempt = prefs.getLong(KEY_LAST_REREGISTER, 0L)
+            val longEnoughAgo = System.currentTimeMillis() - lastAttempt > REREGISTER_INTERVAL_MS
+            if (core.needsServiceRefresh() && longEnoughAgo) {
+                prefs.edit().putLong(KEY_LAST_REREGISTER, System.currentTimeMillis()).apply()
                 _state.value = AccountState.Registering
                 runCatching { core.completeRegistration() }
                     .onFailure { Log.w(TAG, "couldn't refresh registration", it) }
@@ -313,6 +323,9 @@ class AccountManager(context: Context) {
     private companion object {
         const val TAG = "AccountManager"
         const val KEY_HOST = "relay_host"
+        const val KEY_LAST_REREGISTER = "last_reregister"
+        /** Apple's rate limits are measured in hours, so this is generous. */
+        const val REREGISTER_INTERVAL_MS = 24 * 60 * 60 * 1000L
         const val KEY_CODE = "relay_code"
     }
 }
