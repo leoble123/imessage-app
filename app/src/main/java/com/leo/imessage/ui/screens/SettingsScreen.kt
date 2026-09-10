@@ -40,10 +40,7 @@ import com.leo.imessage.ui.theme.LocalPalette
 fun SettingsScreen(onBack: () -> Unit) {
     val palette = LocalPalette.current
     val hazeState = remember { HazeState() }
-    var readReceipts by remember { mutableStateOf(true) }
-    var typingIndicators by remember { mutableStateOf(true) }
-    var effects by remember { mutableStateOf(true) }
-    var haptics by remember { mutableStateOf(true) }
+    val settings = com.leo.imessage.ui.theme.LocalSettings.current
 
     Box(Modifier.fillMaxSize().background(palette.groupedBackground)) {
         Column(
@@ -51,29 +48,109 @@ fun SettingsScreen(onBack: () -> Unit) {
                 .fillMaxSize()
                 .glassSource(hazeState)
                 .verticalScroll(rememberScrollState())
-                .padding(top = 100.dp, bottom = 32.dp),
+                .padding(top = 100.dp, bottom = 40.dp),
         ) {
             ListSection(header = "Account") {
                 SettingsRow("Apple Account", value = "Not signed in")
                 SettingsDivider()
                 SettingsRow("Relay Server", value = "Not set")
+                SettingsDivider()
+                SettingsRow("Phone Number", value = "Not linked")
+            }
+
+            ListSection(header = "Appearance") {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        "Theme",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = palette.label,
+                        modifier = Modifier.padding(bottom = 9.dp),
+                    )
+                    com.leo.imessage.ui.components.SegmentedControl(
+                        options = listOf(
+                            com.leo.imessage.ui.theme.ThemeMode.SYSTEM to "System",
+                            com.leo.imessage.ui.theme.ThemeMode.LIGHT to "Light",
+                            com.leo.imessage.ui.theme.ThemeMode.DARK to "Dark",
+                        ),
+                        selected = settings.themeMode,
+                        onSelect = { settings.themeMode = it },
+                    )
+                }
+                SettingsDivider()
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        "Bubble Style",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = palette.label,
+                        modifier = Modifier.padding(bottom = 9.dp),
+                    )
+                    com.leo.imessage.ui.components.SegmentedControl(
+                        options = listOf(
+                            com.leo.imessage.ui.theme.BubbleStyle.GRADIENT to "Gradient",
+                            com.leo.imessage.ui.theme.BubbleStyle.FLAT to "Flat",
+                        ),
+                        selected = settings.bubbleStyle,
+                        onSelect = { settings.bubbleStyle = it },
+                    )
+                }
+                SettingsDivider()
+                SettingsToggle("Compact Chat List", settings.compactChatList) {
+                    settings.compactChatList = it
+                }
             }
 
             ListSection(
                 header = "Messaging",
                 footer = "Turning off read receipts also hides yours from others.",
             ) {
-                SettingsToggle("Send Read Receipts", readReceipts) { readReceipts = it }
+                SettingsToggle("Send Read Receipts", settings.sendReadReceipts) {
+                    settings.sendReadReceipts = it
+                }
                 SettingsDivider()
-                SettingsToggle("Show Typing Indicators", typingIndicators) { typingIndicators = it }
+                SettingsToggle("Show Typing Indicators", settings.showTypingIndicators) {
+                    settings.showTypingIndicators = it
+                }
                 SettingsDivider()
-                SettingsToggle("Play Message Effects", effects) { effects = it }
+                SettingsToggle("Send with Return Key", settings.sendWithReturn) {
+                    settings.sendWithReturn = it
+                }
+                SettingsDivider()
+                SettingsRow("Blocked Contacts", value = "0")
             }
 
-            ListSection(header = "Appearance") {
-                SettingsRow("Theme", value = "System")
+            ListSection(
+                header = "Gestures & Motion",
+                footer = "Reduce Motion trims spring animations for a calmer, faster feel.",
+            ) {
+                SettingsToggle("Swipe to Reply", settings.swipeToReply) {
+                    settings.swipeToReply = it
+                }
                 SettingsDivider()
-                SettingsToggle("Haptic Feedback", haptics) { haptics = it }
+                SettingsToggle("Swipe for Timestamps", settings.showTimestampsOnSwipe) {
+                    settings.showTimestampsOnSwipe = it
+                }
+                SettingsDivider()
+                SettingsToggle("Play Message Effects", settings.playEffects) {
+                    settings.playEffects = it
+                }
+                SettingsDivider()
+                SettingsToggle("Haptic Feedback", settings.hapticsEnabled) {
+                    settings.hapticsEnabled = it
+                }
+                SettingsDivider()
+                SettingsToggle("Reduce Motion", settings.lowPowerAnimations) {
+                    settings.lowPowerAnimations = it
+                }
+            }
+
+            ListSection(header = "Notifications") {
+                SettingsToggle("Unread Badges", settings.showUnreadBadges) {
+                    settings.showUnreadBadges = it
+                }
+                SettingsDivider()
+                SettingsRow("Notification Sound", value = "Default")
+                SettingsDivider()
+                SettingsRow("Focus Filters", value = "Off")
             }
 
             ListSection(
@@ -83,6 +160,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SettingsRow("Version", value = "0.1.0", showChevron = false)
                 SettingsDivider()
                 SettingsRow("Backend", value = "Mock", showChevron = false)
+                SettingsDivider()
+                SettingsRow("Export Logs")
             }
         }
 

@@ -14,12 +14,13 @@ class MainActivity : ComponentActivity() {
     // wired in; every screen is written against the MessagingBackend
     // interface, so nothing above this line changes when that happens.
     private val backend by lazy { MockBackend() }
+    private val settings = com.leo.imessage.ui.theme.AppSettings()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            iMessageTheme {
+            iMessageTheme(settings) {
                 AppRoot(backend)
             }
         }

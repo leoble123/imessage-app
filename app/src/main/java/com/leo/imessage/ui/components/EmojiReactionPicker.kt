@@ -86,11 +86,7 @@ fun TapbackRail(
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     onPickClassic(kind)
                 }) {
-                    TapbackIcon(
-                        kind = kind,
-                        color = palette.secondaryLabel,
-                        modifier = Modifier.size(19.dp),
-                    )
+                    TapbackIcon(kind = kind, fontSize = 22.sp)
                 }
             }
             TapbackButton(onClick = {

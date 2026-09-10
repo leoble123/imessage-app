@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +39,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.leo.imessage.data.DeliveryState
 import com.leo.imessage.data.GroupPosition
 import com.leo.imessage.data.Message
@@ -46,6 +48,9 @@ import com.leo.imessage.data.Service
 import com.leo.imessage.data.TapbackKind
 import com.leo.imessage.ui.theme.LocalPalette
 import com.leo.imessage.ui.theme.Motion
+
+/** Messages already rendered once, so entry animations only play for new ones. */
+private val seenMessages = mutableSetOf<String>()
 
 @Composable
 fun MessageBubble(
@@ -57,9 +62,23 @@ fun MessageBubble(
     timestampReveal: Float = 0f,
 ) {
     val palette = LocalPalette.current
+    val settings = com.leo.imessage.ui.theme.LocalSettings.current
     val msg = row.message
     val outgoing = msg.isFromMe
     val haptics = LocalHapticFeedback.current
+
+    // Entry animation: a newly-arrived bubble springs up from the composer.
+    // Messages already on screen when the thread opened must not animate, or
+    // every scroll turns into a parade of bubbles flying in.
+    val isNew = remember(msg.id) { msg.id !in seenMessages }
+    val entry = remember(msg.id) { androidx.compose.animation.core.Animatable(if (isNew) 0f else 1f) }
+    LaunchedEffect(msg.id) {
+        if (isNew) {
+            seenMessages += msg.id
+            if (settings.lowPowerAnimations) entry.snapTo(1f)
+            else entry.animateTo(1f, Motion.bouncy())
+        }
+    }
 
     var pressed by remember { mutableStateOf(false) }
     val pressScale by animateFloatAsState(
@@ -87,7 +106,19 @@ fun MessageBubble(
       Column(
         modifier = Modifier
             .fillMaxWidth()
-            .graphicsLayer { translationX = -64.dp.toPx() * timestampReveal },
+            .graphicsLayer {
+                translationX = -64.dp.toPx() * timestampReveal
+                // Springs up and scales out from the composer's corner.
+                translationY = 26.dp.toPx() * (1f - entry.value)
+                val s = 0.62f + 0.38f * entry.value
+                scaleX = s
+                scaleY = s
+                alpha = entry.value.coerceIn(0f, 1f)
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(
+                    if (outgoing) 1f else 0f,
+                    1f,
+                )
+            },
         horizontalAlignment = if (outgoing) Alignment.End else Alignment.Start,
     ) {
         if (row.showSenderName && senderName != null && !outgoing) {
@@ -122,16 +153,29 @@ fun MessageBubble(
             } else {
                 Box(
                     modifier = Modifier
-                        .bubbleEffect(msg.effect, msg.id)
+                        .bubbleEffect(
+                            if (settings.playEffects) msg.effect
+                            else com.leo.imessage.data.MessageEffect.NONE,
+                            msg.id,
+                        )
                         .scale(pressScale)
                         .widthIn(max = 290.dp)
                         .clip(BubbleShape(outgoing, row.groupPosition))
                         .then(
                             if (outgoing) {
-                                Modifier.background(
-                                    if (msg.service == Service.SMS) palette.smsBubble
-                                    else palette.outgoingBubble
-                                )
+                                val flat = settings.bubbleStyle ==
+                                    com.leo.imessage.ui.theme.BubbleStyle.FLAT
+                                if (flat) {
+                                    Modifier.background(
+                                        if (msg.service == Service.SMS) palette.smsBubbleFlat
+                                        else palette.outgoingBubbleFlat
+                                    )
+                                } else {
+                                    Modifier.background(
+                                        if (msg.service == Service.SMS) palette.smsBubble
+                                        else palette.outgoingBubble
+                                    )
+                                }
                             } else {
                                 Modifier.background(palette.incomingBubble)
                             }
@@ -296,8 +340,7 @@ private fun TapbackCluster(
                 TapbackIcon(
                     kind = tb.kind,
                     emoji = tb.emoji,
-                    color = if (outgoing) palette.incomingText else Color.White,
-                    modifier = Modifier.size(14.dp),
+                    fontSize = 13.sp,
                 )
             }
         }

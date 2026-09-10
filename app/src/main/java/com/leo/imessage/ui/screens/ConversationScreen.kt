@@ -159,10 +159,16 @@ fun ConversationScreen(
                     ?: Modifier.background(palette.background)
             )
     ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .imePadding()
+        ) {
         LazyColumn(
             state = listState,
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .fillMaxWidth()
                 .glassSource(hazeState)
                 .pointerInput(Unit) {
                     detectHorizontalDragGestures(
@@ -180,7 +186,7 @@ fun ConversationScreen(
                         }
                     }
                 },
-            contentPadding = PaddingValues(top = 104.dp, bottom = 90.dp, start = 12.dp, end = 12.dp),
+            contentPadding = PaddingValues(top = 104.dp, bottom = 8.dp, start = 12.dp, end = 12.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             items(rows, key = { it.message.id }) { row ->
@@ -225,6 +231,17 @@ fun ConversationScreen(
                     }
                 }
             }
+        }
+
+            MessageInputBar(
+                replyingTo = replyingTo,
+                onCancelReply = { replyingTo = null },
+                onSend = { text, effect ->
+                    onSend(text, effect)
+                    replyingTo = null
+                },
+                hazeState = hazeState,
+            )
         }
 
         // Nav bar with the contact's avatar, as in Messages.
@@ -275,16 +292,6 @@ fun ConversationScreen(
             }
         }
 
-        MessageInputBar(
-            replyingTo = replyingTo,
-            onCancelReply = { replyingTo = null },
-            onSend = { text, effect ->
-                onSend(text, effect)
-                replyingTo = null
-            },
-            hazeState = hazeState,
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
 
         val focused = menuFor
         com.leo.imessage.ui.components.MessageContextMenu(

@@ -66,9 +66,14 @@ private fun appleTypography(): Typography {
 
 @Composable
 fun iMessageTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    settings: AppSettings,
     content: @Composable () -> Unit,
 ) {
+    val darkTheme = when (settings.themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
     val palette = if (darkTheme) AppPalette.Dark else AppPalette.Light
 
     val colorScheme = if (darkTheme) {
@@ -97,7 +102,10 @@ fun iMessageTheme(
         }
     }
 
-    CompositionLocalProvider(LocalPalette provides palette) {
+    CompositionLocalProvider(
+        LocalPalette provides palette,
+        LocalSettings provides settings,
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = appleTypography(),

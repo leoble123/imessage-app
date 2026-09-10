@@ -1,10 +1,7 @@
 package com.leo.imessage.ui.components
 
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
@@ -14,14 +11,14 @@ import androidx.compose.ui.unit.dp
 import com.leo.imessage.data.GroupPosition
 
 /**
- * The iMessage bubble, including its tail.
+ * The iMessage bubble, drawn as a single continuous path.
  *
- * Two details matter for this to read as the real thing rather than a rounded
- * rectangle with a triangle stuck on:
- *  - the tail is a curl, not a triangle: it sweeps out of the bubble's corner
- *    and hooks back in, so the silhouette is continuous.
- *  - only the last bubble in a same-sender run gets a tail; the others tuck
- *    their inner corner in tight (small radius) so a run reads as one block.
+ * The previous version composed the body and the tail as two separate shapes.
+ * That leaves a visible notch where they meet: the body's bottom corner curves
+ * away with an 18dp radius while the tail attaches at the baseline, so a
+ * sliver of background shows through between them. Drawing the whole
+ * silhouette in one pass - walking the outline and bending out into the tail
+ * where it belongs - means there is no seam to show.
  */
 class BubbleShape(
     private val outgoing: Boolean,
@@ -33,98 +30,90 @@ class BubbleShape(
         layoutDirection: LayoutDirection,
         density: Density,
     ): Outline {
-        val r = with(density) { 18.dp.toPx() }
-        val tight = with(density) { 6.dp.toPx() }
+        val r = with(density) { 18.dp.toPx() }.coerceAtMost(size.height / 2f)
+        val tight = with(density) { 5.dp.toPx() }
+        val tailW = with(density) { 7.dp.toPx() }
+
         val hasTail = group == GroupPosition.SINGLE || group == GroupPosition.LAST
+        // Corner facing the sender's edge tucks in for runs, so a group of
+        // bubbles reads as one block.
+        val innerTop = if (group == GroupPosition.MIDDLE || group == GroupPosition.LAST) tight else r
+        val innerBottom = if (group == GroupPosition.MIDDLE || group == GroupPosition.FIRST) tight else r
 
-        // Corner radii, in order: topStart, topEnd, bottomEnd, bottomStart.
-        // The "inner" side is the one facing the sender's edge of the screen.
-        val topInner = if (group == GroupPosition.MIDDLE || group == GroupPosition.LAST) tight else r
-        val bottomInner = if (group == GroupPosition.MIDDLE || group == GroupPosition.FIRST) tight else r
-
+        val w = size.width
+        val h = size.height
         val path = Path()
 
-        if (!hasTail) {
-            val rr = if (outgoing) {
-                RoundRect(
-                    Rect(Offset.Zero, size),
-                    topLeft = CornerRadius(r),
-                    topRight = CornerRadius(topInner),
-                    bottomRight = CornerRadius(bottomInner),
-                    bottomLeft = CornerRadius(r),
+        // Body occupies the full width; the tail bulges beyond it.
+        val left = if (outgoing) 0f else tailW
+        val right = if (outgoing) w - tailW else w
+
+        // k: cubic control-point factor that approximates a quarter circle.
+        val k = 0.5523f
+
+        if (outgoing) {
+            val trR = innerTop
+            val brR = if (hasTail) 0f else innerBottom
+
+            path.moveTo(left + r, 0f)
+            path.lineTo(right - trR, 0f)
+            if (trR > 0f) path.cubicTo(right - trR + trR * k, 0f, right, trR - trR * k, right, trR)
+
+            if (hasTail) {
+                // Down the right edge, then bow out into the tail and hook
+                // back in along the baseline.
+                path.lineTo(right, h - tailW * 1.75f)
+                path.cubicTo(
+                    right, h - tailW * 0.55f,
+                    right + tailW * 0.55f, h - tailW * 0.30f,
+                    right + tailW, h,
+                )
+                path.cubicTo(
+                    right + tailW * 0.30f, h,
+                    right - tailW * 0.10f, h,
+                    right - tailW * 1.30f, h,
                 )
             } else {
-                RoundRect(
-                    Rect(Offset.Zero, size),
-                    topLeft = CornerRadius(topInner),
-                    topRight = CornerRadius(r),
-                    bottomRight = CornerRadius(r),
-                    bottomLeft = CornerRadius(bottomInner),
-                )
+                path.lineTo(right, h - brR)
+                if (brR > 0f) path.cubicTo(right, h - brR + brR * k, right - brR + brR * k, h, right - brR, h)
             }
-            path.addRoundRect(rr)
-            return Outline.Generic(path)
-        }
 
-        // Bubble body inset from the edge to leave room for the tail curl.
-        val tailW = with(density) { 6.dp.toPx() }
-        val bodyLeft = if (outgoing) 0f else tailW
-        val bodyRight = if (outgoing) size.width - tailW else size.width
-        val h = size.height
-
-        val body = if (outgoing) {
-            RoundRect(
-                Rect(bodyLeft, 0f, bodyRight, h),
-                topLeft = CornerRadius(r),
-                topRight = CornerRadius(topInner),
-                bottomRight = CornerRadius(r),
-                bottomLeft = CornerRadius(r),
-            )
+            path.lineTo(left + r, h)
+            path.cubicTo(left + r - r * k, h, left, h - r + r * k, left, h - r)
+            path.lineTo(left, r)
+            path.cubicTo(left, r - r * k, left + r - r * k, 0f, left + r, 0f)
         } else {
-            RoundRect(
-                Rect(bodyLeft, 0f, bodyRight, h),
-                topLeft = CornerRadius(topInner),
-                topRight = CornerRadius(r),
-                bottomRight = CornerRadius(r),
-                bottomLeft = CornerRadius(r),
-            )
-        }
-        path.addRoundRect(body)
+            val tlR = innerTop
+            val blR = if (hasTail) 0f else innerBottom
 
-        // The curl. Starts partway up the bubble's side, bows outward past the
-        // edge, then hooks back in toward the baseline - the same silhouette
-        // as the tail on a speech bubble drawn in one stroke.
-        val tail = Path()
-        if (outgoing) {
-            val x = bodyRight
-            tail.moveTo(x - r * 0.9f, h)
-            tail.cubicTo(
-                x + tailW * 0.15f, h,
-                x + tailW * 0.95f, h - tailW * 0.55f,
-                x + tailW, h - tailW * 1.6f,
-            )
-            tail.cubicTo(
-                x + tailW * 0.55f, h - tailW * 0.2f,
-                x + tailW * 0.2f, h,
-                x - r * 0.2f, h,
-            )
-        } else {
-            val x = bodyLeft
-            tail.moveTo(x + r * 0.9f, h)
-            tail.cubicTo(
-                x - tailW * 0.15f, h,
-                x - tailW * 0.95f, h - tailW * 0.55f,
-                x - tailW, h - tailW * 1.6f,
-            )
-            tail.cubicTo(
-                x - tailW * 0.55f, h - tailW * 0.2f,
-                x - tailW * 0.2f, h,
-                x + r * 0.2f, h,
-            )
-        }
-        tail.close()
-        path.addPath(tail)
+            path.moveTo(left + tlR, 0f)
+            path.lineTo(right - r, 0f)
+            path.cubicTo(right - r + r * k, 0f, right, r - r * k, right, r)
+            path.lineTo(right, h - r)
+            path.cubicTo(right, h - r + r * k, right - r + r * k, h, right - r, h)
 
+            if (hasTail) {
+                path.lineTo(left + tailW * 1.30f, h)
+                path.cubicTo(
+                    left + tailW * 0.10f, h,
+                    left - tailW * 0.30f, h,
+                    left - tailW, h,
+                )
+                path.cubicTo(
+                    left - tailW * 0.55f, h - tailW * 0.30f,
+                    left, h - tailW * 0.55f,
+                    left, h - tailW * 1.75f,
+                )
+            } else {
+                path.lineTo(left + blR, h)
+                if (blR > 0f) path.cubicTo(left + blR - blR * k, h, left, h - blR + blR * k, left, h - blR)
+            }
+
+            path.lineTo(left, tlR)
+            if (tlR > 0f) path.cubicTo(left, tlR - tlR * k, left + tlR - tlR * k, 0f, left + tlR, 0f)
+        }
+
+        path.close()
         return Outline.Generic(path)
     }
 }

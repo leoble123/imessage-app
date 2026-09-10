@@ -91,7 +91,6 @@ fun MessageInputBar(
     GlassSurface(
         modifier = modifier
             .fillMaxWidth()
-            .imePadding()
             .navigationBarsPadding(),
         hazeState = hazeState,
         hairlineAtTop = true,
