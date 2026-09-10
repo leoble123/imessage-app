@@ -125,6 +125,7 @@ fun ConversationScreen(
     onEmojiTapback: (String, String) -> Unit = { _, _ -> },
     onUnsend: (String) -> Unit = {},
     onOpenDetails: () -> Unit = {},
+    onEdit: (String, String) -> Unit = { _, _ -> },
     backgroundId: String = "none",
 ) {
     val palette = LocalPalette.current
@@ -134,6 +135,12 @@ fun ConversationScreen(
     val rows = remember(messages) { buildRows(messages, chat.isGroup) }
     var menuFor by remember { mutableStateOf<MessageRow?>(null) }
     var replyingTo by remember { mutableStateOf<Message?>(null) }
+    var editingMessage by remember { mutableStateOf<Message?>(null) }
+    // The message whose reply chain is being viewed, if any.
+    var threadRoot by remember { mutableStateOf<Message?>(null) }
+    val composerFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val byId = remember(messages) { messages.associateBy { it.id } }
     // Swipe the thread left to uncover per-message timestamps.
     val stampReveal = remember { androidx.compose.animation.core.Animatable(0f) }
 
@@ -210,7 +217,11 @@ fun ConversationScreen(
                     ?.substringBefore(' ')
 
                 com.leo.imessage.ui.components.SwipeToReply(
-                    onReply = { replyingTo = row.message },
+                    onReply = {
+                        replyingTo = row.message
+                        composerFocus.requestFocus()
+                        keyboard?.show()
+                    },
                     modifier = Modifier.padding(
                         top = if (row.groupPosition == GroupPosition.SINGLE ||
                             row.groupPosition == GroupPosition.FIRST
@@ -219,10 +230,24 @@ fun ConversationScreen(
                 ) {
                     MessageBubble(
                         row = row,
+                        onCustomBackground = background.brush != null,
                         sender = chat.participants.firstOrNull { it.id == row.message.senderId },
                         senderName = senderName,
                         onLongPress = { menuFor = row },
                         timestampReveal = stampReveal.value,
+                        replyParent = row.message.replyToId?.let { byId[it] },
+                        replyParentSender = row.message.replyToId
+                            ?.let { byId[it] }
+                            ?.let { parent ->
+                                if (parent.isFromMe) "You"
+                                else chat.participants
+                                    .firstOrNull { it.id == parent.senderId }
+                                    ?.displayName
+                                    ?.substringBefore(' ')
+                            },
+                        onOpenThread = {
+                            threadRoot = row.message.replyToId?.let { byId[it] }
+                        },
                     )
                 }
             }
@@ -244,16 +269,35 @@ fun ConversationScreen(
                     replyingTo = null
                 },
                 hazeState = hazeState,
+                darkBase = if (background.brush != null) background.isDark else null,
+                editing = editingMessage,
+                focusRequester = composerFocus,
+                onCancelEdit = { editingMessage = null },
+                onCommitEdit = { newText ->
+                    editingMessage?.let { onEdit(it.id, newText) }
+                    editingMessage = null
+                },
             )
         }
 
         ConversationNavBar(
             chat = chat,
             hazeState = hazeState,
+            darkBase = if (background.brush != null) background.isDark else null,
             onBack = onBack,
             onOpenDetails = onOpenDetails,
             modifier = Modifier.align(Alignment.TopCenter),
         )
+
+        val root = threadRoot
+        if (root != null) {
+            com.leo.imessage.ui.components.ReplyThreadSheet(
+                root = root,
+                replies = messages.filter { it.replyToId == root.id },
+                chat = chat,
+                onDismiss = { threadRoot = null },
+            )
+        }
 
         val focused = menuFor
         com.leo.imessage.ui.components.MessageContextMenu(
@@ -268,10 +312,22 @@ fun ConversationScreen(
                 menuFor = null
             },
             actions = buildList {
-                add(com.leo.imessage.ui.components.MenuAction("Reply") {})
+                add(
+                    com.leo.imessage.ui.components.MenuAction("Reply") {
+                        replyingTo = focused?.message
+                        composerFocus.requestFocus()
+                        keyboard?.show()
+                    }
+                )
                 add(com.leo.imessage.ui.components.MenuAction("Copy") {})
                 if (focused?.message?.isFromMe == true && focused.message.isUnsent.not()) {
-                    add(com.leo.imessage.ui.components.MenuAction("Edit") {})
+                    add(
+                        com.leo.imessage.ui.components.MenuAction("Edit") {
+                            editingMessage = focused.message
+                            composerFocus.requestFocus()
+                            keyboard?.show()
+                        }
+                    )
                     add(
                         com.leo.imessage.ui.components.MenuAction("Undo Send", destructive = true) {
                             onUnsend(focused.message.id)

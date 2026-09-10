@@ -53,6 +53,7 @@ import com.leo.imessage.ui.theme.LocalPalette
 import com.leo.imessage.ui.theme.Motion
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import com.leo.imessage.util.relativeTimeLabel
 
 @Composable
@@ -66,6 +67,9 @@ fun ChatListScreen(
     val listState = rememberLazyListState()
     val hazeState = remember { HazeState() }
     var query by remember { mutableStateOf("") }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    var topBarHeight by remember { androidx.compose.runtime.mutableStateOf(0.dp) }
+    var bottomBarHeight by remember { androidx.compose.runtime.mutableStateOf(0.dp) }
 
     val visibleChats = remember(chats, query) {
         if (query.isBlank()) chats
@@ -90,8 +94,8 @@ fun ChatListScreen(
             state = listState,
             modifier = Modifier.fillMaxSize().glassSource(hazeState),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                top = 100.dp,
-                bottom = 88.dp,
+                top = topBarHeight + 6.dp,
+                bottom = bottomBarHeight + 6.dp,
             ),
         ) {
             val pinned = visibleChats.filter { it.isPinned }
@@ -134,7 +138,8 @@ fun ChatListScreen(
         GlassSurface(
             modifier = Modifier
                 .fillMaxWidth()
-                .align(Alignment.BottomCenter),
+                .align(Alignment.BottomCenter)
+                .onSizeChanged { bottomBarHeight = with(density) { it.height.toDp() } },
             hazeState = hazeState,
             hairlineAtTop = true,
         ) {
@@ -171,7 +176,8 @@ fun ChatListScreen(
         GlassSurface(
             modifier = Modifier
                 .fillMaxWidth()
-                .align(Alignment.TopCenter),
+                .align(Alignment.TopCenter)
+                .onSizeChanged { topBarHeight = with(density) { it.height.toDp() } },
             hazeState = hazeState,
             tintAlpha = 0.38f + 0.30f * collapseProgress,
             hairlineAtBottom = collapseProgress > 0.6f,

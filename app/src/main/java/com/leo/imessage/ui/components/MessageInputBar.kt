@@ -35,6 +35,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,10 +73,20 @@ fun MessageInputBar(
     onAttach: () -> Unit = {},
     replyingTo: com.leo.imessage.data.Message? = null,
     onCancelReply: () -> Unit = {},
+    darkBase: Boolean? = null,
+    editing: com.leo.imessage.data.Message? = null,
+    onCancelEdit: () -> Unit = {},
+    onCommitEdit: (String) -> Unit = {},
+    focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
 ) {
     val palette = LocalPalette.current
     val haptics = LocalHapticFeedback.current
     var text by remember { mutableStateOf("") }
+
+    // Entering edit mode loads the existing text so it can be changed in place.
+    LaunchedEffect(editing?.id) {
+        if (editing != null) text = editing.text
+    }
     var showEffects by remember { mutableStateOf(false) }
     val canSend = text.isNotBlank()
 
@@ -94,9 +106,36 @@ fun MessageInputBar(
             .fillMaxWidth()
             .navigationBarsPadding(),
         hazeState = hazeState,
+        darkBase = darkBase,
         hairlineAtTop = true,
     ) {
         Column(Modifier.fillMaxWidth()) {
+        if (editing != null) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 12.dp, top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Editing message",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = palette.accent,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    "Cancel",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = palette.accent,
+                    modifier = Modifier
+                        .clickable {
+                            text = ""
+                            onCancelEdit()
+                        }
+                        .padding(horizontal = 4.dp),
+                )
+            }
+        }
         if (replyingTo != null) {
             Row(
                 Modifier
@@ -172,9 +211,11 @@ fun MessageInputBar(
                     BasicTextField(
                         value = text,
                         onValueChange = { text = it },
+                        modifier = if (focusRequester != null) {
+                            Modifier.fillMaxWidth().focusRequester(focusRequester)
+                        } else Modifier.fillMaxWidth(),
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = palette.label),
                         cursorBrush = SolidColor(palette.accent),
-                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
 
@@ -207,7 +248,11 @@ fun MessageInputBar(
                         SendButton(
                             onSend = {
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onSend(text.trim(), MessageEffect.NONE)
+                                if (editing != null) {
+                                    onCommitEdit(text.trim())
+                                } else {
+                                    onSend(text.trim(), MessageEffect.NONE)
+                                }
                                 text = ""
                             },
                             onLongPress = {

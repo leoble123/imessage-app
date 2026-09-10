@@ -52,6 +52,7 @@ fun ConversationNavBar(
     onBack: () -> Unit,
     onOpenDetails: () -> Unit,
     modifier: Modifier = Modifier,
+    darkBase: Boolean? = null,
 ) {
     val palette = LocalPalette.current
 
@@ -60,6 +61,7 @@ fun ConversationNavBar(
         hazeState = hazeState,
         tintAlpha = 0.42f,
         blurRadius = 40,
+        darkBase = darkBase,
     ) {
         Box(
             Modifier

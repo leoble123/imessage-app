@@ -44,6 +44,8 @@ fun GlassSurface(
     hazeState: HazeState? = null,
     tintAlpha: Float = 0.55f,
     blurRadius: Int = 32,
+    /** Overrides the theme when the surface sits over a custom background. */
+    darkBase: Boolean? = null,
     sheen: Boolean = true,
     hairlineAtBottom: Boolean = false,
     hairlineAtTop: Boolean = false,
@@ -51,7 +53,7 @@ fun GlassSurface(
 ) {
     val palette = LocalPalette.current
     val state = hazeState ?: LocalHazeState.current
-    val base = if (palette.isDark) Color.Black else Color.White
+    val base = if (darkBase ?: palette.isDark) Color.Black else Color.White
 
     Box(
         modifier = modifier.hazeChild(
@@ -71,7 +73,7 @@ fun GlassSurface(
                     .background(
                         Brush.verticalGradient(
                             listOf(
-                                Color.White.copy(alpha = if (palette.isDark) 0.07f else 0.30f),
+                                Color.White.copy(alpha = if (darkBase ?: palette.isDark) 0.07f else 0.30f),
                                 Color.White.copy(alpha = 0f),
                             )
                         )
@@ -110,11 +112,12 @@ fun GlassSurface(
 fun GlassPill(
     modifier: Modifier = Modifier,
     hazeState: HazeState? = null,
+    darkBase: Boolean? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val palette = LocalPalette.current
     val state = hazeState ?: LocalHazeState.current
-    val base = if (palette.isDark) Color.Black else Color.White
+    val base = if (darkBase ?: palette.isDark) Color.Black else Color.White
 
     Box(
         modifier = modifier.hazeChild(

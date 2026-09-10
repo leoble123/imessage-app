@@ -27,7 +27,15 @@ interface MessagingBackend {
 
     fun messagesNow(chatId: String): List<Message>
 
-    suspend fun send(chatId: String, text: String, effect: MessageEffect = MessageEffect.NONE)
+    suspend fun send(
+        chatId: String,
+        text: String,
+        effect: MessageEffect = MessageEffect.NONE,
+        replyToId: String? = null,
+    )
+
+    /** Edits a message you sent, keeping the prior text in its history. */
+    suspend fun edit(messageId: String, newText: String)
 
     suspend fun setTapback(messageId: String, kind: TapbackKind)
 

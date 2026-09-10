@@ -134,6 +134,9 @@ fun AppRoot(backend: MessagingBackend) {
                             scope.launch { backend.unsend(messageId) }
                         },
                         onOpenDetails = { showDetails = true },
+                        onEdit = { messageId, newText ->
+                            scope.launch { backend.edit(messageId, newText) }
+                        },
                         backgroundId = backgrounds[chat.id] ?: "none",
                     )
                 }

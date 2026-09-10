@@ -59,10 +59,15 @@ fun MessageBubble(
     row: MessageRow,
     senderName: String?,
     sender: com.leo.imessage.data.Contact? = null,
+    /** Set when the thread has a custom background, so bubbles go translucent. */
+    onCustomBackground: Boolean = false,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
     /** 0..1 - how far the swipe-for-timestamps gesture has been dragged. */
     timestampReveal: Float = 0f,
+    replyParent: Message? = null,
+    replyParentSender: String? = null,
+    onOpenThread: () -> Unit = {},
 ) {
     val palette = LocalPalette.current
     val settings = com.leo.imessage.ui.theme.LocalSettings.current
@@ -137,6 +142,15 @@ fun MessageBubble(
             },
         horizontalAlignment = if (outgoing) Alignment.End else Alignment.Start,
     ) {
+        if (replyParent != null) {
+            ReplyQuote(
+                parent = replyParent,
+                senderName = replyParentSender,
+                outgoing = outgoing,
+                onOpenThread = onOpenThread,
+            )
+        }
+
         if (row.showSenderName && senderName != null && !outgoing) {
             Text(
                 text = senderName,
@@ -192,6 +206,10 @@ fun MessageBubble(
                                         else palette.outgoingBubble
                                     )
                                 }
+                            } else if (onCustomBackground) {
+                                // Frosted rather than solid, so the background
+                                // reads through the way it does on iOS.
+                                Modifier.background(palette.incomingBubble.copy(alpha = 0.62f))
                             } else {
                                 Modifier.background(palette.incomingBubble)
                             }

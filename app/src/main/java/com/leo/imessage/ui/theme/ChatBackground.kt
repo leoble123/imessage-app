@@ -10,6 +10,12 @@ data class ChatBackground(
     val name: String,
     /** Null means "use the theme's plain background". */
     val brush: Brush?,
+    /**
+     * Whether bubbles and bars sitting on this background should switch to
+     * their dark treatment. A dark background under a light theme otherwise
+     * gets white bars and opaque light bubbles, which looks broken.
+     */
+    val isDark: Boolean = true,
 )
 
 /**
@@ -20,7 +26,7 @@ data class ChatBackground(
  * however nice it looks in a picker.
  */
 val ChatBackgrounds: List<ChatBackground> = listOf(
-    ChatBackground("none", "Default", null),
+    ChatBackground("none", "Default", null, isDark = false),
     ChatBackground(
         "dusk", "Dusk",
         Brush.verticalGradient(listOf(Color(0xFF11131A), Color(0xFF1E2333))),
@@ -40,10 +46,12 @@ val ChatBackgrounds: List<ChatBackground> = listOf(
     ChatBackground(
         "linen", "Linen",
         Brush.verticalGradient(listOf(Color(0xFFF7F4EF), Color(0xFFE9E4DC))),
+        isDark = false,
     ),
     ChatBackground(
         "blush", "Blush",
         Brush.verticalGradient(listOf(Color(0xFFFDF1F3), Color(0xFFF6E2E8))),
+        isDark = false,
     ),
 )
 

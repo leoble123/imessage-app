@@ -56,7 +56,22 @@ class MockBackend : MessagingBackend {
     override fun messagesNow(chatId: String): List<Message> =
         _messages.value.filter { it.chatId == chatId }.sortedBy { it.timestamp }
 
-    override suspend fun send(chatId: String, text: String, effect: MessageEffect) {
+    override suspend fun edit(messageId: String, newText: String) {
+        updateMessage(messageId) { msg ->
+            msg.copy(
+                text = newText,
+                editHistory = msg.editHistory + msg.text,
+                editedAt = System.currentTimeMillis(),
+            )
+        }
+    }
+
+    override suspend fun send(
+        chatId: String,
+        text: String,
+        effect: MessageEffect,
+        replyToId: String?,
+    ) {
         val msg = Message(
             id = UUID.randomUUID().toString(),
             chatId = chatId,
@@ -66,6 +81,7 @@ class MockBackend : MessagingBackend {
             senderId = me.id,
             deliveryState = DeliveryState.SENDING,
             effect = effect,
+            replyToId = replyToId,
         )
         _messages.value = _messages.value + msg
         touchChat(chatId, msg)
