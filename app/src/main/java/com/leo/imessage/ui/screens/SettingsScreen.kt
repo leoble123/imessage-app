@@ -95,6 +95,29 @@ fun SettingsScreen(
                     }
                     SettingsDivider()
                     SettingsRow("Relay", value = account.relay ?: "Not set", showChevron = false)
+                    SettingsDivider()
+                    SettingsRow(
+                        "Services",
+                        value = if (account.servicesComplete) "Registered"
+                        else "Incomplete - restart the app",
+                        showChevron = false,
+                        destructive = !account.servicesComplete,
+                    )
+                    account.lastSend?.let {
+                        SettingsDivider()
+                        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            Text(
+                                "Last send",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = palette.label,
+                            )
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = palette.secondaryLabel,
+                            )
+                        }
+                    }
                 }
                 SettingsDivider()
                 SettingsRow(

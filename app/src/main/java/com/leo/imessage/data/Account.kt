@@ -17,6 +17,16 @@ data class AccountSummary(
     val primaryHandle: String?,
     val otherHandles: List<String>,
     val relay: String?,
+    /**
+     * What happened on the last send.
+     *
+     * A message that silently never arrives is the hardest thing to diagnose
+     * from a phone with no tools attached - the failure could be the lookup,
+     * the connection, or Apple accepting it and doing nothing with it.
+     */
+    val lastSend: String? = null,
+    /** True when the registration covers every service this build needs. */
+    val servicesComplete: Boolean = true,
 )
 
 /** Where the setup flow currently is. */
@@ -226,6 +236,8 @@ class AccountManager(context: Context) {
             primaryHandle = handles.firstOrNull(),
             otherHandles = handles.drop(1),
             relay = relayHost,
+            lastSend = backend.lastSendReport,
+            servicesComplete = runCatching { !core.needsServiceRefresh() }.getOrDefault(true),
         )
     }
 

@@ -232,6 +232,7 @@ internal fun Message.toJson(): JSONObject = JSONObject().apply {
     put("note", note)
     put("remindAt", remindAt)
     put("scheduledFor", scheduledFor)
+    put("failureReason", failureReason)
     put("editHistory", JSONArray(editHistory))
     put("tapbacks", JSONArray().apply { tapbacks.forEach { put(it.toJson()) } })
     put("attachments", JSONArray().apply { attachments.forEach { put(it.toJson()) } })
@@ -262,6 +263,7 @@ internal fun JSONObject.toMessage(): Message {
         note = optStringOrNull("note"),
         remindAt = optLongOrNull("remindAt"),
         scheduledFor = optLongOrNull("scheduledFor"),
+        failureReason = optStringOrNull("failureReason"),
         editHistory = optJSONArray("editHistory").strings(),
         tapbacks = optJSONArray("tapbacks").map { it.toTapback() },
         attachments = optJSONArray("attachments").map { it.toAttachment() },

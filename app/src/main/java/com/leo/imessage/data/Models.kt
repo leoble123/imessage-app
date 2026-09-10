@@ -136,6 +136,14 @@ data class Message(
     /** Set while a message is queued to send later, cleared when it goes. */
     val scheduledFor: Long? = null,
     val poll: Poll? = null,
+    /**
+     * Why a send failed, in the sender's own words.
+     *
+     * Shown under the bubble. A message that just says "Not Delivered" makes
+     * every failure look the same, when the difference between "they aren't on
+     * iMessage" and "the connection dropped" is the whole diagnosis.
+     */
+    val failureReason: String? = null,
 ) {
     val hasContent: Boolean get() = text.isNotBlank() || attachments.isNotEmpty()
 }

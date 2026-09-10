@@ -69,6 +69,17 @@ class RustBackend(
     @Volatile
     var openChatId: String? = null
 
+    /**
+     * What happened on the last send attempt, for the diagnostics screen.
+     *
+     * A message that silently never arrives is the hardest kind to diagnose
+     * from a phone with no tools attached: the failure could be the lookup,
+     * the connection, or Apple accepting it and doing nothing.
+     */
+    @Volatile
+    var lastSendReport: String? = null
+        private set
+
     /** This account's own handles, filled in once the core is started. */
     @Volatile
     private var myHandles: List<String> = emptyList()
@@ -198,6 +209,7 @@ class RustBackend(
             Log.e(TAG, "refusing to send to a conversation with no participants")
             return
         }
+        lastSendReport = "sending to ${chat.sendTargets()}"
         val localId = UUID.randomUUID().toString()
 
         // The bubble appears before the network is touched. Waiting on the
@@ -252,13 +264,22 @@ class RustBackend(
             // Adopt the GUID Apple assigned. Tapbacks, edits and unsends all
             // address a message by it, so a local id that never gets replaced
             // produces a message nobody can react to.
+            lastSendReport = "accepted as $guid"
             replaceId(localId, guid, DeliveryState.SENT)
         } catch (e: Exception) {
             // Not just CoreException: staging a file can fail with an ordinary
             // IO error, and a message stuck on "sending" forever is worse than
             // one that says it failed.
             Log.e(TAG, "send failed", e)
-            updateMessage(localId) { it.copy(deliveryState = DeliveryState.FAILED) }
+            lastSendReport = "failed: ${e::class.java.simpleName}: ${e.message}"
+            val reason = buildString {
+                append(e::class.java.simpleName.removeSuffix("Exception"))
+                val detail = e.message?.removePrefix("reason=")?.trim()
+                if (!detail.isNullOrBlank()) append(": ").append(detail)
+            }
+            updateMessage(localId) {
+                it.copy(deliveryState = DeliveryState.FAILED, failureReason = reason)
+            }
         }
     }
 

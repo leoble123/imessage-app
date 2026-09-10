@@ -455,7 +455,20 @@ fun MessageBubble(
             )
         }
 
-        if (row.showDeliveryReceipt && outgoing) {
+        // A failure always shows its reason, receipt or not. "Not Delivered"
+        // alone makes every failure look identical, when the difference
+        // between "they aren't on iMessage" and "the connection dropped" is
+        // the entire diagnosis.
+        if (outgoing && msg.deliveryState == DeliveryState.FAILED) {
+            Text(
+                msg.failureReason?.let { "Not Delivered - $it" } ?: "Not Delivered",
+                style = MaterialTheme.typography.labelSmall,
+                color = palette.destructive,
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .padding(horizontal = 12.dp, vertical = 2.dp),
+            )
+        } else if (row.showDeliveryReceipt && outgoing) {
             DeliveryReceipt(msg)
         }
       }
