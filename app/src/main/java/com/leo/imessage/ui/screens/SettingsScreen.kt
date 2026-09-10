@@ -156,6 +156,36 @@ fun SettingsScreen(onBack: () -> Unit) {
                     settings.playEffects = it
                 }
                 SettingsDivider()
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        "Motion",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = palette.label,
+                        modifier = Modifier.padding(bottom = 9.dp),
+                    )
+                    com.leo.imessage.ui.components.SegmentedControl(
+                        options = com.leo.imessage.ui.theme.MotionProfile.entries
+                            .map { it to it.label },
+                        selected = settings.motionProfile,
+                        onSelect = { settings.motionProfile = it },
+                    )
+                }
+                SettingsDivider()
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        "Haptic Strength",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = palette.label,
+                        modifier = Modifier.padding(bottom = 9.dp),
+                    )
+                    com.leo.imessage.ui.components.SegmentedControl(
+                        options = com.leo.imessage.ui.theme.HapticProfile.entries
+                            .map { it to it.label },
+                        selected = settings.hapticProfile,
+                        onSelect = { settings.hapticProfile = it },
+                    )
+                }
+                SettingsDivider()
                 SettingsToggle("Haptic Feedback", settings.hapticsEnabled) {
                     settings.hapticsEnabled = it
                 }

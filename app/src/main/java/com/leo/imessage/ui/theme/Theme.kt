@@ -76,6 +76,10 @@ fun iMessageTheme(
     }
     val palette = if (darkTheme) AppPalette.Dark else AppPalette.Light
 
+    // Reduce Motion still wins outright; the profile shapes everything else.
+    Motion.responseScale = if (settings.lowPowerAnimations) 0.45f
+        else settings.motionProfile.scale
+
     val colorScheme = if (darkTheme) {
         darkColorScheme(
             primary = palette.accent,

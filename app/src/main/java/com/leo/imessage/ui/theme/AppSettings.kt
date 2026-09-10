@@ -8,6 +8,28 @@ import androidx.compose.runtime.staticCompositionLocalOf
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 /**
+ * How much the interface moves.
+ *
+ * MINIMAL isn't "no animation" - it's the same animations run short enough
+ * to read as instant, which keeps state changes explicable without making
+ * anyone wait for them.
+ */
+enum class MotionProfile(val label: String, val scale: Float) {
+    MINIMAL("Minimal", 0.62f),
+    BALANCED("Balanced", 1f),
+    EXPRESSIVE("Expressive", 1.28f),
+}
+
+/** Strength of touch feedback, mapped onto the platform's haptic constants. */
+enum class HapticProfile(val label: String) {
+    OFF("Off"),
+    SOFT("Soft"),
+    LIGHT("Light"),
+    MEDIUM("Medium"),
+    STRONG("Strong"),
+}
+
+/**
  * GLASS is the iOS 26 material - translucent, lit rim, specular sheen.
  * GRADIENT and FLAT are the older opaque looks, kept as options.
  */
@@ -27,6 +49,8 @@ class AppSettings {
     var showTypingIndicators by mutableStateOf(true)
     var playEffects by mutableStateOf(true)
     var hapticsEnabled by mutableStateOf(true)
+    var motionProfile by mutableStateOf(MotionProfile.BALANCED)
+    var hapticProfile by mutableStateOf(HapticProfile.MEDIUM)
     var swipeToReply by mutableStateOf(true)
     var showTimestampsOnSwipe by mutableStateOf(true)
     var groupByContact by mutableStateOf(true)

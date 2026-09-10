@@ -589,14 +589,17 @@ fun EffectPicker(
                 },
             hazeState = hazeState,
             darkBase = darkBase,
-            tintAlpha = 0.62f,
+            tintAlpha = 0.82f,
         ) {
         Column {
             options.forEachIndexed { i, (effect, label) ->
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = if (effect == MessageEffect.NONE) palette.secondaryLabel else palette.accent,
+                    style = MaterialTheme.typography.titleSmall,
+                    // Label colour, not accent: a pale blue on a pale panel
+                    // is the exact combination that vanished.
+                    color = if (effect == MessageEffect.NONE) palette.secondaryLabel
+                        else palette.label,
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onPick(effect) }

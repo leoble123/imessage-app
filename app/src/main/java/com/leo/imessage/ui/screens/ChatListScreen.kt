@@ -174,7 +174,11 @@ fun ChatListScreen(
                 }
             }
 
-            items(rest, key = { it.id }) { chat ->
+            items(
+                items = rest,
+                key = { it.id },
+                contentType = { "chat" },
+            ) { chat ->
                 ChatRow(
                     chat = chat,
                     onOpen = onOpenChat,

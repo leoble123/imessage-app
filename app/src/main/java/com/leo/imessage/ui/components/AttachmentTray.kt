@@ -78,7 +78,7 @@ import java.util.UUID
 @Composable
 fun AttachmentTray(
     onAttach: (List<Attachment>) -> Unit,
-    onPickEffect: (MessageEffect) -> Unit,
+    onRequestEffects: () -> Unit,
     onDismiss: () -> Unit,
     /** Attaches the user's current position as a shareable map link. */
     onShareLocation: () -> Unit = {},
@@ -97,7 +97,7 @@ fun AttachmentTray(
 
     var recording by remember { mutableStateOf(false) }
     var askedForMic by remember { mutableStateOf(false) }
-    var showEffects by remember { mutableStateOf(false) }
+
 
     BackHandler { onDismiss() }
 
@@ -162,18 +162,6 @@ fun AttachmentTray(
         }
     }
 
-    if (showEffects) {
-        EffectPicker(
-            onPick = { effect ->
-                showEffects = false
-                onPickEffect(effect)
-                onDismiss()
-            },
-            onDismiss = { showEffects = false },
-            hazeState = hazeState,
-            darkBase = darkBase,
-        )
-    }
 
     Box(modifier.fillMaxSize()) {
         GlassScrim(
@@ -200,10 +188,7 @@ fun AttachmentTray(
                     scaleY = sc
                     transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 1f)
                     translationY = 30.dp.toPx() * (1f - a)
-                }
-                // While a picker is up the menu steps aside instead of
-                // sitting underneath it competing for the same space.
-                .graphicsLayer { alpha = if (showEffects) 0f else 1f },
+                },
             horizontalAlignment = Alignment.Start,
         ) {
             if (recording) {
@@ -259,7 +244,13 @@ fun AttachmentTray(
                         pickDocument.launch(arrayOf("*/*"))
                     }
                     TrayRow("Effects", 6, { progress() }) {
-                        showEffects = true
+                        // Handed up to the screen rather than opened here:
+                        // nesting a picker inside the tray meant stacking a
+                        // second blurred scrim on top of the tray's own, and
+                        // two glass layers over a light conversation wash out
+                        // to plain white with the text still in it somewhere.
+                        onRequestEffects()
+                        onDismiss()
                     }
                     }
                 }

@@ -72,6 +72,7 @@ fun ReplyThreadView(
         mutableStateOf<List<com.leo.imessage.data.Attachment>>(emptyList())
     }
     var stagedEffect by remember { mutableStateOf(MessageEffect.NONE) }
+    var showEffectPicker by remember { mutableStateOf(false) }
 
     val appear = remember { Animatable(0f) }
     LaunchedEffect(root.id) { appear.animateTo(1f, Motion.standard()) }
@@ -206,8 +207,22 @@ fun ReplyThreadView(
             if (showTray) {
                 AttachmentTray(
                     onAttach = { added -> staged = staged + added },
-                    onPickEffect = { effect -> stagedEffect = effect },
+                    onRequestEffects = { showEffectPicker = true },
                     onDismiss = { showTray = false },
+                    hazeState = hazeState,
+                    darkBase = darkBase,
+                )
+            }
+
+            if (showEffectPicker) {
+                EffectPicker(
+                    onPick = { effect ->
+                        showEffectPicker = false
+                        stagedEffect = effect
+                    },
+                    onDismiss = { showEffectPicker = false },
+                    hazeState = hazeState,
+                    darkBase = darkBase,
                 )
             }
         }

@@ -21,9 +21,25 @@ import androidx.compose.animation.core.tween
  * keeping damping high is what turns it liquid.
  */
 object Motion {
+    /**
+     * Global multiplier on every spring's response, driven by the Motion
+     * profile in Settings.
+     *
+     * One dial rather than a per-animation setting: the whole point of a
+     * motion profile is that the app moves as one thing. Scaling response
+     * keeps every spring's *character* - what overshoots still overshoots -
+     * and only changes how long it all takes.
+     */
+    private val responseScaleState = androidx.compose.runtime.mutableFloatStateOf(1f)
+    var responseScale: Float
+        get() = responseScaleState.floatValue
+        set(value) {
+            if (responseScaleState.floatValue != value) responseScaleState.floatValue = value
+        }
+
     /** 2pi/response squared, since Compose takes stiffness with unit mass. */
     private fun stiffnessFor(response: Float): Float {
-        val omega = (2.0 * Math.PI / response).toFloat()
+        val omega = (2.0 * Math.PI / (response * responseScale)).toFloat()
         return omega * omega
     }
 

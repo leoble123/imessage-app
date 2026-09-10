@@ -52,6 +52,7 @@ fun ConversationNavBar(
     onBack: () -> Unit,
     onOpenDetails: () -> Unit,
     onFaceTime: () -> Unit = {},
+    onSearch: () -> Unit = {},
     modifier: Modifier = Modifier,
     darkBase: Boolean? = null,
 ) {
@@ -89,7 +90,13 @@ fun ConversationNavBar(
                 Modifier
                     .align(Alignment.TopCenter)
                     .pointerInput(chat.id) {
-                        detectTapGestures { onOpenDetails() }
+                        detectTapGestures(
+                            onTap = { onOpenDetails() },
+                            // Long-press the title to search the thread -
+                            // the same spot that opens its details, since
+                            // both are questions about "this conversation".
+                            onLongPress = { onSearch() },
+                        )
                     },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {

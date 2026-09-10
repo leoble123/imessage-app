@@ -175,6 +175,7 @@ fun ConversationScreen(
     // thread, so composing anywhere else means watching your own message
     // vanish from the transcript the moment it lands.
     fun threadFor(m: Message): Message = m.replyToId?.let { byId[it] } ?: m
+
     var menuFor by remember { mutableStateOf<MessageRow?>(null) }
     var editingMessage by remember { mutableStateOf<Message?>(null) }
     // The message whose reply chain is being viewed, if any.
@@ -188,6 +189,31 @@ fun ConversationScreen(
     // why it came up underneath the text field.
     var showTray by remember { mutableStateOf(false) }
     var trayRecording by remember { mutableStateOf(false) }
+    var showEffectPicker by remember { mutableStateOf(false) }
+    var searching by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var matchIndex by remember { mutableStateOf(0) }
+
+    val matches = remember(rows, searchQuery) {
+        if (searchQuery.isBlank()) emptyList()
+        else rows.mapIndexedNotNull { index, row ->
+            index.takeIf { row.message.text.contains(searchQuery, ignoreCase = true) }
+        }
+    }
+    // Stepping starts at the newest match, because the thing you're looking
+    // for in a long thread is far more often recent than ancient.
+    LaunchedEffect(matches) { matchIndex = (matches.size - 1).coerceAtLeast(0) }
+    LaunchedEffect(matchIndex, matches) {
+        matches.getOrNull(matchIndex)?.let { listState.animateScrollToItem(it) }
+    }
+
+    // Hoisted out of the item body: a lambda allocated inside `items` is a
+    // new object on every pass, which makes every bubble's parameters look
+    // changed and defeats Compose's skipping entirely. These are stable, so
+    // an unaffected bubble is left alone.
+    val openAttachment: (com.leo.imessage.data.Attachment) -> Unit =
+        remember { { attachment -> viewing = attachment } }
+    val showMenuFor: (MessageRow) -> Unit = remember { { row -> menuFor = row } }
     // Swiping a bubble arms a reply on the composer. It used to throw you
     // into the full thread view, which is the wrong trade: replying is the
     // common case and reading a thread is the rare one, so the gesture
@@ -202,11 +228,16 @@ fun ConversationScreen(
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     androidx.activity.compose.BackHandler(
         enabled = threadRoot != null || menuFor != null || viewing != null ||
-            infoFor != null || showTray || replyingTo != null
+            infoFor != null || showTray || replyingTo != null || showEffectPicker || searching
     ) {
         when {
             viewing != null -> viewing = null
             infoFor != null -> infoFor = null
+            showEffectPicker -> showEffectPicker = false
+            searching -> {
+                searching = false
+                searchQuery = ""
+            }
             showTray -> showTray = false
             replyingTo != null -> replyingTo = null
             menuFor != null -> menuFor = null
@@ -318,7 +349,22 @@ fun ConversationScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            items(rows, key = { it.message.id }) { row ->
+            items(
+                items = rows,
+                key = { it.message.id },
+                // Bubbles, photo bubbles and voice notes are structurally
+                // different subtrees. Without a content type the list reuses
+                // one as the other and Compose rebuilds it from scratch;
+                // with it, scrolling recycles like for like.
+                contentType = { row ->
+                    when {
+                        row.message.isUnsent -> "unsent"
+                        row.message.attachments.any { it.isVisual } -> "media"
+                        row.message.attachments.isNotEmpty() -> "attachment"
+                        else -> "text"
+                    }
+                },
+            ) { row ->
                 if (row.showTimestampHeader) {
                     Text(
                         text = conversationTimestampHeader(row.message.timestamp),
@@ -355,7 +401,7 @@ fun ConversationScreen(
                         backgroundIsDark = background.brush != null && background.isDark,
                         sender = chat.participants.firstOrNull { it.id == row.message.senderId },
                         senderName = senderName,
-                        onLongPress = { menuFor = row },
+                        onLongPress = { showMenuFor(row) },
                         timestampReveal = { stampReveal.value },
                         replyCount = row.replyCount,
                         replyParent = row.message.replyToId?.let { byId[it] },
@@ -369,7 +415,10 @@ fun ConversationScreen(
                                     ?.substringBefore(' ')
                             },
                         onOpenThread = { threadRoot = threadFor(row.message) },
-                        onOpenAttachment = { viewing = it },
+                        onOpenAttachment = openAttachment,
+                        highlight = searchQuery.takeIf { searching && it.isNotBlank() },
+                        isActiveMatch = searching &&
+                            matches.getOrNull(matchIndex) == rows.indexOf(row),
                     )
                 }
             }
@@ -440,7 +489,7 @@ fun ConversationScreen(
             if (trayProgress != null) {
                 com.leo.imessage.ui.components.AttachmentTray(
                     onAttach = { added -> staged = staged + added },
-                    onPickEffect = { effect -> stagedEffect = effect },
+                    onRequestEffects = { showEffectPicker = true },
                     onDismiss = {
                         showTray = false
                         trayRecording = false
@@ -453,13 +502,38 @@ fun ConversationScreen(
                 )
             }
 
-        ConversationNavBar(
+        if (searching) {
+            com.leo.imessage.ui.components.ConversationSearchBar(
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+                matchCount = matches.size,
+                currentMatch = matchIndex,
+                onPrevious = {
+                    if (matches.isNotEmpty()) {
+                        matchIndex = (matchIndex - 1 + matches.size) % matches.size
+                    }
+                },
+                onNext = {
+                    if (matches.isNotEmpty()) matchIndex = (matchIndex + 1) % matches.size
+                },
+                onClose = {
+                    searching = false
+                    searchQuery = ""
+                },
+                hazeState = hazeState,
+                darkBase = if (background.brush != null) background.isDark else null,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .onSizeChanged { navBarHeight = with(density) { it.height.toDp() } },
+            )
+        } else ConversationNavBar(
             chat = chat,
             hazeState = hazeState,
             darkBase = if (background.brush != null) background.isDark else null,
             onBack = onBack,
             onOpenDetails = onOpenDetails,
             onFaceTime = onFaceTime,
+            onSearch = { searching = true },
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .onSizeChanged { navBarHeight = with(density) { it.height.toDp() } },
@@ -486,6 +560,18 @@ fun ConversationScreen(
                 .align(Alignment.BottomEnd)
                 .padding(end = 18.dp, bottom = composerHeight + 12.dp),
         )
+
+        if (showEffectPicker) {
+            com.leo.imessage.ui.components.EffectPicker(
+                onPick = { effect ->
+                    showEffectPicker = false
+                    stagedEffect = effect
+                },
+                onDismiss = { showEffectPicker = false },
+                hazeState = hazeState,
+                darkBase = if (background.brush != null) background.isDark else null,
+            )
+        }
 
         infoFor?.let { message ->
             com.leo.imessage.ui.components.MessageInfoSheet(

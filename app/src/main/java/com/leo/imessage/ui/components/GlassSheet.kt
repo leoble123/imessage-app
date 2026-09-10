@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -55,10 +56,23 @@ fun GlassSheet(
     val palette = LocalPalette.current
     val state = hazeState ?: LocalHazeState.current
     val dark = darkBase ?: palette.isDark
-    val base = if (dark) Color.Black else Color.White
+    // Not pure white in light mode. A white panel blurring a white
+    // conversation produces white on white - the panel disappears and its
+    // text goes with it. Tinting a few percent grey is what gives a light
+    // panel an edge to exist against.
+    val base = if (dark) Color.Black else Color(0xFFF4F4F7)
 
     Box(
         modifier
+            // A cast shadow separates the panel from whatever it floats over
+            // even when the two are nearly the same colour, which blur alone
+            // cannot do.
+            .shadow(
+                elevation = 22.dp,
+                shape = shape,
+                ambientColor = Color.Black.copy(alpha = 0.5f),
+                spotColor = Color.Black.copy(alpha = 0.5f),
+            )
             .clip(shape)
             .hazeChild(
                 state = state,

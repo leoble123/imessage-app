@@ -40,7 +40,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.leo.imessage.data.DeliveryState
@@ -85,6 +87,10 @@ fun MessageBubble(
     /** Set on a lone reply, to render the dimmed original above it. */
     replyParent: Message? = null,
     replyParentSender: String? = null,
+    /** Search term to pick out inside the message text, if any. */
+    highlight: String? = null,
+    /** True for the match currently stepped to, which gets a stronger tint. */
+    isActiveMatch: Boolean = false,
     /** Tapping a photo, video or file opens it full screen. */
     onOpenAttachment: (com.leo.imessage.data.Attachment) -> Unit = {},
     onOpenThread: () -> Unit = {},
@@ -348,7 +354,12 @@ fun MessageBubble(
                         ) {
                             Column {
                                 Text(
-                                    text = msg.text,
+                                    text = highlighted(
+                                        text = msg.text,
+                                        term = highlight,
+                                        active = isActiveMatch,
+                                        accent = palette.accent,
+                                    ),
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = if (outgoing) palette.outgoingText else incomingTextColor,
                                 )
@@ -527,4 +538,41 @@ fun TapbackKind.glyph(): String = when (this) {
     TapbackKind.EXCLAIM -> "‼"
     TapbackKind.QUESTION -> "?"
     TapbackKind.ANY_EMOJI -> "🙂"
+}
+
+/**
+ * Marks every occurrence of a search term inside a message.
+ *
+ * Highlighting in place rather than showing a separate results list is the
+ * whole point: you get the hit *and* the conversation around it, which is
+ * usually what you were actually looking for.
+ */
+private fun highlighted(
+    text: String,
+    term: String?,
+    active: Boolean,
+    accent: androidx.compose.ui.graphics.Color,
+): androidx.compose.ui.text.AnnotatedString {
+    if (term.isNullOrBlank()) return androidx.compose.ui.text.AnnotatedString(text)
+
+    return androidx.compose.ui.text.buildAnnotatedString {
+        var index = 0
+        while (true) {
+            val hit = text.indexOf(term, index, ignoreCase = true)
+            if (hit < 0) {
+                append(text.substring(index))
+                break
+            }
+            append(text.substring(index, hit))
+            withStyle(
+                androidx.compose.ui.text.SpanStyle(
+                    background = accent.copy(alpha = if (active) 0.55f else 0.26f),
+                    fontWeight = FontWeight.SemiBold,
+                )
+            ) {
+                append(text.substring(hit, hit + term.length))
+            }
+            index = hit + term.length
+        }
+    }
 }
