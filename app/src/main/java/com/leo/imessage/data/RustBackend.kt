@@ -39,6 +39,8 @@ class RustBackend(
      * Optional so the backend still works before permission is granted.
      */
     private val contacts: Contacts? = null,
+    /** Microphone and earpiece for calls. Null keeps calls signalling-only. */
+    private val audio: CallAudio? = null,
 ) : MessagingBackend {
 
     /**
@@ -48,7 +50,7 @@ class RustBackend(
      * as messages and are delivered through the same listener - splitting them
      * across two objects would mean two listeners racing over one socket.
      */
-    val calls: Calls = Calls(core, contacts)
+    val calls: Calls = Calls(core, contacts, audio)
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -492,6 +494,15 @@ class RustBackend(
             // The callback comes from a Rust thread; everything below touches
             // the store, so it moves onto our own scope first.
             scope.launch { handle(event) }
+        }
+
+        override fun onAudioFrame(frame: ByteArray, timestamp: UInt) {
+            // Straight to the queue - this runs on the media thread.
+            audio?.onFrame(frame)
+        }
+
+        override fun onAudioConfig(config: ByteArray) {
+            audio?.onConfig(config)
         }
 
         override fun onCallEvent(event: uniffi.imessage_core.CallEvent) {

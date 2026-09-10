@@ -35,6 +35,7 @@ use rustpush::{
     MessagePart, IndexedMessagePart, VerifyBody, MADRID_SERVICE,
 };
 use rustpush::facetime::{FTClient, FACETIME_SERVICE, VIDEO_SERVICE};
+use rustpush::avconference::{AudioSender, ChannelFrame, ChannelType, DecoderConfiguration};
 use tokio::sync::Mutex;
 
 use state::{read_plist, write_plist, Paths, SavedState};
@@ -80,6 +81,10 @@ struct Inner {
     identity: Option<IDSNGMIdentity>,
     client: Option<Arc<IMClient>>,
     facetime: Option<Arc<FTClient>>,
+    /// Kept so the audio path can reach the app too, not just the receive loop.
+    listener: Option<Arc<dyn EventListener>>,
+    /// The microphone side of a live call, one per call id.
+    audio: std::collections::HashMap<String, Arc<Mutex<AudioSender>>>,
     /// Apple hands back a body with the SMS challenge in it, and verifying
     /// the code requires handing that same body back. Only set when the
     /// account went down the SMS path rather than the trusted-device one.
@@ -441,6 +446,7 @@ impl ImessageCore {
 
         inner.client = Some(client.clone());
         inner.facetime = Some(facetime.clone());
+        inner.listener = Some(listener.clone());
         inner.receiving = true;
         drop(inner);
 
@@ -689,6 +695,7 @@ impl ImessageCore {
 
     /// Declines a ringing call, telling the caller rather than just going quiet.
     pub async fn decline_call(&self, call_id: String) -> Result<(), CoreError> {
+        self.stop_call_audio(call_id.clone()).await;
         let (facetime, _) = self.calling().await?;
         let mut state = facetime.state.write().await;
         let session = state
@@ -703,6 +710,7 @@ impl ImessageCore {
 
     /// Hangs up a call already in progress.
     pub async fn end_call(&self, call_id: String) -> Result<(), CoreError> {
+        self.stop_call_audio(call_id.clone()).await;
         let (facetime, _) = self.calling().await?;
         let mut state = facetime.state.write().await;
         let session = state
@@ -713,6 +721,90 @@ impl ImessageCore {
             .leave(session)
             .await
             .map_err(|e| CoreError::new(format!("Couldn't hang up: {e}")))
+    }
+
+    /// Opens the audio path on a call that has connected.
+    ///
+    /// Separate from answering on purpose: the media session only exists once
+    /// the relay connection is up, which is a moment or two after the call is
+    /// answered, and asking for a microphone before then fails.
+    pub async fn start_call_audio(&self, call_id: String) -> Result<(), CoreError> {
+        let inner = self.inner.lock().await;
+        let facetime = inner
+            .facetime
+            .clone()
+            .ok_or_else(|| CoreError::new("FaceTime isn't connected."))?;
+        let listener = inner
+            .listener
+            .clone()
+            .ok_or_else(|| CoreError::new("Not started."))?;
+        drop(inner);
+
+        let session_conn = {
+            let state = facetime.state.read().await;
+            state
+                .sessions
+                .get(&call_id)
+                .and_then(|s| s.connection.clone())
+                .ok_or_else(|| CoreError::new("That call isn't connected yet."))?
+        };
+
+        // Incoming frames arrive on the media thread. The handler only
+        // forwards - anything slow here stalls the whole receive path.
+        let for_handler = listener.clone();
+        session_conn.frame_handler.configure_handler(Box::new(move |message| {
+            if message.r#type != ChannelType::Aac {
+                // Video frames arrive through the same handler. There's no
+                // renderer yet, so they're dropped rather than queued into
+                // memory that nothing drains.
+                return;
+            }
+            match message.frame {
+                ChannelFrame::Sample(bytes) => {
+                    for_handler.on_audio_frame(bytes, message.timestamp)
+                }
+                ChannelFrame::Configuration(DecoderConfiguration::Raw(config, _)) => {
+                    for_handler.on_audio_config(config)
+                }
+                ChannelFrame::Configuration(_) => {}
+            }
+        }));
+
+        let sender = session_conn.create_audio_sender(None, &[]).await;
+        let mut inner = self.inner.lock().await;
+        inner.audio.insert(call_id, Arc::new(Mutex::new(sender)));
+        Ok(())
+    }
+
+    /// Sends one encoded audio frame from the microphone.
+    ///
+    /// `timestamp` is the codec's own clock, not wall time - it has to advance
+    /// by the frame's sample count or the far end plays the call at the wrong
+    /// speed.
+    pub async fn send_call_audio(
+        &self,
+        call_id: String,
+        frame: Vec<u8>,
+        timestamp: u32,
+    ) -> Result<(), CoreError> {
+        let sender = {
+            let inner = self.inner.lock().await;
+            inner
+                .audio
+                .get(&call_id)
+                .cloned()
+                .ok_or_else(|| CoreError::new("Audio isn't running for that call."))?
+        };
+        let mut sender = sender.lock().await;
+        sender
+            .send_audio_frame(&frame, timestamp)
+            .map_err(|e| CoreError::new(format!("Couldn't send audio: {e}")))
+    }
+
+    /// Releases the microphone path when a call ends.
+    pub async fn stop_call_audio(&self, call_id: String) {
+        let mut inner = self.inner.lock().await;
+        inner.audio.remove(&call_id);
     }
 
     /// A shareable FaceTime link, the way iOS's "Create Link" works.

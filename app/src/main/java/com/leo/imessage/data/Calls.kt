@@ -4,6 +4,7 @@ import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import uniffi.imessage_core.CallEvent
 import uniffi.imessage_core.ImessageCore
 
@@ -15,7 +16,11 @@ import uniffi.imessage_core.ImessageCore
  * simultaneous call is a state machine nobody can see. A second incoming call
  * while one is live is declined rather than silently queued.
  */
-class Calls(private val core: ImessageCore, private val contacts: Contacts?) {
+class Calls(
+    private val core: ImessageCore,
+    private val contacts: Contacts?,
+    private val audio: CallAudio? = null,
+) {
 
     enum class Stage {
         /** Ringing, we haven't answered. */
@@ -45,6 +50,10 @@ class Calls(private val core: ImessageCore, private val contacts: Contacts?) {
             get() = members.joinToString(", ") { it.displayName }
                 .ifBlank { "FaceTime" }
     }
+
+    private val scope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
+    )
 
     private val _current = MutableStateFlow<Call?>(null)
     val current: StateFlow<Call?> = _current.asStateFlow()
@@ -82,27 +91,42 @@ class Calls(private val core: ImessageCore, private val contacts: Contacts?) {
                 else it.copy(stage = Stage.ACTIVE, connectedAt = System.currentTimeMillis())
             }
 
-            is CallEvent.Connected -> update(event.callId) {
-                if (it.stage == Stage.ACTIVE) it
-                else it.copy(stage = Stage.ACTIVE, connectedAt = System.currentTimeMillis())
+            is CallEvent.Connected -> {
+                // The media session only exists once this arrives, so this is
+                // the earliest the microphone can be opened.
+                startAudio(event.callId)
+                update(event.callId) {
+                    if (it.stage == Stage.ACTIVE) it
+                    else it.copy(stage = Stage.ACTIVE, connectedAt = System.currentTimeMillis())
+                }
             }
 
             // In a one-to-one call the other side leaving is the end of it.
             is CallEvent.Left -> update(event.callId) { call ->
-                if (call.members.size <= 1) call.copy(stage = Stage.ENDED, endedReason = "Ended")
-                else call
+                if (call.members.size <= 1) {
+                    audio?.stop()
+                    call.copy(stage = Stage.ENDED, endedReason = "Ended")
+                } else {
+                    call
+                }
             }
 
-            is CallEvent.Declined -> update(event.callId) {
-                it.copy(stage = Stage.ENDED, endedReason = "Declined")
+            is CallEvent.Declined -> {
+                audio?.stop()
+                update(event.callId) {
+                    it.copy(stage = Stage.ENDED, endedReason = "Declined")
+                }
             }
 
             is CallEvent.AnsweredElsewhere -> update(event.callId) {
                 it.copy(stage = Stage.ENDED, endedReason = "Answered on another device")
             }
 
-            is CallEvent.Disconnected -> update(event.callId) {
-                it.copy(stage = Stage.ENDED, endedReason = "Disconnected")
+            is CallEvent.Disconnected -> {
+                audio?.stop()
+                update(event.callId) {
+                    it.copy(stage = Stage.ENDED, endedReason = "Disconnected")
+                }
             }
 
             is CallEvent.LinkChanged -> {}
@@ -134,6 +158,7 @@ class Calls(private val core: ImessageCore, private val contacts: Contacts?) {
 
     suspend fun decline() {
         val call = _current.value ?: return
+        audio?.stop()
         runCatching { core.declineCall(call.id) }
             .onFailure { Log.w(TAG, "decline failed", it) }
         _current.value = call.copy(stage = Stage.ENDED, endedReason = "Declined")
@@ -141,10 +166,28 @@ class Calls(private val core: ImessageCore, private val contacts: Contacts?) {
 
     suspend fun hangUp() {
         val call = _current.value ?: return
+        audio?.stop()
         runCatching { core.endCall(call.id) }
             .onFailure { Log.w(TAG, "hang up failed", it) }
         _current.value = call.copy(stage = Stage.ENDED, endedReason = "Ended")
     }
+
+    /** Opens the audio path, once the call has a media session behind it. */
+    private fun startAudio(callId: String) {
+        val audio = audio ?: return
+        scope.launch {
+            runCatching { core.startCallAudio(callId) }
+                .onSuccess { audio.start(callId) }
+                .onFailure { Log.w(TAG, "couldn't open call audio", it) }
+        }
+    }
+
+    var muted: Boolean
+        get() = audio?.muted ?: false
+        set(value) { audio?.muted = value }
+
+    /** True when there is a microphone path at all. */
+    val hasAudio: Boolean get() = audio != null
 
     /** Clears an ended call once its "call ended" moment has been shown. */
     fun dismiss() {

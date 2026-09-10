@@ -147,6 +147,7 @@ class MainActivity : ComponentActivity() {
                         onDecline = { lifecycleScope.launch { liveCall?.decline() } },
                         onHangUp = { lifecycleScope.launch { liveCall?.hangUp() } },
                         onDismiss = { liveCall?.dismiss() },
+                        onMuteChange = { liveCall?.muted = it },
                     )
                 }
             }
@@ -189,6 +190,13 @@ class MainActivity : ComponentActivity() {
                 android.content.pm.PackageManager.PERMISSION_GRANTED
             ) {
                 add(android.Manifest.permission.READ_CONTACTS)
+            }
+            // Asked up front rather than mid-call: a permission dialog while
+            // the phone is ringing is the worst possible moment for one.
+            if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                add(android.Manifest.permission.RECORD_AUDIO)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=

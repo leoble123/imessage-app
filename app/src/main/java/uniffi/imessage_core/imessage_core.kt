@@ -668,36 +668,58 @@ internal interface UniffiCallbackInterfaceEventListenerMethod1 : com.sun.jna.Cal
     fun callback(`uniffiHandle`: Long,`event`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceEventListenerMethod2 : com.sun.jna.Callback {
-    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+    fun callback(`uniffiHandle`: Long,`frame`: RustBuffer.ByValue,`timestamp`: Int,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
 internal interface UniffiCallbackInterfaceEventListenerMethod3 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`config`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+}
+internal interface UniffiCallbackInterfaceEventListenerMethod4 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
+}
+internal interface UniffiCallbackInterfaceEventListenerMethod5 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`reason`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
-@Structure.FieldOrder("onEvent", "onCallEvent", "onStateChanged", "onConnectionLost", "uniffiFree")
+@Structure.FieldOrder("onEvent", "onCallEvent", "onAudioFrame", "onAudioConfig", "onStateChanged", "onConnectionLost", "uniffiFree")
 internal open class UniffiVTableCallbackInterfaceEventListener(
     @JvmField internal var `onEvent`: UniffiCallbackInterfaceEventListenerMethod0? = null,
     @JvmField internal var `onCallEvent`: UniffiCallbackInterfaceEventListenerMethod1? = null,
-    @JvmField internal var `onStateChanged`: UniffiCallbackInterfaceEventListenerMethod2? = null,
-    @JvmField internal var `onConnectionLost`: UniffiCallbackInterfaceEventListenerMethod3? = null,
+    @JvmField internal var `onAudioFrame`: UniffiCallbackInterfaceEventListenerMethod2? = null,
+    @JvmField internal var `onAudioConfig`: UniffiCallbackInterfaceEventListenerMethod3? = null,
+    @JvmField internal var `onStateChanged`: UniffiCallbackInterfaceEventListenerMethod4? = null,
+    @JvmField internal var `onConnectionLost`: UniffiCallbackInterfaceEventListenerMethod5? = null,
     @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
 ) : Structure() {
     class UniffiByValue(
         `onEvent`: UniffiCallbackInterfaceEventListenerMethod0? = null,
         `onCallEvent`: UniffiCallbackInterfaceEventListenerMethod1? = null,
-        `onStateChanged`: UniffiCallbackInterfaceEventListenerMethod2? = null,
-        `onConnectionLost`: UniffiCallbackInterfaceEventListenerMethod3? = null,
+        `onAudioFrame`: UniffiCallbackInterfaceEventListenerMethod2? = null,
+        `onAudioConfig`: UniffiCallbackInterfaceEventListenerMethod3? = null,
+        `onStateChanged`: UniffiCallbackInterfaceEventListenerMethod4? = null,
+        `onConnectionLost`: UniffiCallbackInterfaceEventListenerMethod5? = null,
         `uniffiFree`: UniffiCallbackInterfaceFree? = null,
-    ): UniffiVTableCallbackInterfaceEventListener(`onEvent`,`onCallEvent`,`onStateChanged`,`onConnectionLost`,`uniffiFree`,), Structure.ByValue
+    ): UniffiVTableCallbackInterfaceEventListener(`onEvent`,`onCallEvent`,`onAudioFrame`,`onAudioConfig`,`onStateChanged`,`onConnectionLost`,`uniffiFree`,), Structure.ByValue
 
    internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceEventListener) {
         `onEvent` = other.`onEvent`
         `onCallEvent` = other.`onCallEvent`
+        `onAudioFrame` = other.`onAudioFrame`
+        `onAudioConfig` = other.`onAudioConfig`
         `onStateChanged` = other.`onStateChanged`
         `onConnectionLost` = other.`onConnectionLost`
         `uniffiFree` = other.`uniffiFree`
     }
 
 }
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -851,6 +873,10 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_imessage_core_fn_method_eventlistener_on_call_event(`ptr`: Pointer,`event`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_imessage_core_fn_method_eventlistener_on_audio_frame(`ptr`: Pointer,`frame`: RustBuffer.ByValue,`timestamp`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    fun uniffi_imessage_core_fn_method_eventlistener_on_audio_config(`ptr`: Pointer,`config`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     fun uniffi_imessage_core_fn_method_eventlistener_on_state_changed(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     fun uniffi_imessage_core_fn_method_eventlistener_on_connection_lost(`ptr`: Pointer,`reason`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -887,6 +913,8 @@ internal interface UniffiLib : Library {
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_request_sms_code(`ptr`: Pointer,`phoneId`: Int,
     ): Long
+    fun uniffi_imessage_core_fn_method_imessagecore_send_call_audio(`ptr`: Pointer,`callId`: RustBuffer.ByValue,`frame`: RustBuffer.ByValue,`timestamp`: Int,
+    ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_send_edit(`ptr`: Pointer,`participants`: RustBuffer.ByValue,`groupName`: RustBuffer.ByValue,`senderGuid`: RustBuffer.ByValue,`targetId`: RustBuffer.ByValue,`targetPart`: Long,`newText`: RustBuffer.ByValue,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_send_mark_unread(`ptr`: Pointer,`participants`: RustBuffer.ByValue,`groupName`: RustBuffer.ByValue,`senderGuid`: RustBuffer.ByValue,
@@ -904,6 +932,10 @@ internal interface UniffiLib : Library {
     fun uniffi_imessage_core_fn_method_imessagecore_sign_out(`ptr`: Pointer,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_start(`ptr`: Pointer,`listener`: Pointer,
+    ): Long
+    fun uniffi_imessage_core_fn_method_imessagecore_start_call_audio(`ptr`: Pointer,`callId`: RustBuffer.ByValue,
+    ): Long
+    fun uniffi_imessage_core_fn_method_imessagecore_stop_call_audio(`ptr`: Pointer,`callId`: RustBuffer.ByValue,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_submit_device_code(`ptr`: Pointer,`code`: RustBuffer.ByValue,
     ): Long
@@ -1029,6 +1061,10 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_imessage_core_checksum_method_eventlistener_on_call_event(
     ): Short
+    fun uniffi_imessage_core_checksum_method_eventlistener_on_audio_frame(
+    ): Short
+    fun uniffi_imessage_core_checksum_method_eventlistener_on_audio_config(
+    ): Short
     fun uniffi_imessage_core_checksum_method_eventlistener_on_state_changed(
     ): Short
     fun uniffi_imessage_core_checksum_method_eventlistener_on_connection_lost(
@@ -1059,6 +1095,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_request_sms_code(
     ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_send_call_audio(
+    ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_send_edit(
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_send_mark_unread(
@@ -1076,6 +1114,10 @@ internal interface UniffiLib : Library {
     fun uniffi_imessage_core_checksum_method_imessagecore_sign_out(
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_start(
+    ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_start_call_audio(
+    ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_stop_call_audio(
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_submit_device_code(
     ): Short
@@ -1109,10 +1151,16 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_imessage_core_checksum_method_eventlistener_on_call_event() != 54338.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_imessage_core_checksum_method_eventlistener_on_state_changed() != 49687.toShort()) {
+    if (lib.uniffi_imessage_core_checksum_method_eventlistener_on_audio_frame() != 49051.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_imessage_core_checksum_method_eventlistener_on_connection_lost() != 15722.toShort()) {
+    if (lib.uniffi_imessage_core_checksum_method_eventlistener_on_audio_config() != 56283.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_eventlistener_on_state_changed() != 60598.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_eventlistener_on_connection_lost() != 414.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_active_calls() != 48979.toShort()) {
@@ -1154,6 +1202,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_request_sms_code() != 10899.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_send_call_audio() != 42287.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_send_edit() != 58289.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1179,6 +1230,12 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_start() != 38215.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_start_call_audio() != 15710.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_stop_call_audio() != 60521.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_submit_device_code() != 11405.toShort()) {
@@ -1403,6 +1460,25 @@ public object FfiConverterString: FfiConverter<String, RustBuffer.ByValue> {
     }
 }
 
+/**
+ * @suppress
+ */
+public object FfiConverterByteArray: FfiConverterRustBuffer<ByteArray> {
+    override fun read(buf: ByteBuffer): ByteArray {
+        val len = buf.getInt()
+        val byteArr = ByteArray(len)
+        buf.get(byteArr)
+        return byteArr
+    }
+    override fun allocationSize(value: ByteArray): ULong {
+        return 4UL + value.size.toULong()
+    }
+    override fun write(value: ByteArray, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        buf.put(value)
+    }
+}
+
 
 // This template implements a class for working with a Rust struct via a Pointer/Arc<T>
 // to the live Rust struct on the other side of the FFI.
@@ -1582,6 +1658,23 @@ public interface EventListener {
     fun `onCallEvent`(`event`: CallEvent)
     
     /**
+     * One encoded audio frame from the far end, ready to decode and play.
+     *
+     * These arrive on the media thread at the codec's frame rate - roughly
+     * fifty a second - so the Kotlin side must hand off rather than block.
+     */
+    fun `onAudioFrame`(`frame`: kotlin.ByteArray, `timestamp`: kotlin.UInt)
+    
+    /**
+     * The far end's decoder configuration, sent before its first frame.
+     *
+     * For AAC this is the AudioSpecificConfig, which is exactly what a
+     * decoder needs as its csd-0. Taking it off the wire rather than assuming
+     * a sample rate is what makes decoding reliable instead of a guess.
+     */
+    fun `onAudioConfig`(`config`: kotlin.ByteArray)
+    
+    /**
      * Called whenever the registration state changes and needs persisting.
      * Losing this means re-registering with Apple on next launch, which burns
      * a registration slot, so the app writes it out immediately.
@@ -1712,6 +1805,41 @@ open class EventListenerImpl: Disposable, AutoCloseable, EventListener {
 
     
     /**
+     * One encoded audio frame from the far end, ready to decode and play.
+     *
+     * These arrive on the media thread at the codec's frame rate - roughly
+     * fifty a second - so the Kotlin side must hand off rather than block.
+     */override fun `onAudioFrame`(`frame`: kotlin.ByteArray, `timestamp`: kotlin.UInt)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_eventlistener_on_audio_frame(
+        it, FfiConverterByteArray.lower(`frame`),FfiConverterUInt.lower(`timestamp`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * The far end's decoder configuration, sent before its first frame.
+     *
+     * For AAC this is the AudioSpecificConfig, which is exactly what a
+     * decoder needs as its csd-0. Taking it off the wire rather than assuming
+     * a sample rate is what makes decoding reliable instead of a guess.
+     */override fun `onAudioConfig`(`config`: kotlin.ByteArray)
+        = 
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_eventlistener_on_audio_config(
+        it, FfiConverterByteArray.lower(`config`),_status)
+}
+    }
+    
+    
+
+    
+    /**
      * Called whenever the registration state changes and needs persisting.
      * Losing this means re-registering with Apple on next launch, which burns
      * a registration slot, so the app writes it out immediately.
@@ -1807,7 +1935,32 @@ internal object uniffiCallbackInterfaceEventListener {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
-    internal object `onStateChanged`: UniffiCallbackInterfaceEventListenerMethod2 {
+    internal object `onAudioFrame`: UniffiCallbackInterfaceEventListenerMethod2 {
+        override fun callback(`uniffiHandle`: Long,`frame`: RustBuffer.ByValue,`timestamp`: Int,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeEventListener.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`onAudioFrame`(
+                    FfiConverterByteArray.lift(`frame`),
+                    FfiConverterUInt.lift(`timestamp`),
+                )
+            }
+            val writeReturn = { _: Unit -> Unit }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+    internal object `onAudioConfig`: UniffiCallbackInterfaceEventListenerMethod3 {
+        override fun callback(`uniffiHandle`: Long,`config`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeEventListener.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`onAudioConfig`(
+                    FfiConverterByteArray.lift(`config`),
+                )
+            }
+            val writeReturn = { _: Unit -> Unit }
+            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+        }
+    }
+    internal object `onStateChanged`: UniffiCallbackInterfaceEventListenerMethod4 {
         override fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeEventListener.handleMap.get(uniffiHandle)
             val makeCall = { ->
@@ -1818,7 +1971,7 @@ internal object uniffiCallbackInterfaceEventListener {
             uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
         }
     }
-    internal object `onConnectionLost`: UniffiCallbackInterfaceEventListenerMethod3 {
+    internal object `onConnectionLost`: UniffiCallbackInterfaceEventListenerMethod5 {
         override fun callback(`uniffiHandle`: Long,`reason`: RustBuffer.ByValue,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,) {
             val uniffiObj = FfiConverterTypeEventListener.handleMap.get(uniffiHandle)
             val makeCall = { ->
@@ -1840,6 +1993,8 @@ internal object uniffiCallbackInterfaceEventListener {
     internal var vtable = UniffiVTableCallbackInterfaceEventListener.UniffiByValue(
         `onEvent`,
         `onCallEvent`,
+        `onAudioFrame`,
+        `onAudioConfig`,
         `onStateChanged`,
         `onConnectionLost`,
         uniffiFree,
@@ -2068,6 +2223,15 @@ public interface ImessageCoreInterface {
      */
     suspend fun `requestSmsCode`(`phoneId`: kotlin.UInt): LoginStep
     
+    /**
+     * Sends one encoded audio frame from the microphone.
+     *
+     * `timestamp` is the codec's own clock, not wall time - it has to advance
+     * by the frame's sample count or the far end plays the call at the wrong
+     * speed.
+     */
+    suspend fun `sendCallAudio`(`callId`: kotlin.String, `frame`: kotlin.ByteArray, `timestamp`: kotlin.UInt)
+    
     suspend fun `sendEdit`(`participants`: List<kotlin.String>, `groupName`: kotlin.String?, `senderGuid`: kotlin.String?, `targetId`: kotlin.String, `targetPart`: kotlin.ULong, `newText`: kotlin.String): kotlin.String
     
     suspend fun `sendMarkUnread`(`participants`: List<kotlin.String>, `groupName`: kotlin.String?, `senderGuid`: kotlin.String?): kotlin.String
@@ -2102,6 +2266,20 @@ public interface ImessageCoreInterface {
      * Brings up the message client and starts delivering events to `listener`.
      */
     suspend fun `start`(`listener`: EventListener)
+    
+    /**
+     * Opens the audio path on a call that has connected.
+     *
+     * Separate from answering on purpose: the media session only exists once
+     * the relay connection is up, which is a moment or two after the call is
+     * answered, and asking for a microphone before then fails.
+     */
+    suspend fun `startCallAudio`(`callId`: kotlin.String)
+    
+    /**
+     * Releases the microphone path when a call ends.
+     */
+    suspend fun `stopCallAudio`(`callId`: kotlin.String)
     
     /**
      * Submits a six-digit code from a trusted device.
@@ -2530,6 +2708,35 @@ open class ImessageCore: Disposable, AutoCloseable, ImessageCoreInterface {
     }
 
     
+    /**
+     * Sends one encoded audio frame from the microphone.
+     *
+     * `timestamp` is the codec's own clock, not wall time - it has to advance
+     * by the frame's sample count or the far end plays the call at the wrong
+     * speed.
+     */
+    @Throws(CoreException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `sendCallAudio`(`callId`: kotlin.String, `frame`: kotlin.ByteArray, `timestamp`: kotlin.UInt) {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_send_call_audio(
+                thisPtr,
+                FfiConverterString.lower(`callId`),FfiConverterByteArray.lower(`frame`),FfiConverterUInt.lower(`timestamp`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+        
+        // Error FFI converter
+        CoreException.ErrorHandler,
+    )
+    }
+
+    
     @Throws(CoreException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `sendEdit`(`participants`: List<kotlin.String>, `groupName`: kotlin.String?, `senderGuid`: kotlin.String?, `targetId`: kotlin.String, `targetPart`: kotlin.ULong, `newText`: kotlin.String) : kotlin.String {
@@ -2734,6 +2941,59 @@ open class ImessageCore: Disposable, AutoCloseable, ImessageCoreInterface {
         
         // Error FFI converter
         CoreException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Opens the audio path on a call that has connected.
+     *
+     * Separate from answering on purpose: the media session only exists once
+     * the relay connection is up, which is a moment or two after the call is
+     * answered, and asking for a microphone before then fails.
+     */
+    @Throws(CoreException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `startCallAudio`(`callId`: kotlin.String) {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_start_call_audio(
+                thisPtr,
+                FfiConverterString.lower(`callId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+        
+        // Error FFI converter
+        CoreException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Releases the microphone path when a call ends.
+     */
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `stopCallAudio`(`callId`: kotlin.String) {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_stop_call_audio(
+                thisPtr,
+                FfiConverterString.lower(`callId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+        
+        // Error FFI converter
+        UniffiNullRustCallStatusErrorHandler,
     )
     }
 

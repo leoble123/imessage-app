@@ -258,7 +258,7 @@ class AccountManager(context: Context) {
         // already has names - loading them afterwards makes every thread title
         // visibly change from a number to a name a moment after it appears.
         contacts.load()
-        val backend = RustBackend(core, store, contacts)
+        val backend = RustBackend(core, store, contacts, CallAudio(appContext, core))
         backend.start()
         _state.value = AccountState.Ready(backend)
     }

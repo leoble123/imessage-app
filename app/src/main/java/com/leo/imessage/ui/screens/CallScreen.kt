@@ -11,6 +11,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -62,7 +64,10 @@ fun CallScreen(
     onDecline: () -> Unit,
     onHangUp: () -> Unit,
     onDismiss: () -> Unit,
+    onMuteChange: (Boolean) -> Unit = {},
 ) {
+    var muted by remember { mutableStateOf(false) }
+
     // An ended call lingers just long enough to read why, then clears itself.
     LaunchedEffect(call.stage) {
         if (call.stage == Calls.Stage.ENDED) {
@@ -129,17 +134,23 @@ fun CallScreen(
             Spacer(Modifier.weight(1f))
 
             if (call.stage == Calls.Stage.ACTIVE) {
-                // No mute/camera/speaker controls here on purpose. The call is
-                // connected at the signalling layer but no audio is flowing
-                // yet, and a mute button that mutes nothing is worse than no
-                // button - it makes a call look live when it isn't.
-                Text(
-                    "Connected - audio isn't carried yet",
-                    color = Color.White.copy(alpha = 0.45f),
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                )
+                // Only mute, because only mute has something behind it. There
+                // is no camera path yet, and a video button that does nothing
+                // makes a call look more capable than it is.
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    CallToggle(
+                        on = muted,
+                        onIcon = Icons.Filled.MicOff,
+                        offIcon = Icons.Filled.Mic,
+                        label = if (muted) "Unmute" else "Mute",
+                    ) {
+                        muted = !muted
+                        onMuteChange(muted)
+                    }
+                }
                 Spacer(Modifier.height(36.dp))
             }
 
@@ -215,6 +226,47 @@ private fun RoundButton(
             Icon(icon, label, tint = Color.White, modifier = Modifier.size(32.dp))
         }
         Spacer(Modifier.height(10.dp))
+        Text(label, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun CallToggle(
+    on: Boolean,
+    onIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    offIcon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale = pressScale(pressed, pressedScale = 0.92f)
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier
+                .size(64.dp)
+                .scaleFrom(scale)
+                .clip(CircleShape)
+                .background(
+                    if (on) Color.White.copy(alpha = 0.92f)
+                    else Color.White.copy(alpha = 0.16f)
+                )
+                .clickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    onClick = onClick,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (on) onIcon else offIcon,
+                label,
+                tint = if (on) Color(0xFF1C1C2E) else Color.White,
+                modifier = Modifier.size(26.dp),
+            )
+        }
+        Spacer(Modifier.height(8.dp))
         Text(label, color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
     }
 }

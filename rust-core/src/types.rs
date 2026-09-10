@@ -193,6 +193,19 @@ pub trait EventListener: Send + Sync {
     fn on_event(&self, event: IncomingEvent);
     /// A FaceTime call changed state.
     fn on_call_event(&self, event: CallEvent);
+
+    /// One encoded audio frame from the far end, ready to decode and play.
+    ///
+    /// These arrive on the media thread at the codec's frame rate - roughly
+    /// fifty a second - so the Kotlin side must hand off rather than block.
+    fn on_audio_frame(&self, frame: Vec<u8>, timestamp: u32);
+
+    /// The far end's decoder configuration, sent before its first frame.
+    ///
+    /// For AAC this is the AudioSpecificConfig, which is exactly what a
+    /// decoder needs as its csd-0. Taking it off the wire rather than assuming
+    /// a sample rate is what makes decoding reliable instead of a guess.
+    fn on_audio_config(&self, config: Vec<u8>);
     /// Called whenever the registration state changes and needs persisting.
     /// Losing this means re-registering with Apple on next launch, which burns
     /// a registration slot, so the app writes it out immediately.
