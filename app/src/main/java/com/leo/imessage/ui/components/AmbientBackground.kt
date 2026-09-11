@@ -13,6 +13,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import com.leo.imessage.ui.theme.Backdrop
 import com.leo.imessage.ui.theme.LocalPalette
 import com.leo.imessage.ui.theme.LocalSettings
 import com.leo.imessage.ui.theme.ThemeMode
@@ -52,25 +53,7 @@ fun AmbientBackground(modifier: Modifier = Modifier) {
         return
     }
 
-    // Hue-rotations of the accent rather than fixed colours, so the field
-    // belongs to whatever accent is set instead of fighting it.
-    val colors = remember(palette.accent, palette.isDark) {
-        val hsv = FloatArray(3)
-        android.graphics.Color.colorToHSV(palette.accent.toArgb(), hsv)
-        listOf(-52f, 22f, 86f, -14f, 48f).map { shift ->
-            Color(
-                android.graphics.Color.HSVToColor(
-                    floatArrayOf(
-                        ((hsv[0] + shift) % 360f + 360f) % 360f,
-                        (hsv[1] * 0.9f).coerceIn(0f, 1f),
-                        // Lifted in dark mode: a dark blob on a black ground
-                        // is not a blob, it is nothing.
-                        if (palette.isDark) 1f else 0.98f,
-                    )
-                )
-            )
-        }
-    }
+    val colors = ambientColors(palette)
 
     // On an OLED screen the point of the black theme is that black pixels are
     // off. A full-strength field would light the whole panel, so it keeps the
@@ -78,7 +61,7 @@ fun AmbientBackground(modifier: Modifier = Modifier) {
     val strength = when {
         oled -> 0.38f
         palette.isDark -> 1f
-        else -> 0.85f
+        else -> 1f
     }
 
     // Reduce Motion stops the drift but keeps the colour. The setting is
@@ -116,7 +99,7 @@ fun AmbientBackground(modifier: Modifier = Modifier) {
                 val cx = w * (blob.x + blob.driftX * sin(t * blob.speedX + blob.offset))
                 val cy = h * (blob.y + blob.driftY * sin(t * blob.speedY + blob.offset * 1.7f))
                 val color = colors[index % colors.size]
-                    .copy(alpha = blob.alpha * strength * (if (palette.isDark) 1.35f else 1f))
+                    .copy(alpha = blob.alpha * strength * (if (palette.isDark) 1.35f else 1.15f))
                 // Each one its own size. Four blobs of equal radius overlap
                 // into a single even wash - which is a gradient, not a field.
                 // It is the difference between the big ones that only ever
@@ -167,3 +150,67 @@ private val BLOBS = listOf(
     Blob(x = 0.12f, y = 0.68f, driftX = 0.20f, driftY = 0.14f, speedX = 1.29f, speedY = 0.91f, offset = 5.1f, alpha = 0.15f, radius = 0.46f),
     Blob(x = 0.58f, y = 0.42f, driftX = 0.24f, driftY = 0.22f, speedX = 0.47f, speedY = 1.37f, offset = 2.6f, alpha = 0.10f, radius = 0.38f),
 )
+
+/**
+ * The colours the field is painted with.
+ *
+ * Hue-rotations of the accent rather than fixed colours, so the field belongs
+ * to whatever accent is set instead of fighting it. The value is the part
+ * that matters: a blob has to be *further from* the background than the
+ * background is from itself, and on a white screen that means going darker.
+ * Painting near-white blobs onto white is what made this whole effect
+ * disappear in light mode while looking rich in dark - the code was the same,
+ * the direction was backwards.
+ */
+@Composable
+private fun ambientColors(palette: com.leo.imessage.ui.theme.AppPalette): List<Color> =
+    remember(palette.accent, palette.isDark) {
+        val hsv = FloatArray(3)
+        android.graphics.Color.colorToHSV(palette.accent.toArgb(), hsv)
+        HUE_SHIFTS.map { shift ->
+            Color(
+                android.graphics.Color.HSVToColor(
+                    floatArrayOf(
+                        ((hsv[0] + shift) % 360f + 360f) % 360f,
+                        if (palette.isDark) (hsv[1] * 0.9f).coerceIn(0f, 1f) else 0.55f,
+                        if (palette.isDark) 1f else 0.80f,
+                    )
+                )
+            )
+        }
+    }
+
+/**
+ * What the glass on this screen is actually sitting on.
+ *
+ * One colour for a field that is not one colour, which is an approximation
+ * and is meant to be: the alternative is every pane sampling the pixels
+ * beneath it, and a pane whose tint shifts as it slides over a gradient
+ * flickers. The average is what the eye reports anyway.
+ */
+@Composable
+fun rememberAmbientBackdrop(): Backdrop {
+    val palette = LocalPalette.current
+    val settings = LocalSettings.current
+    if (!settings.ambientBackground) {
+        return remember(palette.background) { Backdrop(palette.background) }
+    }
+    val colors = ambientColors(palette)
+    val oled = settings.themeMode == ThemeMode.OLED
+    return remember(colors, palette.background, oled) {
+        val strength = if (oled) 0.38f else 1f
+        val weight = if (palette.isDark) 1.35f else 1.15f
+        var blended = palette.background
+        BLOBS.forEachIndexed { index, blob ->
+            val color = colors[index % colors.size]
+            // Each blob contributes the share of the screen it actually
+            // covers, so the wide faint ones count for more than the tight
+            // bright ones - which is the opposite of averaging the list.
+            val coverage = (blob.radius * blob.alpha * strength * weight).coerceIn(0f, 1f)
+            blended = androidx.compose.ui.graphics.lerp(blended, color, coverage)
+        }
+        Backdrop(blended)
+    }
+}
+
+private val HUE_SHIFTS = listOf(-52f, 22f, 86f, -14f, 48f)

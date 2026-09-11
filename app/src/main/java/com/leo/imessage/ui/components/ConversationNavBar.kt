@@ -110,6 +110,7 @@ fun ConversationNavBar(
                 Spacer(Modifier.height(3.dp))
                 GlassPill(
                     modifier = Modifier.clip(RoundedCornerShape(11.dp)),
+                    cornerRadius = 11.dp,
                     hazeState = hazeState,
                     darkBase = darkBase,
                 ) {

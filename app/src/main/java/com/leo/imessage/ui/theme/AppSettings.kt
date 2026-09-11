@@ -143,6 +143,17 @@ class AppSettings(private val store: SettingsStore? = null) {
     var ambientBackground by bool("ambient_background", true)
 
     /**
+     * Whether glass actually bends what is behind it.
+     *
+     * A real per-pixel shader rather than a painted-on bevel, which means it
+     * costs a render pass for every pane on screen. Worth it, and worth being
+     * able to turn off: it needs Android 13 for AGSL, and a phone that is
+     * already warm has better things to spend a GPU on than the edge of a
+     * conversation row.
+     */
+    var glassRefraction by bool("glass_refraction", true)
+
+    /**
      * Gives every conversation its own colour, derived from who it's with.
      *
      * The honest reason this exists: iMessage is blue and grey and nothing

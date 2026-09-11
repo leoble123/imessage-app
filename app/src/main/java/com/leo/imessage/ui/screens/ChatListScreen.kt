@@ -92,6 +92,17 @@ fun ChatListScreen(
     val palette = LocalPalette.current
     val listState = rememberLazyListState()
     val hazeState = remember { HazeState() }
+    // Every pane, rim and shadow on this screen is derived from this rather
+    // than from the theme, because the theme does not know about the colour
+    // field the list floats on.
+    val backdrop = com.leo.imessage.ui.components.rememberAmbientBackdrop()
+    // A second blur source, holding only the colour field.
+    //
+    // The rows cannot sample the first one: they are inside it, and a pane
+    // that blurs a picture it is itself part of feeds back into itself. What
+    // a row needs to see through to is the field, which sits behind
+    // everything and contains none of them.
+    val fieldHaze = remember { HazeState() }
     var query by remember { mutableStateOf("") }
     var unreadOnly by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
@@ -201,6 +212,9 @@ fun ChatListScreen(
     val navBarBottom = androidx.compose.foundation.layout.WindowInsets.navigationBars
         .asPaddingValues().calculateBottomPadding()
 
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.leo.imessage.ui.theme.LocalBackdrop provides backdrop,
+    ) {
     Box(Modifier.fillMaxSize()) {
         // The colour field and the list are one blur source, so the floating
         // bars sample both. Blurring only the list would leave them flat
@@ -212,7 +226,9 @@ fun ChatListScreen(
                 .nestedScroll(pullConnection)
                 .glassSource(hazeState),
         ) {
-            com.leo.imessage.ui.components.AmbientBackground(Modifier.fillMaxSize())
+            com.leo.imessage.ui.components.AmbientBackground(
+                Modifier.fillMaxSize().glassSource(fieldHaze),
+            )
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -263,8 +279,10 @@ fun ChatListScreen(
                                 .fillMaxWidth()
                                 .clickable { showArchived = !showArchived },
                             shape = RoundedCornerShape(18.dp),
+                            cornerRadius = 18.dp,
                             tintAlpha = 0.26f,
                             elevation = 6.dp,
+                            hazeState = fieldHaze,
                         ) {
                             Row(
                                 Modifier
@@ -319,6 +337,7 @@ fun ChatListScreen(
                             .padding(horizontal = CARD_MARGIN)
                             .fillMaxWidth(),
                         tintAlpha = if (chat.unreadCount > 0) 0.40f else 0.30f,
+                        hazeState = fieldHaze,
                     ) {
                         ChatRow(
                             chat = chat,
@@ -635,6 +654,7 @@ fun ChatListScreen(
             )
         }
     }
+    }
 }
 
 @Composable
@@ -711,8 +731,9 @@ private fun ChatRow(
     // Transparent at rest, not palette.background: the list now floats on a
     // moving colour field, and a row painted with the flat background colour
     // would punch an opaque hole straight through it.
+    val backdrop = com.leo.imessage.ui.theme.LocalBackdrop.current
     val pressTint by androidx.compose.animation.animateColorAsState(
-        targetValue = if (pressed) palette.fieldBackground else Color.Transparent,
+        targetValue = if (pressed) backdrop.label.copy(alpha = 0.08f) else Color.Transparent,
         animationSpec = if (pressed) Motion.fade(40) else Motion.fade(220),
         label = "rowPress",
     )
@@ -962,7 +983,7 @@ private fun RowPreview(
                 Modifier
                     .size(30.dp)
                     .clip(RoundedCornerShape(7.dp))
-                    .background(palette.fieldBackground),
+                    .background(palette.label.copy(alpha = 0.08f)),
                 contentAlignment = Alignment.Center,
             ) {
                 if (thumb != null) {

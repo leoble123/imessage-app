@@ -36,6 +36,50 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 42,
+            versionName = "0.42.0",
+            date = "11 September 2026",
+            headline = "Glass that actually bends light, and one answer to what it sits on.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "Real refraction, computed per pixel on the GPU. A pane is thicker at " +
+                        "its edges, so the background is undisturbed across the middle and " +
+                        "bent harder and harder toward the rim - with a faint colour " +
+                        "fringe, because glass doesn't bend red and blue by the same " +
+                        "amount, and a bright line where the curve faces the light.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Glass Refraction is a switch in Settings, under Appearance. It costs " +
+                        "a render pass per pane, and a phone that's already warm has " +
+                        "better things to spend a GPU on.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Light mode was washed out and dark mode wasn't, because every " +
+                        "translucent surface carried its own idea of what was behind it. " +
+                        "Measured off your screenshot, the cards and pills were coming out " +
+                        "two to seven levels away from the background they sat on - the " +
+                        "only thing defining them was their shadow. Nothing decides for " +
+                        "itself now: panes, rims, sheens, shadows and scrims are all " +
+                        "derived from the one colour actually being painted.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "The colour field did nothing in light mode. It was painting " +
+                        "near-white blobs onto white - the same code that looked rich in " +
+                        "dark mode, pointed in the wrong direction.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "Conversation rows look through to the field for real now instead of " +
+                        "being a tinted fill over it, which is also what gives the " +
+                        "refraction something to bend.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 41,
             versionName = "0.41.0",
             date = "11 September 2026",

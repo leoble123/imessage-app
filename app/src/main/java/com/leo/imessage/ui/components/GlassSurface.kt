@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -60,14 +62,14 @@ fun GlassSurface(
 ) {
     val palette = LocalPalette.current
     val state = hazeState ?: LocalHazeState.current
-    val base = if (darkBase ?: palette.isDark) Color.Black else Color.White
+    val backdrop = backdropFor(darkBase)
 
     Box(
         modifier = modifier.hazeChild(
             state = state,
             style = HazeStyle(
-                backgroundColor = base,
-                tints = listOf(HazeTint(base.copy(alpha = tintAlpha))),
+                backgroundColor = backdrop.color,
+                tints = listOf(HazeTint(backdrop.pane(tintAlpha))),
                 blurRadius = blurRadius.dp,
                 noiseFactor = 0.06f,
             ),
@@ -79,10 +81,7 @@ fun GlassSurface(
                     .matchParentSize()
                     .background(
                         Brush.verticalGradient(
-                            listOf(
-                                Color.White.copy(alpha = if (darkBase ?: palette.isDark) 0.07f else 0.30f),
-                                Color.White.copy(alpha = 0f),
-                            )
+                            listOf(backdrop.sheen, Color.Transparent)
                         )
                     )
             )
@@ -120,41 +119,64 @@ fun GlassPill(
     modifier: Modifier = Modifier,
     hazeState: HazeState? = null,
     darkBase: Boolean? = null,
+    /** Must match what the caller clipped to, or the bend is in the wrong place. */
+    cornerRadius: Dp = 999.dp,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val palette = LocalPalette.current
     val state = hazeState ?: LocalHazeState.current
-    val base = if (darkBase ?: palette.isDark) Color.Black else Color.White
-
-    val dark = darkBase ?: palette.isDark
+    val backdrop = backdropFor(darkBase)
 
     Box(
-        modifier = modifier.hazeChild(
-            state = state,
-            style = HazeStyle(
-                backgroundColor = base,
-                tints = listOf(HazeTint(base.copy(alpha = 0.42f))),
-                blurRadius = 26.dp,
-                noiseFactor = 0.05f,
+        modifier = modifier
+            // Outermost, so the layer it makes holds the blurred backdrop and
+            // the rim together - the shader bends the pane, not just its fill.
+            .refractiveGlass(cornerRadius = cornerRadius)
+            .hazeChild(
+                state = state,
+                style = HazeStyle(
+                    backgroundColor = backdrop.color,
+                    tints = listOf(HazeTint(backdrop.pane(0.42f))),
+                    blurRadius = 26.dp,
+                    noiseFactor = 0.05f,
+                ),
+            )
+            // A floating pane needs its own edge. Pinned to a screen edge a
+            // bar borrows one from the frame; hovering over content it has
+            // nothing, and without a rim it reads as a smudge rather than as
+            // glass - which on a light backdrop is the whole difference
+            // between a control and a faint smear of nearly-white.
+            .border(
+                BorderStroke(
+                    width = 0.9.dp,
+                    brush = Brush.verticalGradient(
+                        listOf(backdrop.rimTop, backdrop.rimMid, backdrop.rimBottom)
+                    ),
+                ),
+                shape = CircleShape,
             ),
-        ),
     ) {
-        // A floating pane needs its own edge. Pinned to a screen edge a bar
-        // borrows one from the frame; hovering over content it has nothing,
-        // and without a rim it reads as a smudge rather than as glass.
         Box(
             Modifier
                 .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = if (dark) 0.10f else 0.24f),
-                            Color.White.copy(alpha = 0f),
-                        )
-                    )
-                )
+                .background(Brush.verticalGradient(listOf(backdrop.sheen, Color.Transparent)))
         )
         content()
+    }
+}
+
+/**
+ * The backdrop a surface should render against.
+ *
+ * `darkBase` survives as an override for the handful of places that sit on
+ * something the rest of the app cannot see - a photo viewer, a call screen -
+ * and know better than the ambient answer.
+ */
+@Composable
+private fun backdropFor(darkBase: Boolean?): com.leo.imessage.ui.theme.Backdrop {
+    val backdrop = com.leo.imessage.ui.theme.LocalBackdrop.current
+    if (darkBase == null || darkBase == backdrop.isDark) return backdrop
+    return remember(darkBase) {
+        com.leo.imessage.ui.theme.Backdrop(if (darkBase) Color.Black else Color.White)
     }
 }
 
@@ -185,37 +207,54 @@ fun ProvideHaze(state: HazeState, content: @Composable () -> Unit) {
 fun GlassCard(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(22.dp),
+    cornerRadius: Dp = 22.dp,
     darkBase: Boolean? = null,
     /** How much of the field shows through. Lower is more glass, less card. */
     tintAlpha: Float = 0.34f,
     elevation: Dp = 8.dp,
+    /**
+     * What the pane is looking through to.
+     *
+     * Without one the pane is a tinted fill, which over a smooth field is
+     * indistinguishable from a blurred one - and there is nothing for the
+     * refraction to bend, so the edge does nothing. With one, the field is
+     * genuinely sampled, and the rim has something to compress.
+     */
+    hazeState: HazeState? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val palette = LocalPalette.current
-    val dark = darkBase ?: palette.isDark
-    // Not pure white in light mode: a white pane over a pale field is white
-    // on white, and the pane disappears along with its edges.
-    val base = if (dark) Color(0xFF15161A) else Color(0xFFF7F7FA)
+    val backdrop = backdropFor(darkBase)
 
     Box(
         modifier
             .shadow(
                 elevation = elevation,
                 shape = shape,
-                ambientColor = Color.Black.copy(alpha = 0.38f),
-                spotColor = Color.Black.copy(alpha = 0.38f),
+                ambientColor = backdrop.shadow,
+                spotColor = backdrop.shadow,
             )
+            .refractiveGlass(cornerRadius = cornerRadius)
             .clip(shape)
-            .background(base.copy(alpha = tintAlpha))
+            .then(
+                if (hazeState == null) {
+                    Modifier.background(backdrop.pane(tintAlpha))
+                } else {
+                    Modifier.hazeChild(
+                        state = hazeState,
+                        style = HazeStyle(
+                            backgroundColor = backdrop.color,
+                            tints = listOf(HazeTint(backdrop.pane(tintAlpha))),
+                            blurRadius = 24.dp,
+                            noiseFactor = 0.04f,
+                        ),
+                    )
+                }
+            )
             .border(
                 BorderStroke(
                     width = 0.9.dp,
                     brush = Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = if (dark) 0.22f else 0.55f),
-                            Color.White.copy(alpha = if (dark) 0.06f else 0.13f),
-                            Color.White.copy(alpha = if (dark) 0.03f else 0.07f),
-                        )
+                        listOf(backdrop.rimTop, backdrop.rimMid, backdrop.rimBottom)
                     ),
                 ),
                 shape = shape,
@@ -224,14 +263,7 @@ fun GlassCard(
         Box(
             Modifier
                 .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = if (dark) 0.06f else 0.18f),
-                            Color.Transparent,
-                        )
-                    )
-                )
+                .background(Brush.verticalGradient(listOf(backdrop.sheen, Color.Transparent)))
         )
         content()
     }

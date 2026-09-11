@@ -53,14 +53,8 @@ fun GlassSheet(
     blurRadius: Int = 34,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val palette = LocalPalette.current
     val state = hazeState ?: LocalHazeState.current
-    val dark = darkBase ?: palette.isDark
-    // Not pure white in light mode. A white panel blurring a white
-    // conversation produces white on white - the panel disappears and its
-    // text goes with it. Tinting a few percent grey is what gives a light
-    // panel an edge to exist against.
-    val base = if (dark) Color.Black else Color(0xFFF4F4F7)
+    val backdrop = sheetBackdrop(darkBase)
 
     Box(
         modifier
@@ -77,8 +71,8 @@ fun GlassSheet(
             .hazeChild(
                 state = state,
                 style = HazeStyle(
-                    backgroundColor = base,
-                    tints = listOf(HazeTint(base.copy(alpha = tintAlpha))),
+                    backgroundColor = backdrop.color,
+                    tints = listOf(HazeTint(backdrop.pane(tintAlpha))),
                     blurRadius = blurRadius.dp,
                     noiseFactor = 0.05f,
                 ),
@@ -87,11 +81,7 @@ fun GlassSheet(
                 BorderStroke(
                     width = 0.9.dp,
                     brush = Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = if (dark) 0.24f else 0.6f),
-                            Color.White.copy(alpha = if (dark) 0.07f else 0.14f),
-                            Color.White.copy(alpha = if (dark) 0.04f else 0.08f),
-                        )
+                        listOf(backdrop.rimTop, backdrop.rimMid, backdrop.rimBottom)
                     ),
                 ),
                 shape = shape,
@@ -100,16 +90,22 @@ fun GlassSheet(
         Box(
             Modifier
                 .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = if (dark) 0.07f else 0.2f),
-                            Color.Transparent,
-                        )
-                    )
-                )
+                .background(Brush.verticalGradient(listOf(backdrop.sheen, Color.Transparent)))
         )
         content()
+    }
+}
+
+/**
+ * A panel's backdrop, with `darkBase` kept as an override for the screens
+ * that sit on something this app cannot inspect - a photo, a video call.
+ */
+@Composable
+private fun sheetBackdrop(darkBase: Boolean?): com.leo.imessage.ui.theme.Backdrop {
+    val backdrop = com.leo.imessage.ui.theme.LocalBackdrop.current
+    if (darkBase == null || darkBase == backdrop.isDark) return backdrop
+    return remember(darkBase) {
+        com.leo.imessage.ui.theme.Backdrop(if (darkBase) Color.Black else Color.White)
     }
 }
 
@@ -162,9 +158,8 @@ fun GlassScrim(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val palette = LocalPalette.current
-    val dark = darkBase ?: palette.isDark
-    val base = if (dark) Color.Black else Color.White
+    val backdrop = sheetBackdrop(darkBase)
+    val base = backdrop.scrim
 
     Box(
         modifier
@@ -175,7 +170,7 @@ fun GlassScrim(
                     Modifier.hazeChild(
                         state = hazeState,
                         style = HazeStyle(
-                            backgroundColor = base,
+                            backgroundColor = backdrop.color,
                             tints = listOf(HazeTint(base.copy(alpha = 0.42f))),
                             blurRadius = 22.dp,
                             noiseFactor = 0.03f,
