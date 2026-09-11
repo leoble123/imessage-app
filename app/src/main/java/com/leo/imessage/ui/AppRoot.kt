@@ -58,6 +58,8 @@ fun AppRoot(
     addressBook: List<com.leo.imessage.data.Contacts.SavedContact> = emptyList(),
     /** Imports an OpenBubbles export, returning a line about what it found. */
     onImport: (suspend (android.net.Uri) -> String)? = null,
+    /** Asks Apple whether one address is on iMessage, for diagnosing a failed send. */
+    onCheckHandle: (suspend (String) -> String)? = null,
     /** Places a FaceTime call. Null when there's no live account behind it. */
     onPlaceCall: ((List<String>) -> Unit)? = null,
 ) {
@@ -425,6 +427,7 @@ fun AppRoot(
                     account = accountSummary,
                     onSignOut = onSignOut,
                     onImport = onImport,
+                    onCheckHandle = onCheckHandle,
                     onOpenReleaseNotes = { showReleaseNotes = true },
                 )
             }

@@ -59,12 +59,16 @@ fun SettingsScreen(
     onImport: (suspend (android.net.Uri) -> String)? = null,
     /** Opens the full version history. */
     onOpenReleaseNotes: () -> Unit = {},
+    /** Asks Apple about one address and reports what it said. */
+    onCheckHandle: (suspend (String) -> String)? = null,
 ) {
     val palette = LocalPalette.current
     val hazeState = remember { HazeState() }
     val settings = com.leo.imessage.ui.theme.LocalSettings.current
     val context = androidx.compose.ui.platform.LocalContext.current
     var editingTemplates by remember { mutableStateOf(false) }
+    var checkingHandle by remember { mutableStateOf(false) }
+    var checkResult by remember { mutableStateOf<String?>(null) }
 
     Box(Modifier.fillMaxSize().background(palette.groupedBackground)) {
         Column(
@@ -437,6 +441,24 @@ fun SettingsScreen(
                     onClick = { editingTemplates = true },
                 )
                 SettingsDivider()
+                if (onCheckHandle != null) {
+                    // The one question a failed send cannot answer for you.
+                    SettingsRow(
+                        "Check iMessage Availability",
+                        onClick = { checkingHandle = true },
+                    )
+                    checkResult?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = palette.secondaryLabel,
+                            modifier = Modifier.padding(
+                                start = 16.dp, end = 16.dp, bottom = 12.dp,
+                            ),
+                        )
+                    }
+                    SettingsDivider()
+                }
                 SettingsRow(
                     "Export Diagnostics",
                     onClick = { shareDiagnostics(context, settings) },
@@ -481,6 +503,26 @@ fun SettingsScreen(
                     modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
                 )
             }
+        }
+
+        if (checkingHandle && onCheckHandle != null) {
+            val checkScope = rememberCoroutineScope()
+            com.leo.imessage.ui.components.GlassPrompt(
+                title = "Check iMessage Availability",
+                initial = "",
+                placeholder = "Phone number or email",
+                confirmLabel = "Check",
+                onConfirm = { entered ->
+                    if (entered.isNotBlank()) {
+                        checkResult = "Asking Apple…"
+                        checkScope.launch {
+                            checkResult = runCatching { onCheckHandle(entered) }
+                                .getOrElse { it.message ?: "That check didn't run." }
+                        }
+                    }
+                },
+                onDismiss = { checkingHandle = false },
+            )
         }
 
         if (editingTemplates) {

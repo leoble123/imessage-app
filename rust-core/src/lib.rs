@@ -1157,11 +1157,16 @@ impl ImessageCore {
         let conversation = ConversationData {
             participants,
             cv_name: group_name,
-            // A group without a stable GUID reads as a brand-new thread on the
-            // other side every time, so one is minted when the caller has none.
-            sender_guid: Some(
-                sender_guid.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
-            ),
+            // Passed straight through, and specifically *not* invented when
+            // absent. This used to mint a fresh UUID whenever the caller had
+            // none, on the theory that a group without a stable GUID reads as
+            // a new thread every time. True of groups - but groups always
+            // arrive here with one, because their GUID is part of the
+            // conversation's own identifier. The only messages that reached
+            // that fallback were one-to-one ones, which are supposed to carry
+            // no group GUID at all, and were instead being stamped with a
+            // different randomly generated group per message.
+            sender_guid,
             after_guid: None,
         };
 

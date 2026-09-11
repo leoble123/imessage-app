@@ -36,6 +36,30 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 44,
+            versionName = "0.44.0",
+            date = "11 September 2026",
+            headline = "Find out whether it really is a rate limit.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "Settings → About → Check iMessage Availability. Type a number or " +
+                        "email and it asks Apple directly, then tells you the address it " +
+                        "sent, the account it sent it under, and which of three answers " +
+                        "came back: a name, an empty answer, or a refusal with a status " +
+                        "code. A failed send cannot tell those apart; this can.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Every one-to-one message was being stamped with a freshly invented " +
+                        "group identifier. Groups are supposed to carry one and always " +
+                        "already had theirs; the only messages reaching that code were " +
+                        "the ones that should have carried none, and each got a different " +
+                        "random group of its own.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 43,
             versionName = "0.43.0",
             date = "11 September 2026",

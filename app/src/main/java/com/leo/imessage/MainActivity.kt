@@ -118,6 +118,7 @@ class MainActivity : ComponentActivity() {
                                     runCatching { backend?.calls?.place(targets, video = false) }
                                 }
                             },
+                            onCheckHandle = { raw -> account.checkHandle(raw) },
                             onImport = { uri ->
                                 val r = account.importFromOpenBubbles(uri)
                                 if (r.messages == 0 && r.duplicates > 0) {

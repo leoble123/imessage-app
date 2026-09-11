@@ -293,6 +293,53 @@ class AccountManager(context: Context) {
             result
         }
 
+    /**
+     * Asks Apple whether one address is reachable over iMessage, and reports
+     * exactly what came back.
+     *
+     * This exists because the error a failed send produces cannot answer the
+     * question. rustpush raises one error for two different situations - the
+     * recipient has no iMessage, or your account is being throttled - because
+     * by the time it is raised they look identical: the lookup succeeded and
+     * named nobody. What it does *not* cover is the third possibility, which
+     * is that the address this app sent was wrong, and that one is only
+     * distinguishable by looking at the address it sent.
+     *
+     * So the report gives the handle as it went out, the account it went out
+     * under, and whichever of the three answers Apple actually gave:
+     *
+     *  - a name back, so the lookup works and the person is reachable;
+     *  - an empty answer, which is a throttle or genuinely no iMessage;
+     *  - an error with a status code, which is Apple refusing outright.
+     */
+    suspend fun checkHandle(raw: String): String = withContext(Dispatchers.IO) {
+        val backend = backend ?: return@withContext "Not signed in."
+        val normalized = runCatching { Handles.normalize(raw) }.getOrNull()
+            ?: return@withContext "Couldn't make sense of \"$raw\"."
+        val sender = backend.handles().firstOrNull()
+            ?: return@withContext "This account has no iMessage address."
+
+        val report = StringBuilder()
+        report.appendLine("Asked about: $normalized")
+        report.appendLine("Asked as: $sender")
+        try {
+            val found = core.validateTargets(listOf(normalized), sender)
+            if (found.isEmpty()) {
+                report.append(
+                    "Apple answered, and named nobody. That is either a rate " +
+                        "limit or that address genuinely has no iMessage."
+                )
+            } else {
+                report.append("Reachable on iMessage: ${found.joinToString(", ")}")
+            }
+        } catch (e: Throwable) {
+            // The status number in here is the useful part - it is Apple's
+            // own word for what it objected to.
+            report.append("Apple refused the lookup: ${e.message ?: e::class.java.simpleName}")
+        }
+        report.toString()
+    }
+
     /** Called when the app goes to the background, so nothing is left unsaved. */
     suspend fun flush() = runCatching { store.flush() }
 
