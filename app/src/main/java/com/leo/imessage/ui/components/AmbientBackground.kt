@@ -47,12 +47,17 @@ fun AmbientBackground(modifier: Modifier = Modifier) {
     val settings = LocalSettings.current
     val oled = settings.themeMode == ThemeMode.OLED
 
+    if (!settings.ambientBackground) {
+        Box(modifier.background(palette.background))
+        return
+    }
+
     // Hue-rotations of the accent rather than fixed colours, so the field
     // belongs to whatever accent is set instead of fighting it.
     val colors = remember(palette.accent, palette.isDark) {
         val hsv = FloatArray(3)
         android.graphics.Color.colorToHSV(palette.accent.toArgb(), hsv)
-        listOf(-38f, 26f, 74f, 8f).map { shift ->
+        listOf(-52f, 22f, 86f, -14f, 48f).map { shift ->
             Color(
                 android.graphics.Color.HSVToColor(
                     floatArrayOf(
@@ -104,9 +109,7 @@ fun AmbientBackground(modifier: Modifier = Modifier) {
         Canvas(Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
-            // Larger than the screen on purpose - a blob whose edge enters
-            // frame stops being weather and starts being a circle.
-            val radius = maxOf(w, h) * 0.85f
+            val span = maxOf(w, h)
 
             BLOBS.forEachIndexed { index, blob ->
                 val t = 2f * PI.toFloat() * phase
@@ -114,6 +117,12 @@ fun AmbientBackground(modifier: Modifier = Modifier) {
                 val cy = h * (blob.y + blob.driftY * sin(t * blob.speedY + blob.offset * 1.7f))
                 val color = colors[index % colors.size]
                     .copy(alpha = blob.alpha * strength * (if (palette.isDark) 1.35f else 1f))
+                // Each one its own size. Four blobs of equal radius overlap
+                // into a single even wash - which is a gradient, not a field.
+                // It is the difference between the big ones that only ever
+                // change the temperature of a corner and the tight ones that
+                // actually read as light coming from somewhere.
+                val radius = span * blob.radius
 
                 drawCircle(
                     brush = Brush.radialGradient(
@@ -145,11 +154,16 @@ private class Blob(
     val speedY: Float,
     val offset: Float,
     val alpha: Float,
+    /** As a fraction of the screen's longest side. */
+    val radius: Float,
 )
 
 private val BLOBS = listOf(
-    Blob(x = 0.18f, y = 0.12f, driftX = 0.16f, driftY = 0.10f, speedX = 1f, speedY = 0.7f, offset = 0f, alpha = 0.15f),
-    Blob(x = 0.86f, y = 0.26f, driftX = 0.13f, driftY = 0.14f, speedX = 0.61f, speedY = 1.13f, offset = 1.9f, alpha = 0.13f),
-    Blob(x = 0.24f, y = 0.82f, driftX = 0.18f, driftY = 0.11f, speedX = 0.83f, speedY = 0.47f, offset = 3.4f, alpha = 0.12f),
-    Blob(x = 0.78f, y = 0.94f, driftX = 0.12f, driftY = 0.13f, speedX = 1.29f, speedY = 0.91f, offset = 5.1f, alpha = 0.11f),
+    // Two wide ones setting the temperature of the whole screen...
+    Blob(x = 0.16f, y = 0.06f, driftX = 0.18f, driftY = 0.12f, speedX = 1f, speedY = 0.7f, offset = 0f, alpha = 0.16f, radius = 0.95f),
+    Blob(x = 0.84f, y = 0.96f, driftX = 0.14f, driftY = 0.13f, speedX = 0.61f, speedY = 1.13f, offset = 1.9f, alpha = 0.14f, radius = 0.88f),
+    // ...and three tighter ones that read as light with a source.
+    Blob(x = 0.92f, y = 0.20f, driftX = 0.15f, driftY = 0.16f, speedX = 0.83f, speedY = 0.47f, offset = 3.4f, alpha = 0.17f, radius = 0.52f),
+    Blob(x = 0.12f, y = 0.68f, driftX = 0.20f, driftY = 0.14f, speedX = 1.29f, speedY = 0.91f, offset = 5.1f, alpha = 0.15f, radius = 0.46f),
+    Blob(x = 0.58f, y = 0.42f, driftX = 0.24f, driftY = 0.22f, speedX = 0.47f, speedY = 1.37f, offset = 2.6f, alpha = 0.10f, radius = 0.38f),
 )

@@ -198,6 +198,12 @@ fun SettingsScreen(
             }
 
             ListSection(header = "Appearance") {
+                SettingsToggle(
+                    title = "Ambient Background",
+                    checked = settings.ambientBackground,
+                    onCheckedChange = { settings.ambientBackground = it },
+                )
+                SettingsDivider()
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Text(
                         "Theme",

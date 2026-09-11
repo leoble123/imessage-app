@@ -36,6 +36,48 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 41,
+            versionName = "0.41.0",
+            date = "11 September 2026",
+            headline = "Nothing on the home screen is a bar any more.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "The top and bottom bars are gone. Settings, Edit, the filter, search " +
+                        "and compose are floating glass pills with the background running " +
+                        "past them on every side - which is the only shape that reads as " +
+                        "glass. A bar pinned edge to edge over a dark screen is a black " +
+                        "rectangle whatever it claims to be made of.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Every conversation is its own pane of glass, inset from the edges " +
+                        "with the colour field showing between them.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "\"Messages\" is part of the list now, so it scrolls away under the " +
+                        "floating controls the way a large title should - and your pinned " +
+                        "circles land in a pill of their own once it has gone.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Ambient Background is a switch, in Settings under Appearance.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "The colour field has structure instead of being one even wash - two " +
+                        "wide blobs setting the temperature and three tighter ones that " +
+                        "read as light with a source.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "With only a couple of conversations the heading vanished on launch. " +
+                        "It was measuring a scroll, on a list too short to scroll.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 40,
             versionName = "0.40.0",
             date = "11 September 2026",

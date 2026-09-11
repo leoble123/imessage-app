@@ -131,6 +131,18 @@ class AppSettings(private val store: SettingsStore? = null) {
     var lowPowerAnimations by bool("reduce_motion", false)
 
     /**
+     * The slow colour field behind the conversation list.
+     *
+     * A toggle rather than a taste imposed on everybody: it is the one thing
+     * in this app that is on screen the entire time you are using it, and
+     * something you look at that often is either exactly right for you or
+     * quietly wearing. Off leaves the flat background, which is also what
+     * makes the glass read as plain translucency - so this is really the
+     * switch between two whole looks.
+     */
+    var ambientBackground by bool("ambient_background", true)
+
+    /**
      * Gives every conversation its own colour, derived from who it's with.
      *
      * The honest reason this exists: iMessage is blue and grey and nothing
