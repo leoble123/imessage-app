@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -76,16 +78,36 @@ fun SwipeableRow(
     // shouldn't trigger recomposition when it flips.
     val passedThreshold = remember { booleanArrayOf(false) }
 
+    // How solid the row is: see-through at rest so the colour field behind
+    // the list shows through it, solid the instant it starts to move. A swipe
+    // should read as sliding a card over the actions, not as dragging a
+    // window across them, and sixteen pixels of travel is opaque well before
+    // any rail is wide enough to be noticed through it.
+    //
+    // Every read of `offset.value` below is inside a deferred lambda -
+    // drawBehind and graphicsLayer both run in the draw phase. Reading it
+    // during composition instead would recompose this row on every frame of
+    // the one gesture in the app that most has to stay smooth.
+    val slideUnit = with(density) { 16.dp.toPx() }
+    val opacity: () -> Float = { (abs(offset.value) / slideUnit).coerceIn(0f, 1f) }
+    val rowBackground = com.leo.imessage.ui.theme.LocalPalette.current.background
+
     Box(modifier = modifier) {
-        // matchParentSize, never fillMaxHeight: fillMaxHeight resolves against
-        // the incoming constraint, and inside anything loosely bounded - a
-        // preview card, a menu - that constraint is the whole screen. That's
-        // how the action rails turned into full-height rainbow columns.
-        // matchParentSize measures against the row itself, which is the only
-        // height that was ever meant.
+        // Hidden at rest rather than merely covered. Drawn unconditionally
+        // they sit behind every row in the list, which was invisible while
+        // rows were opaque and became four coloured stripes down the screen
+        // the moment they weren't.
+        //
+        // matchParentSize, never fillMaxHeight: fillMaxHeight resolves
+        // against the incoming constraint, and inside anything loosely
+        // bounded - a preview card, a menu - that constraint is the whole
+        // screen. That's how the action rails turned into full-height
+        // rainbow columns. matchParentSize measures against the row itself,
+        // which is the only height that was ever meant.
         Row(
             modifier = Modifier
                 .matchParentSize()
+                .graphicsLayer { alpha = opacity() }
                 .wrapContentWidth(Alignment.Start),
         ) {
             leadingActions.forEach { action ->
@@ -96,6 +118,7 @@ fun SwipeableRow(
         Row(
             modifier = Modifier
                 .matchParentSize()
+                .graphicsLayer { alpha = opacity() }
                 .wrapContentWidth(Alignment.End),
         ) {
             trailingActions.forEach { action ->
@@ -111,6 +134,10 @@ fun SwipeableRow(
                     layout(placeable.width, placeable.height) {
                         placeable.placeRelative(IntOffset(offset.value.roundToInt(), 0))
                     }
+                }
+                .drawBehind {
+                    val alpha = opacity()
+                    if (alpha > 0f) drawRect(rowBackground.copy(alpha = alpha))
                 }
                 .pointerInput(trailingActions, leadingActions) {
                     detectHorizontalDragGestures(

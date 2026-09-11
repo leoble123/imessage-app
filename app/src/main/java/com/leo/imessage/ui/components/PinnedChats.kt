@@ -1,5 +1,10 @@
 package com.leo.imessage.ui.components
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,23 +29,40 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.leo.imessage.data.Chat
 import com.leo.imessage.ui.theme.LocalPalette
+import com.leo.imessage.ui.theme.LocalSettings
+import com.leo.imessage.ui.theme.chatRingColorsFor
+import com.leo.imessage.ui.theme.chatTintFor
 
 /**
  * Pinned conversations, as circles above the list.
  *
  * Messages keeps up to nine of these and sizes them by how many there are -
  * one or two get big circles, a full set gets small ones - which is what
- * stops a single pin looking lost and nine looking cramped. The unread dot
- * rides the top-left of the circle rather than sitting in a separate column,
- * because there's no row here to hang it off.
+ * stops a single pin looking lost and nine looking cramped.
+ *
+ * Where this departs from Messages is that the circles carry state. iOS's
+ * pins are an ornament: a static disc, a dot, and a tag that floats past. All
+ * the information that would make them worth looking at is already here -
+ * who is typing, what is unread, what just arrived - and none of it was on
+ * screen. So the ring is the display: it breathes while they type, holds a
+ * steady coloured arc while something is unread, and sits invisible when
+ * there is nothing to say. Nothing moves unless something is actually
+ * happening, which is the only way a moving thing stays informative.
  */
 @Composable
 fun PinnedChatsRow(
@@ -87,7 +110,7 @@ fun PinnedChatsRow(
 @Composable
 private fun PinnedChat(
     chat: Chat,
-    avatarSize: androidx.compose.ui.unit.Dp,
+    avatarSize: Dp,
     onOpen: () -> Unit,
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
@@ -96,6 +119,7 @@ private fun PinnedChat(
     val haptics = rememberHaptics()
     var pressed by remember { mutableStateOf(false) }
     val scale = pressScale(pressed, pressedScale = 0.9f)
+    val tint = chatTintFor(chat.avatarSeed)
 
     Column(
         modifier = modifier
@@ -116,20 +140,40 @@ private fun PinnedChat(
             },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box {
+        Box(contentAlignment = Alignment.Center) {
+            LiveRing(
+                chat = chat,
+                diameter = avatarSize + RING_INSET * 2,
+            )
             if (chat.isGroup) {
                 GroupAvatar(chat.participants, avatarSize)
             } else {
                 Avatar(chat.participants.first(), avatarSize)
             }
             if (chat.unreadCount > 0) {
+                // The count itself once there is more than one. A dot says
+                // "something"; a number says whether it can wait.
                 Box(
                     Modifier
                         .align(Alignment.TopStart)
-                        .size(13.dp)
-                        .clip(CircleShape)
-                        .background(palette.accent)
-                )
+                        .clip(RoundedCornerShape(50))
+                        .background(tint)
+                        .padding(horizontal = if (chat.unreadCount > 1) 5.dp else 0.dp)
+                        .size(
+                            width = if (chat.unreadCount > 1) Dp.Unspecified else 13.dp,
+                            height = 13.dp,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (chat.unreadCount > 1) {
+                        Text(
+                            text = if (chat.unreadCount > 99) "99+" else "${chat.unreadCount}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                        )
+                    }
+                }
             }
             if (chat.isMuted) {
                 Box(
@@ -152,10 +196,163 @@ private fun PinnedChat(
         Text(
             text = chat.displayName,
             style = MaterialTheme.typography.labelSmall,
-            color = palette.secondaryLabel,
+            color = if (chat.unreadCount > 0) palette.label else palette.secondaryLabel,
+            fontWeight = if (chat.unreadCount > 0) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
         )
     }
 }
+
+/** How far the ring sits outside the avatar. */
+private val RING_INSET = 5.dp
+
+/**
+ * The ring around a pinned avatar, and the whole reason these are worth
+ * looking at.
+ *
+ * Three states, and only three, because a signal you have to decode is not a
+ * signal: breathing means they are typing right now, a solid arc means there
+ * is something unread, and nothing at all means nothing is happening. The
+ * arc is drawn as a sweep rather than a full circle so that the two states
+ * are told apart by shape and not only by movement - which is what keeps it
+ * readable with Reduce Motion on, when the breathing is frozen.
+ */
+@Composable
+private fun LiveRing(chat: Chat, diameter: Dp) {
+    val settings = LocalSettings.current
+    val colors = chatRingColorsFor(chat.avatarSeed)
+    val typing = chat.isTyping
+    val unread = chat.unreadCount > 0
+    if (!typing && !unread) return
+
+    val pulse = if (typing && !settings.lowPowerAnimations) {
+        val transition = rememberInfiniteTransition(label = "ring")
+        transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                // Close to a resting breath. Anything quicker reads as an
+                // alert, and an alert that never stops is just noise.
+                animation = tween(1400, easing = com.leo.imessage.ui.theme.Motion.AppleEase),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "ringPulse",
+        ).value
+    } else {
+        // Held at the top of the breath, so a frozen ring still reads as lit
+        // rather than as half-drawn.
+        if (typing) 1f else 0f
+    }
+
+    Box(
+        Modifier
+            .size(diameter)
+            .drawBehind {
+                val stroke = 2.4.dp.toPx() + (if (typing) 1.4.dp.toPx() * pulse else 0f)
+                val inset = stroke / 2f
+                val brush = Brush.sweepGradient(
+                    colors = colors + colors.first(),
+                    center = center,
+                )
+                if (typing) {
+                    // A full ring: they are here, the whole circle is theirs.
+                    drawCircle(
+                        brush = brush,
+                        radius = (size.minDimension - stroke) / 2f,
+                        style = Stroke(width = stroke),
+                        alpha = 0.55f + 0.45f * pulse,
+                    )
+                } else {
+                    // An arc, opening at the top-left where the unread badge
+                    // sits, so the badge reads as the end of the arc rather
+                    // than as something dropped on top of it.
+                    drawArc(
+                        brush = brush,
+                        startAngle = 150f,
+                        sweepAngle = 300f,
+                        useCenter = false,
+                        topLeft = Offset(inset, inset),
+                        size = Size(size.width - stroke, size.height - stroke),
+                        style = Stroke(width = stroke),
+                        alpha = 0.9f,
+                    )
+                }
+            }
+    )
+}
+
+/**
+ * The pinned circles, shrunk into the navigation bar.
+ *
+ * The list's pins scroll away like everything else; this is what they scroll
+ * *into*. Where the large title was is where they end up, so the screen's
+ * heading becomes the people on it - which is the trade a messaging app
+ * should obviously make and iOS never does, because it spends that row
+ * re-printing the word "Messages" over a list of messages.
+ *
+ * Same rings, same badges, smaller. Deliberately not a second design: the
+ * whole effect depends on these reading as the same objects that were just
+ * above the list.
+ */
+@Composable
+fun PinnedDock(
+    pinned: List<Chat>,
+    onOpen: (Chat) -> Unit,
+    onLongPress: (Chat) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (pinned.isEmpty()) return
+    val haptics = rememberHaptics()
+
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        pinned.take(9).forEach { chat ->
+            var pressed by remember(chat.id) { mutableStateOf(false) }
+            val scale = pressScale(pressed, pressedScale = 0.88f)
+            Box(
+                Modifier
+                    .scaleFrom(scale)
+                    .pointerInput(chat.id) {
+                        detectTapGestures(
+                            onPress = {
+                                pressed = true
+                                tryAwaitRelease()
+                                pressed = false
+                            },
+                            onTap = { onOpen(chat) },
+                            onLongPress = {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onLongPress(chat)
+                            },
+                        )
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                LiveRing(chat = chat, diameter = DOCK_AVATAR + 6.dp)
+                if (chat.isGroup) {
+                    GroupAvatar(chat.participants, DOCK_AVATAR)
+                } else {
+                    Avatar(chat.participants.first(), DOCK_AVATAR)
+                }
+                if (chat.unreadCount > 0) {
+                    Box(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .size(9.dp)
+                            .clip(CircleShape)
+                            .background(chatTintFor(chat.avatarSeed))
+                    )
+                }
+            }
+        }
+    }
+}
+
+private val DOCK_AVATAR = 34.dp

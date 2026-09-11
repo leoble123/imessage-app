@@ -134,21 +134,42 @@ data class AppPalette(
  * Deterministic avatar gradient, picked from the contact's identifier so the
  * same person always gets the same colors across launches.
  */
+private val avatarPairs = listOf(
+    Color(0xFF62C1FF) to Color(0xFF2A7BFF),
+    Color(0xFFFF9F6E) to Color(0xFFFF5E3A),
+    Color(0xFF7AE582) to Color(0xFF29B765),
+    Color(0xFFCE9CFF) to Color(0xFF8A4FFF),
+    Color(0xFFFFD36E) to Color(0xFFFFA51F),
+    Color(0xFFFF8FB1) to Color(0xFFFF2D6F),
+    Color(0xFF7BE7DA) to Color(0xFF1FB6A6),
+    Color(0xFFA8B4FF) to Color(0xFF5B6BFF),
+)
+
+fun avatarColorsFor(seed: String): Pair<Color, Color> {
+    val idx = ((seed.hashCode() % avatarPairs.size) + avatarPairs.size) % avatarPairs.size
+    return avatarPairs[idx]
+}
+
 fun avatarGradientFor(seed: String): Brush {
-    val pairs = listOf(
-        Color(0xFF62C1FF) to Color(0xFF2A7BFF),
-        Color(0xFFFF9F6E) to Color(0xFFFF5E3A),
-        Color(0xFF7AE582) to Color(0xFF29B765),
-        Color(0xFFCE9CFF) to Color(0xFF8A4FFF),
-        Color(0xFFFFD36E) to Color(0xFFFFA51F),
-        Color(0xFFFF8FB1) to Color(0xFFFF2D6F),
-        Color(0xFF7BE7DA) to Color(0xFF1FB6A6),
-        Color(0xFFA8B4FF) to Color(0xFF5B6BFF),
-    )
-    val idx = ((seed.hashCode() % pairs.size) + pairs.size) % pairs.size
-    val (a, b) = pairs[idx]
+    val (a, b) = avatarColorsFor(seed)
     return Brush.linearGradient(listOf(a, b))
 }
+
+/**
+ * One colour standing for a whole conversation - its ring, its unread pill,
+ * its accent anywhere else it needs one.
+ *
+ * Deliberately the deeper stop of the same pair the avatar is painted with,
+ * rather than a second palette that happens to look similar. A person is one
+ * colour in this app; two systems that agree today drift apart the first time
+ * either is touched, and then the same thread is teal in one place and blue
+ * in another.
+ */
+fun chatTintFor(seed: String): Color = avatarColorsFor(seed).second
+
+/** The pair itself, for a ring that wants the gradient rather than the tint. */
+fun chatRingColorsFor(seed: String): List<Color> =
+    avatarColorsFor(seed).let { listOf(it.first, it.second) }
 
 /**
  * A conversation's own bubble colours, derived from who it's with.

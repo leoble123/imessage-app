@@ -186,6 +186,16 @@ fun AppRoot(
                     }
                 },
                 onSetMuted = { id, muted -> scope.launch { backend.setMuted(id, muted) } },
+                onMarkAllRead = {
+                    scope.launch {
+                        // Sequential, not a parallel fan-out: each of these
+                        // sends a read receipt over the same connection, and
+                        // firing twenty at once is a burst Apple has no
+                        // reason to expect from one person opening an app.
+                        chats.filter { it.unreadCount > 0 }
+                            .forEach { runCatching { backend.markRead(it.id) } }
+                    }
+                },
                 onDeleteChat = { id ->
                     scope.launch {
                         if (openChatId == id) openChatId = null

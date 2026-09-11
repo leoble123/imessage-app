@@ -36,6 +36,67 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 40,
+            versionName = "0.40.0",
+            date = "11 September 2026",
+            headline = "The conversation list stopped being a grey ledger.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "A slow colour field behind the list, drawn from your accent colour. " +
+                        "Every bar on this screen is a real backdrop blur and until now " +
+                        "there was nothing behind them worth blurring.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Every conversation has its own colour - the same one its avatar is " +
+                        "painted with. It's on the ring, the unread badge and the count, " +
+                        "so you can find a thread by colour before you've read a word.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Pinned circles that carry state: the ring breathes while they're " +
+                        "typing and holds a coloured arc while something is unread. " +
+                        "Nothing moves unless something is actually happening.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Scroll, and the big \"Messages\" heading turns into your pinned " +
+                        "circles. There's no reason for a screen full of messages to " +
+                        "spend its widest row printing the word \"Messages\".",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Rows show the actual photo instead of the word \"Photo\", a reaction " +
+                        "as the reaction, and how far your own last message got.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "A line under the heading saying what's actually going on - who's " +
+                        "typing, what's unread, or that you're all caught up.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Pull the list down past the top for everything waiting across every " +
+                        "conversation, and a way to mark it all read that doesn't mean " +
+                        "opening each thread in turn.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Swipe rails were drawn behind every row at all times. Invisible " +
+                        "while rows were opaque, four coloured stripes the moment they " +
+                        "weren't.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "The heading sat still through the first inch of every scroll and " +
+                        "then moved all at once - it was measuring how much of the first " +
+                        "row had gone, which is nothing until the bar's own height has " +
+                        "scrolled past.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 39,
             versionName = "0.39.0",
             date = "10 September 2026",

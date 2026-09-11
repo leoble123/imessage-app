@@ -30,7 +30,6 @@ import com.leo.imessage.ui.theme.LocalPalette
 @Composable
 fun TypingIndicator(modifier: Modifier = Modifier) {
     val palette = LocalPalette.current
-    val transition = rememberInfiniteTransition(label = "typing")
 
     Box(
         modifier = modifier
@@ -38,36 +37,54 @@ fun TypingIndicator(modifier: Modifier = Modifier) {
             .background(palette.incomingBubble)
             .padding(horizontal = 15.dp, vertical = 13.dp),
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            repeat(3) { i ->
-                val phase by transition.animateFloat(
-                    initialValue = 0f,
-                    targetValue = 1f,
-                    animationSpec = infiniteRepeatable(
-                        animation = keyframes {
-                            durationMillis = 1200
-                            0f at 0
-                            0f at (i * 160)
-                            1f at (i * 160 + 260)
-                            0f at (i * 160 + 620)
-                            0f at 1200
-                        },
-                        repeatMode = RepeatMode.Restart,
-                    ),
-                    label = "dot$i",
-                )
-                Box(
-                    Modifier
-                        .size(8.dp)
-                        .scale(0.82f + phase * 0.28f)
-                        .alpha(0.45f + phase * 0.55f)
-                        .clip(CircleShape)
-                        .background(palette.secondaryLabel),
-                )
-            }
+        TypingDots(color = palette.secondaryLabel, dot = 8.dp, gap = 5.dp)
+    }
+}
+
+/**
+ * The dots on their own, for anywhere there is no bubble to put them in -
+ * the conversation list, where "typing" as a word and then three live dots
+ * says the same thing twice but only one of the two proves it is happening
+ * right now.
+ */
+@Composable
+fun TypingDots(
+    color: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+    dot: androidx.compose.ui.unit.Dp = 5.dp,
+    gap: androidx.compose.ui.unit.Dp = 3.dp,
+) {
+    val transition = rememberInfiniteTransition(label = "typing")
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(gap),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        repeat(3) { i ->
+            val phase by transition.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = keyframes {
+                        durationMillis = 1200
+                        0f at 0
+                        0f at (i * 160)
+                        1f at (i * 160 + 260)
+                        0f at (i * 160 + 620)
+                        0f at 1200
+                    },
+                    repeatMode = RepeatMode.Restart,
+                ),
+                label = "dot$i",
+            )
+            Box(
+                Modifier
+                    .size(dot)
+                    .scale(0.82f + phase * 0.28f)
+                    .alpha(0.45f + phase * 0.55f)
+                    .clip(CircleShape)
+                    .background(color),
+            )
         }
     }
 }

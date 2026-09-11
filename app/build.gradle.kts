@@ -12,8 +12,8 @@ android {
         applicationId = "com.leo.imessage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 39
-        versionName = "0.39.0"
+        versionCode = 40
+        versionName = "0.40.0"
         buildConfigField("long", "BUILD_TIME", "${System.currentTimeMillis()}L")
         ndk {
             // Only the ABI we actually target - keeps the APK lean.
