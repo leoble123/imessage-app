@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.leo.imessage.ui.theme.LocalPalette
+import com.leo.imessage.ui.theme.Materials
 import com.leo.imessage.ui.theme.Motion
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
@@ -53,8 +54,9 @@ fun GlassSheet(
     blurRadius: Int = 34,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val palette = LocalPalette.current
     val state = hazeState ?: LocalHazeState.current
-    val backdrop = sheetBackdrop(darkBase)
+    val dark = darkBase ?: palette.isDark
 
     Box(
         modifier
@@ -71,41 +73,17 @@ fun GlassSheet(
             .hazeChild(
                 state = state,
                 style = HazeStyle(
-                    backgroundColor = backdrop.color,
-                    tints = listOf(HazeTint(backdrop.pane(tintAlpha))),
-                    blurRadius = blurRadius.dp,
-                    noiseFactor = 0.05f,
+                    backgroundColor = if (dark) Color.Black else Color.White,
+                    tints = listOf(HazeTint(Materials.thick(dark))),
+                    blurRadius = Materials.BLUR_RADIUS.dp,
+                    noiseFactor = 0f,
                 ),
             )
-            .border(
-                BorderStroke(
-                    width = 0.9.dp,
-                    brush = Brush.verticalGradient(
-                        listOf(backdrop.rimTop, backdrop.rimMid, backdrop.rimBottom)
-                    ),
-                ),
-                shape = shape,
-            ),
+            // A hairline, not a lit rim. A panel needs an edge; iOS gives it
+            // the separator colour and nothing else.
+            .border(0.5.dp, palette.separator, shape),
     ) {
-        Box(
-            Modifier
-                .matchParentSize()
-                .background(Brush.verticalGradient(listOf(backdrop.sheen, Color.Transparent)))
-        )
         content()
-    }
-}
-
-/**
- * A panel's backdrop, with `darkBase` kept as an override for the screens
- * that sit on something this app cannot inspect - a photo, a video call.
- */
-@Composable
-private fun sheetBackdrop(darkBase: Boolean?): com.leo.imessage.ui.theme.Backdrop {
-    val backdrop = com.leo.imessage.ui.theme.LocalBackdrop.current
-    if (darkBase == null || darkBase == backdrop.isDark) return backdrop
-    return remember(darkBase) {
-        com.leo.imessage.ui.theme.Backdrop(if (darkBase) Color.Black else Color.White)
     }
 }
 
@@ -158,8 +136,8 @@ fun GlassScrim(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val backdrop = sheetBackdrop(darkBase)
-    val base = backdrop.scrim
+    val palette = LocalPalette.current
+    val dark = darkBase ?: palette.isDark
 
     Box(
         modifier
@@ -170,14 +148,14 @@ fun GlassScrim(
                     Modifier.hazeChild(
                         state = hazeState,
                         style = HazeStyle(
-                            backgroundColor = backdrop.color,
-                            tints = listOf(HazeTint(base.copy(alpha = 0.42f))),
+                            backgroundColor = if (dark) Color.Black else Color.White,
+                            tints = listOf(HazeTint(Materials.scrim(dark))),
                             blurRadius = 22.dp,
-                            noiseFactor = 0.03f,
+                            noiseFactor = 0f,
                         ),
                     )
                 } else {
-                    Modifier.background(Color.Black.copy(alpha = 0.42f))
+                    Modifier.background(Materials.scrim(dark))
                 }
             )
             .clickable(

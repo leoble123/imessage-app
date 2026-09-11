@@ -198,20 +198,7 @@ fun SettingsScreen(
             }
 
             ListSection(header = "Appearance") {
-                SettingsToggle(
-                    title = "Ambient Background",
-                    checked = settings.ambientBackground,
-                    onCheckedChange = { settings.ambientBackground = it },
-                )
-                SettingsDivider()
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                    SettingsToggle(
-                        title = "Glass Refraction",
-                        checked = settings.glassRefraction,
-                        onCheckedChange = { settings.glassRefraction = it },
-                    )
-                    SettingsDivider()
-                }
+
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Text(
                         "Theme",

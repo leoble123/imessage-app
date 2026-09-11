@@ -92,17 +92,6 @@ fun ChatListScreen(
     val palette = LocalPalette.current
     val listState = rememberLazyListState()
     val hazeState = remember { HazeState() }
-    // Every pane, rim and shadow on this screen is derived from this rather
-    // than from the theme, because the theme does not know about the colour
-    // field the list floats on.
-    val backdrop = com.leo.imessage.ui.components.rememberAmbientBackdrop()
-    // A second blur source, holding only the colour field.
-    //
-    // The rows cannot sample the first one: they are inside it, and a pane
-    // that blurs a picture it is itself part of feeds back into itself. What
-    // a row needs to see through to is the field, which sits behind
-    // everything and contains none of them.
-    val fieldHaze = remember { HazeState() }
     var query by remember { mutableStateOf("") }
     var unreadOnly by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
@@ -212,23 +201,15 @@ fun ChatListScreen(
     val navBarBottom = androidx.compose.foundation.layout.WindowInsets.navigationBars
         .asPaddingValues().calculateBottomPadding()
 
-    androidx.compose.runtime.CompositionLocalProvider(
-        com.leo.imessage.ui.theme.LocalBackdrop provides backdrop,
-    ) {
-    Box(Modifier.fillMaxSize()) {
-        // The colour field and the list are one blur source, so the floating
-        // bars sample both. Blurring only the list would leave them flat
-        // wherever no row happened to be behind them, which is exactly where
-        // the effect is most looked at.
+    Box(Modifier.fillMaxSize().background(palette.background)) {
+        // The list is the blur source; the floating controls sample it, so
+        // rows visibly smear through them on their way past.
         Box(
             Modifier
                 .fillMaxSize()
                 .nestedScroll(pullConnection)
                 .glassSource(hazeState),
         ) {
-            com.leo.imessage.ui.components.AmbientBackground(
-                Modifier.fillMaxSize().glassSource(fieldHaze),
-            )
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -241,13 +222,12 @@ fun ChatListScreen(
                     top = statusBarTop + TOP_BAR_INSET,
                     bottom = navBarBottom + BOTTOM_BAR_INSET,
                 ),
-                verticalArrangement = Arrangement.spacedBy(CARD_GAP),
             ) {
                 val pinned = visibleChats.filter { it.isPinned }
                 val rest = visibleChats.filterNot { it.isPinned }
 
                 item(key = "heading") {
-                    Column(Modifier.padding(start = 22.dp, end = 22.dp, bottom = 4.dp)) {
+                    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 10.dp)) {
                         Text(
                             text = if (showArchived) "Archived" else "Messages",
                             style = MaterialTheme.typography.displaySmall,
@@ -273,21 +253,12 @@ fun ChatListScreen(
 
                 if (archivedCount > 0 || showArchived) {
                     item(key = "archived-entry") {
-                        com.leo.imessage.ui.components.GlassCard(
-                            modifier = Modifier
-                                .padding(horizontal = CARD_MARGIN)
-                                .fillMaxWidth()
-                                .clickable { showArchived = !showArchived },
-                            shape = RoundedCornerShape(18.dp),
-                            cornerRadius = 18.dp,
-                            tintAlpha = 0.26f,
-                            elevation = 6.dp,
-                            hazeState = fieldHaze,
-                        ) {
+                        Column {
                             Row(
                                 Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 13.dp),
+                                    .clickable { showArchived = !showArchived }
+                                    .padding(horizontal = 20.dp, vertical = 13.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
@@ -304,6 +275,7 @@ fun ChatListScreen(
                                     )
                                 }
                             }
+                            RowSeparator()
                         }
                     }
                 }
@@ -328,31 +300,20 @@ fun ChatListScreen(
                     key = { it.id },
                     contentType = { "chat" },
                 ) { chat ->
-                    // Each conversation is its own pane rather than a line in
-                    // a ledger. Two of them floating on the field read as a
-                    // screen with two things on it; two rows on a flat fill
-                    // read as a screen that failed to load.
-                    com.leo.imessage.ui.components.GlassCard(
-                        modifier = Modifier
-                            .padding(horizontal = CARD_MARGIN)
-                            .fillMaxWidth(),
-                        tintAlpha = if (chat.unreadCount > 0) 0.40f else 0.30f,
-                        hazeState = fieldHaze,
-                    ) {
-                        ChatRow(
-                            chat = chat,
-                            onOpen = onOpenChat,
-                            editing = editing,
-                            isSelected = chat.id in selected,
-                            onToggleSelected = { toggleSelection(selected, chat.id) },
-                            onSetPinned = onSetPinned,
-                            onSetMuted = onSetMuted,
-                            onDeleteChat = onDeleteChat,
-                            onMarkUnread = onMarkUnread,
-                            onLongPress = { actionsFor = chat },
-                            draft = drafts[chat.id],
-                        )
-                    }
+                    ChatRow(
+                        chat = chat,
+                        onOpen = onOpenChat,
+                        editing = editing,
+                        isSelected = chat.id in selected,
+                        onToggleSelected = { toggleSelection(selected, chat.id) },
+                        onSetPinned = onSetPinned,
+                        onSetMuted = onSetMuted,
+                        onDeleteChat = onDeleteChat,
+                        onMarkUnread = onMarkUnread,
+                        onLongPress = { actionsFor = chat },
+                        draft = drafts[chat.id],
+                        showSeparator = chat.id != rows.lastOrNull()?.id,
+                    )
                 }
             }
         }
@@ -371,6 +332,7 @@ fun ChatListScreen(
                 com.leo.imessage.ui.components.GlassPill(
                     modifier = Modifier.clip(RoundedCornerShape(50)),
                     hazeState = hazeState,
+                    fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
                 ) {
                     Row(
                         Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
@@ -422,6 +384,7 @@ fun ChatListScreen(
                 com.leo.imessage.ui.components.GlassPill(
                     modifier = Modifier.clip(RoundedCornerShape(50)),
                     hazeState = hazeState,
+                    fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
                 ) {
                     Row(
                         Modifier.padding(start = 13.dp, end = 15.dp, top = 9.dp, bottom = 9.dp),
@@ -457,6 +420,7 @@ fun ChatListScreen(
                             .clip(RoundedCornerShape(50))
                             .graphicsLayer { alpha = collapseProgress },
                         hazeState = hazeState,
+                        fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
                     ) {
                         Text(
                             text = if (showArchived) "Archived" else "Messages",
@@ -473,6 +437,7 @@ fun ChatListScreen(
                         com.leo.imessage.ui.components.GlassPill(
                             modifier = Modifier.clip(RoundedCornerShape(50)),
                             hazeState = hazeState,
+                            fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
                         ) {
                             Text(
                                 text = "Delete (${selected.size})",
@@ -493,6 +458,7 @@ fun ChatListScreen(
                         com.leo.imessage.ui.components.GlassPill(
                             modifier = Modifier.clip(RoundedCornerShape(50)),
                             hazeState = hazeState,
+                            fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
                         ) {
                             Text(
                                 text = if (selected.size == visibleChats.size) "None" else "All",
@@ -513,6 +479,7 @@ fun ChatListScreen(
                         com.leo.imessage.ui.components.GlassPill(
                             modifier = Modifier.clip(CircleShape),
                             hazeState = hazeState,
+                            fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
                         ) {
                             Icon(
                                 Icons.Filled.FilterList,
@@ -545,6 +512,7 @@ fun ChatListScreen(
                     com.leo.imessage.ui.components.GlassPill(
                         modifier = Modifier.clip(RoundedCornerShape(50)),
                         hazeState = hazeState,
+                        fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
                     ) {
                         com.leo.imessage.ui.components.PinnedDock(
                             pinned = allPinned,
@@ -569,6 +537,7 @@ fun ChatListScreen(
                     .weight(1f)
                     .clip(RoundedCornerShape(50)),
                 hazeState = hazeState,
+                fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
             ) {
                 SearchField(query = query, onQueryChange = { query = it })
             }
@@ -577,6 +546,7 @@ fun ChatListScreen(
                 com.leo.imessage.ui.components.GlassPill(
                     modifier = Modifier.clip(CircleShape),
                     hazeState = hazeState,
+                    fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
                 ) {
                     Icon(
                         Icons.Filled.Videocam,
@@ -593,6 +563,7 @@ fun ChatListScreen(
             com.leo.imessage.ui.components.GlassPill(
                 modifier = Modifier.clip(CircleShape),
                 hazeState = hazeState,
+                fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
             ) {
                 Icon(
                     Icons.Outlined.Edit,
@@ -653,7 +624,6 @@ fun ChatListScreen(
                 },
             )
         }
-    }
     }
 }
 
@@ -720,6 +690,8 @@ private fun ChatRow(
     draft: String? = null,
     /** Off inside a preview card, where rails have nothing to slide out of. */
     swipeEnabled: Boolean = true,
+    /** The hairline under the row. Off for the last one, and in previews. */
+    showSeparator: Boolean = false,
 ) {
     val palette = LocalPalette.current
     val rowHaptics = com.leo.imessage.ui.components.rememberHaptics()
@@ -728,12 +700,8 @@ private fun ChatRow(
     // lift - no ripple, no delay. That immediacy is most of why taps feel
     // direct rather than laggy.
     var pressed by remember { mutableStateOf(false) }
-    // Transparent at rest, not palette.background: the list now floats on a
-    // moving colour field, and a row painted with the flat background colour
-    // would punch an opaque hole straight through it.
-    val backdrop = com.leo.imessage.ui.theme.LocalBackdrop.current
     val pressTint by androidx.compose.animation.animateColorAsState(
-        targetValue = if (pressed) backdrop.label.copy(alpha = 0.08f) else Color.Transparent,
+        targetValue = if (pressed) palette.fieldBackground else palette.background,
         animationSpec = if (pressed) Motion.fade(40) else Motion.fade(220),
         label = "rowPress",
     )
@@ -766,19 +734,10 @@ private fun ChatRow(
             ) { onSetMuted(chat.id, !chat.isMuted) },
         ),
     ) {
+        Box {
         Row(
             Modifier
                 .background(pressTint)
-                // An unread row is washed in its own colour rather than
-                // marked with a dot in the app's. A dot tells you something
-                // is unread; the wash tells you *who* from across the room.
-                .then(
-                    if (chat.unreadCount == 0) Modifier else Modifier.background(
-                        androidx.compose.ui.graphics.Brush.horizontalGradient(
-                            listOf(tint.copy(alpha = 0.13f), tint.copy(alpha = 0f))
-                        )
-                    )
-                )
                 .pointerInput(chat.id) {
                     detectTapGestures(
                         onPress = {
@@ -793,7 +752,7 @@ private fun ChatRow(
                         },
                     )
                 }
-                .padding(start = 12.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.Top,
         ) {
             // The selection circle slides the row over rather than appearing
@@ -911,7 +870,32 @@ private fun ChatRow(
                 RowPreview(chat = chat, draft = draft, tint = tint)
             }
         }
+        // Inset to start where the text does, which is what makes a list read
+        // as rows of one thing rather than as stacked boxes.
+        if (showSeparator) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 102.dp)
+                    .fillMaxWidth()
+                    .height(0.5.dp)
+                    .background(palette.separator)
+            )
+        }
+        }
     }
+}
+
+/** A full-width hairline, for rows that are not conversations. */
+@Composable
+private fun RowSeparator() {
+    Box(
+        Modifier
+            .padding(start = 20.dp)
+            .fillMaxWidth()
+            .height(0.5.dp)
+            .background(LocalPalette.current.separator)
+    )
 }
 
 /**
@@ -1081,12 +1065,6 @@ private val TOP_BAR_INSET = 58.dp
 
 /** And at the bottom, for search and compose. */
 private val BOTTOM_BAR_INSET = 68.dp
-
-/** The inset of a conversation card from the edge of the screen. */
-private val CARD_MARGIN = 12.dp
-
-/** And the air between two of them. */
-private val CARD_GAP = 8.dp
 
 /** Pulled distance per pixel dragged - the rubber band. */
 private const val PULL_RESISTANCE = 0.5f

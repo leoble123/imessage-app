@@ -130,28 +130,6 @@ class AppSettings(private val store: SettingsStore? = null) {
     var sendWithReturn by bool("send_with_return", false)
     var lowPowerAnimations by bool("reduce_motion", false)
 
-    /**
-     * The slow colour field behind the conversation list.
-     *
-     * A toggle rather than a taste imposed on everybody: it is the one thing
-     * in this app that is on screen the entire time you are using it, and
-     * something you look at that often is either exactly right for you or
-     * quietly wearing. Off leaves the flat background, which is also what
-     * makes the glass read as plain translucency - so this is really the
-     * switch between two whole looks.
-     */
-    var ambientBackground by bool("ambient_background", true)
-
-    /**
-     * Whether glass actually bends what is behind it.
-     *
-     * A real per-pixel shader rather than a painted-on bevel, which means it
-     * costs a render pass for every pane on screen. Worth it, and worth being
-     * able to turn off: it needs Android 13 for AGSL, and a phone that is
-     * already warm has better things to spend a GPU on than the edge of a
-     * conversation row.
-     */
-    var glassRefraction by bool("glass_refraction", true)
 
     /**
      * Gives every conversation its own colour, derived from who it's with.

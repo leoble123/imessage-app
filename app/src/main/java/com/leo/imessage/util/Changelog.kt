@@ -36,6 +36,46 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 43,
+            versionName = "0.43.0",
+            date = "11 September 2026",
+            headline = "Out with the frosted plastic, in with the real thing.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "Every surface had a white rim graded down its edge and a sheen over " +
+                        "its top third. That is what \"foggy plastic\" means - real iOS " +
+                        "material has neither. It is one flat opacity over a blur, and the " +
+                        "only line on it is the hairline where it meets content.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "Two fixed tones, taken from UIKit's own materials rather than " +
+                        "invented, which is also the whole answer to being consistent " +
+                        "across backgrounds: a constant cannot disagree with itself the " +
+                        "way a derivation can.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "The conversation list is a list again - flat rows on a flat " +
+                        "background with a hairline inset to where the text starts, the " +
+                        "way Messages has always drawn one.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "The floating controls are control fills now, not material. A " +
+                        "translucent pill at the top of a list has nothing behind it to be " +
+                        "translucent about, so it came out the same colour as the screen; " +
+                        "iOS gives controls an opaque grey for exactly that reason.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "The ambient colour field and the glass refraction are gone, along " +
+                        "with their settings.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 42,
             versionName = "0.42.0",
             date = "11 September 2026",

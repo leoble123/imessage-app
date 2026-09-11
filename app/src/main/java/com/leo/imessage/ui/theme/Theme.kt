@@ -141,10 +141,6 @@ fun iMessageTheme(
     CompositionLocalProvider(
         LocalPalette provides palette,
         LocalSettings provides settings,
-        // The flat background is what is behind the glass on every screen
-        // that does not paint something else there. The conversation list,
-        // which does, overrides this for itself.
-        LocalBackdrop provides remember(palette.background) { Backdrop(palette.background) },
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
