@@ -36,6 +36,29 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 54,
+            versionName = "0.54.0",
+            date = "12 September 2026",
+            headline = "Check iMessage Availability actually runs now.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "The availability check was cancelling itself before it asked " +
+                        "Apple anything. It ran on a scope belonging to the prompt " +
+                        "that started it, and the prompt closes the instant you tap " +
+                        "Check - so the lookup was killed on the way out, every time, " +
+                        "and it had never once reached the network.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "A cancelled check no longer prints its cancellation where the " +
+                        "answer goes. \"The coroutine scope left the composition\" was " +
+                        "the app describing its own plumbing and passing it off as " +
+                        "something Apple said.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 53,
             versionName = "0.53.0",
             date = "12 September 2026",

@@ -72,6 +72,18 @@ fun SettingsScreen(
     var checkingHandle by remember { mutableStateOf(false) }
     var checkResult by remember { mutableStateOf<String?>(null) }
 
+    // Screen-scoped, and it has to be.
+    //
+    // This lived inside the `if (checkingHandle)` block that puts the prompt
+    // on screen, which meant its lifetime was the prompt's. GlassPrompt calls
+    // onConfirm and then dismisses itself, so tapping Check set
+    // checkingHandle = false, the block left the composition, and the scope
+    // was cancelled with the lookup still in flight - every time, before a
+    // single request went out. The cancellation was then caught and shown as
+    // though it were Apple's answer, which is how a network diagnostic spent
+    // days reporting "The coroutine scope left the composition".
+    val checkScope = rememberCoroutineScope()
+
     Box(Modifier.fillMaxSize().background(palette.groupedBackground)) {
         Column(
             Modifier
@@ -589,7 +601,6 @@ fun SettingsScreen(
         }
 
         if (checkingHandle && onCheckHandle != null) {
-            val checkScope = rememberCoroutineScope()
             com.leo.imessage.ui.components.GlassPrompt(
                 title = "Check iMessage Availability",
                 initial = "",
@@ -599,8 +610,17 @@ fun SettingsScreen(
                     if (entered.isNotBlank()) {
                         checkResult = "Asking Apple…"
                         checkScope.launch {
-                            checkResult = runCatching { onCheckHandle(entered) }
-                                .getOrElse { it.message ?: "That check didn't run." }
+                            checkResult = try {
+                                onCheckHandle(entered)
+                            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                                // Never reported as a result. A cancellation
+                                // is this screen going away, not an answer,
+                                // and dressing one up as the other is what
+                                // hid the bug above.
+                                throw cancel
+                            } catch (e: Throwable) {
+                                e.message ?: "That check didn't run."
+                            }
                         }
                     }
                 },
