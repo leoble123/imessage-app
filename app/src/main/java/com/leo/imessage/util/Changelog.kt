@@ -36,6 +36,29 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 62,
+            versionName = "0.62.0",
+            date = "12 September 2026",
+            headline = "A sign-in no longer dies because a public server had a bad minute.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "Signing in gets three attempts at provisioning instead of one. The " +
+                        "step runs against a public anisette server over a websocket, and " +
+                        "only when the device identity is new - so a single abandoned " +
+                        "session landed squarely on a first sign-in and looked like the " +
+                        "app was broken.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "That failure said what it was. The server has states the client did " +
+                        "not know about, so it died listing the four it recognised, which " +
+                        "reads like a bug here rather than a server giving up. Any state " +
+                        "it cannot answer now ends the session and retries it.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 61,
             versionName = "0.61.0",
             date = "12 September 2026",
