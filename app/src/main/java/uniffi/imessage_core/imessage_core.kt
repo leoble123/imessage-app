@@ -847,6 +847,8 @@ internal open class UniffiVTableCallbackInterfaceEventListener(
 
 
 
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -906,6 +908,8 @@ internal interface UniffiLib : Library {
     fun uniffi_imessage_core_fn_method_imessagecore_download_attachment(`ptr`: Pointer,`messageId`: RustBuffer.ByValue,`attachmentIndex`: Int,`intoPath`: RustBuffer.ByValue,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_end_call(`ptr`: Pointer,`callId`: RustBuffer.ByValue,
+    ): Long
+    fun uniffi_imessage_core_fn_method_imessagecore_force_register(`ptr`: Pointer,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_handles(`ptr`: Pointer,
     ): Long
@@ -1093,6 +1097,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_end_call(
     ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_force_register(
+    ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_handles(
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_is_registered(
@@ -1197,6 +1203,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_end_call() != 53262.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_force_register() != 60897.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_handles() != 27449.toShort()) {
@@ -2213,6 +2222,31 @@ public interface ImessageCoreInterface {
     suspend fun `endCall`(`callId`: kotlin.String)
     
     /**
+     * Registers again even though a registration already exists.
+     *
+     * `complete_registration` skips the expensive step whenever the saved
+     * state already carries one, which is correct nearly always and wrong in
+     * exactly one situation: when the registration Apple holds for this
+     * identity has been superseded. IDS keeps one registration per device
+     * identity, so another client signing the same Apple ID in with the same
+     * device details takes it over - and the loser is left in a state that
+     * looks completely healthy from the inside. The push connection stays up.
+     * Lookups are answered rather than refused. Every one of them resolves
+     * nobody, because the registration doing the asking is no longer the one
+     * Apple answers for, and nothing arrives either, for the same reason.
+     *
+     * Nothing in the protocol reports that from the outside - a superseded
+     * registration and a fine one return the same status - and there is no
+     * way back from it except registering again.
+     *
+     * So this exists, and it is deliberately a button rather than anything
+     * automatic or retried. Registration is the rate-limited step; doing it
+     * on a schedule to "fix" a problem is the pattern that turns a bad
+     * afternoon into a blocked account.
+     */
+    suspend fun `forceRegister`()
+    
+    /**
      * The addresses and numbers this account can send from.
      */
     suspend fun `handles`(): Handles
@@ -2626,6 +2660,51 @@ open class ImessageCore: Disposable, AutoCloseable, ImessageCoreInterface {
             UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_end_call(
                 thisPtr,
                 FfiConverterString.lower(`callId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+        
+        // Error FFI converter
+        CoreException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Registers again even though a registration already exists.
+     *
+     * `complete_registration` skips the expensive step whenever the saved
+     * state already carries one, which is correct nearly always and wrong in
+     * exactly one situation: when the registration Apple holds for this
+     * identity has been superseded. IDS keeps one registration per device
+     * identity, so another client signing the same Apple ID in with the same
+     * device details takes it over - and the loser is left in a state that
+     * looks completely healthy from the inside. The push connection stays up.
+     * Lookups are answered rather than refused. Every one of them resolves
+     * nobody, because the registration doing the asking is no longer the one
+     * Apple answers for, and nothing arrives either, for the same reason.
+     *
+     * Nothing in the protocol reports that from the outside - a superseded
+     * registration and a fine one return the same status - and there is no
+     * way back from it except registering again.
+     *
+     * So this exists, and it is deliberately a button rather than anything
+     * automatic or retried. Registration is the rate-limited step; doing it
+     * on a schedule to "fix" a problem is the pattern that turns a bad
+     * afternoon into a blocked account.
+     */
+    @Throws(CoreException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `forceRegister`() {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_force_register(
+                thisPtr,
+                
             )
         },
         { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_void(future, callback, continuation) },

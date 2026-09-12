@@ -60,6 +60,8 @@ fun AppRoot(
     onImport: (suspend (android.net.Uri) -> String)? = null,
     /** Asks Apple whether one address is on iMessage, for diagnosing a failed send. */
     onCheckHandle: (suspend (String) -> String)? = null,
+    /** Registers this device with Apple again. */
+    onReRegister: (suspend () -> String)? = null,
     /** Adds or removes the conversations that aren't real. */
     onSampleConversations: (suspend (Boolean) -> String)? = null,
     /** Places a FaceTime call. Null when there's no live account behind it. */
@@ -421,6 +423,7 @@ fun AppRoot(
                     onSignOut = onSignOut,
                     onImport = onImport,
                     onCheckHandle = onCheckHandle,
+                    onReRegister = onReRegister,
                     onSampleConversations = onSampleConversations,
                     onOpenReleaseNotes = { showReleaseNotes = true },
                 )

@@ -61,6 +61,8 @@ fun SettingsScreen(
     onOpenReleaseNotes: () -> Unit = {},
     /** Asks Apple about one address and reports what it said. */
     onCheckHandle: (suspend (String) -> String)? = null,
+    /** Registers this device with Apple again. */
+    onReRegister: (suspend () -> String)? = null,
     /** Adds or removes the conversations that aren't real. */
     onSampleConversations: (suspend (Boolean) -> String)? = null,
 ) {
@@ -554,6 +556,34 @@ fun SettingsScreen(
                     }
                     SettingsDivider()
                 }
+                if (onReRegister != null) {
+                    SettingsRow(
+                        "Re-register with Apple",
+                        onClick = {
+                            checkResult = "Registering…"
+                            checkScope.launch {
+                                checkResult = try {
+                                    onReRegister()
+                                } catch (cancel: kotlinx.coroutines.CancellationException) {
+                                    throw cancel
+                                } catch (e: Throwable) {
+                                    e.message ?: "That didn't run."
+                                }
+                            }
+                        },
+                    )
+                    Text(
+                        "Only if nothing sends or arrives. Apple keeps one registration " +
+                            "per device, so if another iMessage app is signed in to this " +
+                            "same account it will take it back and break that one instead. " +
+                            "Registering over and over is what gets an account limited, so " +
+                            "do this once and give it a minute.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = palette.secondaryLabel,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                    )
+                    SettingsDivider()
+                }
                 SettingsRow(
                     "Export Diagnostics",
                     onClick = { shareDiagnostics(context, settings) },
@@ -678,17 +708,40 @@ private fun shareDiagnostics(
         appendLine("--- protocol log ---")
         append(recentCoreLog())
     }
+    // As a file, not as an intent extra.
+    //
+    // The report used to go in EXTRA_TEXT, which travels through a Binder
+    // transaction with about a megabyte to share between everything in
+    // flight. A few lines of version information fitted. A protocol log does
+    // not, and the failure mode is not an error the user can see: the
+    // transaction is rejected, the exception is swallowed by the runCatching
+    // around it, and the button appears to do nothing at all.
     runCatching {
+        val dir = java.io.File(context.cacheDir, "diagnostics").apply { mkdirs() }
+        val file = java.io.File(dir, "relay-diagnostics.txt")
+        file.writeText(report)
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context, context.packageName + ".fileprovider", file,
+        )
         val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(android.content.Intent.EXTRA_SUBJECT, "Relay diagnostics")
-            putExtra(android.content.Intent.EXTRA_TEXT, report)
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         context.startActivity(
             android.content.Intent.createChooser(intent, "Export Diagnostics").apply {
                 addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
             }
         )
+    }.onFailure {
+        // Visible. A diagnostic tool that fails silently is worse than none,
+        // because it is indistinguishable from having nothing to report.
+        android.widget.Toast.makeText(
+            context,
+            "Couldn't export: ${it::class.java.simpleName}: ${it.message}",
+            android.widget.Toast.LENGTH_LONG,
+        ).show()
     }
 }
 

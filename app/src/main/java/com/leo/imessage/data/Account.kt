@@ -312,6 +312,45 @@ class AccountManager(context: Context) {
      *  - an empty answer, which is a throttle or genuinely no iMessage;
      *  - an error with a status code, which is Apple refusing outright.
      */
+    /**
+     * Registers this device with Apple again, from scratch.
+     *
+     * The normal path skips registration whenever a saved one exists, which
+     * is right nearly always - it is the rate-limited step - and wrong in the
+     * one case that looks exactly like being blocked. IDS holds one
+     * registration per device identity, so another client signing the same
+     * Apple ID in with the same device details takes it over, and what is
+     * left behind still connects, still gets its lookups answered, and
+     * resolves nobody. Nothing arrives either. There is no status code for
+     * it, and no way out but registering again.
+     *
+     * Reports the handles afterwards, because the useful confirmation is not
+     * that it returned but what Apple now says this account is.
+     */
+    suspend fun reRegister(): String = withContext(Dispatchers.IO) {
+        val before = backend?.handles().orEmpty()
+        try {
+            core.forceRegister()
+        } catch (e: Throwable) {
+            return@withContext "Registration failed: ${e.message ?: e::class.java.simpleName}"
+        }
+        val after = backend?.handles().orEmpty()
+        buildString {
+            appendLine("Registered again.")
+            if (after.isEmpty()) {
+                append("Apple returned no addresses, which means it did not take.")
+            } else {
+                appendLine("This account is now:")
+                after.forEach { appendLine("  $it") }
+                if (after != before) {
+                    append("That is different from before - try sending again now.")
+                } else {
+                    append("Same as before. Try sending again; if it still fails the registration was not the problem.")
+                }
+            }
+        }
+    }
+
     suspend fun checkHandle(raw: String): String = withContext(Dispatchers.IO) {
         val backend = backend ?: return@withContext "Not signed in."
         val normalized = runCatching { Handles.normalize(raw) }.getOrNull()

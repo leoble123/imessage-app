@@ -28,6 +28,7 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
+        android:largeHeap="true"
         android:name=".EchoApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"

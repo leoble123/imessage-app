@@ -387,6 +387,74 @@ impl ImessageCore {
         Ok(())
     }
 
+    /// Registers again even though a registration already exists.
+    ///
+    /// `complete_registration` skips the expensive step whenever the saved
+    /// state already carries one, which is correct nearly always and wrong in
+    /// exactly one situation: when the registration Apple holds for this
+    /// identity has been superseded. IDS keeps one registration per device
+    /// identity, so another client signing the same Apple ID in with the same
+    /// device details takes it over - and the loser is left in a state that
+    /// looks completely healthy from the inside. The push connection stays up.
+    /// Lookups are answered rather than refused. Every one of them resolves
+    /// nobody, because the registration doing the asking is no longer the one
+    /// Apple answers for, and nothing arrives either, for the same reason.
+    ///
+    /// Nothing in the protocol reports that from the outside - a superseded
+    /// registration and a fine one return the same status - and there is no
+    /// way back from it except registering again.
+    ///
+    /// So this exists, and it is deliberately a button rather than anything
+    /// automatic or retried. Registration is the rate-limited step; doing it
+    /// on a schedule to "fix" a problem is the pattern that turns a bad
+    /// afternoon into a blocked account.
+    pub async fn force_register(&self) -> Result<(), CoreError> {
+        let mut inner = self.inner.lock().await;
+        let config = inner
+            .config
+            .clone()
+            .ok_or_else(|| CoreError::new("call configure_relay first"))?;
+        let connection = inner
+            .connection
+            .clone()
+            .ok_or_else(|| CoreError::new("call configure_relay first"))?;
+
+        if inner.users.is_empty() {
+            return Err(CoreError::new("sign in first"));
+        }
+        let identity = inner
+            .identity
+            .clone()
+            .ok_or_else(|| CoreError::new("no identity to register with"))?;
+
+        info!("re-registering with Apple, at the user's request");
+        let aps_state = connection.state.read().await.clone();
+        register(
+            config.as_ref() as &dyn OSConfig,
+            &aps_state,
+            services!(),
+            &mut inner.users,
+            &identity,
+        )
+        .await
+        .map_err(|e| CoreError::new(format!("registration failed: {e}")))?;
+
+        let handles: Vec<String> = inner
+            .users
+            .iter()
+            .flat_map(|u| {
+                u.registration
+                    .get(MADRID_SERVICE.name)
+                    .map(|r| r.handles.clone())
+                    .unwrap_or_default()
+            })
+            .collect();
+        info!("re-registered; handles are now {:?}", handles);
+
+        self.persist(&mut inner).await?;
+        Ok(())
+    }
+
     /// Brings up the message client and starts delivering events to `listener`.
     pub async fn start(&self, listener: Arc<dyn EventListener>) -> Result<(), CoreError> {
         let mut inner = self.inner.lock().await;

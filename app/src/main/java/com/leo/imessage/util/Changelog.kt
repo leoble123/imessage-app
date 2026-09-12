@@ -36,6 +36,39 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 56,
+            versionName = "0.56.0",
+            date = "12 September 2026",
+            headline = "Register with Apple again, which is the one thing nothing here could do.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "Re-register with Apple, in Settings. Registration was skipped " +
+                        "whenever a saved one existed - correct almost always, and wrong " +
+                        "in the one case that looks exactly like being blocked. Apple " +
+                        "keeps one registration per device, so another app signed in to " +
+                        "the same account takes it over, and what is left still connects, " +
+                        "still gets answered, and resolves nobody. Nothing arrives either. " +
+                        "There was no way out of that state and now there is one.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Export Diagnostics does something. The report went out as an intent " +
+                        "extra, which has about a megabyte for everything in flight - fine " +
+                        "for a version string, not for a protocol log. It was being " +
+                        "rejected, the error was swallowed, and the button looked dead. " +
+                        "It writes a file now, and says so out loud when it cannot.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "More room for importing an OpenBubbles export. This is a raise, not " +
+                        "a fix: the importer still holds the whole export in memory at " +
+                        "once, and a big enough one will still run out. Streaming it " +
+                        "properly is the actual repair and is not in this build.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 55,
             versionName = "0.55.0",
             date = "12 September 2026",
