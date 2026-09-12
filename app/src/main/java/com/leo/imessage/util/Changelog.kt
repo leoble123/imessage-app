@@ -36,6 +36,32 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 58,
+            versionName = "0.58.0",
+            date = "12 September 2026",
+            headline = "The log showed it was never asking Apple at all.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "Lookups were being answered out of a stale cache instead of being " +
+                        "sent. Empty results are cached like any other and trusted for an " +
+                        "hour, so one failed lookup answered for every lookup of that " +
+                        "address for the next hour - the diagnostic included. The log " +
+                        "shows it plainly: the cache is opened and closed and no query " +
+                        "ever goes out. Re-registering now clears that cache, and the " +
+                        "availability check always asks for real.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "The push connection was tearing itself down several times a second. " +
+                        "Reconnecting while already connected presents the same push " +
+                        "certificate twice, Apple allows one, and the two evict each " +
+                        "other forever. Nothing can arrive over a socket with that " +
+                        "lifespan, which is most likely why nothing did.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 57,
             versionName = "0.57.0",
             date = "12 September 2026",

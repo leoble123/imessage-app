@@ -206,6 +206,27 @@ impl ImessageCore {
         code: String,
         token: Option<String>,
     ) -> Result<(), CoreError> {
+        // Already connected with these details? Then stop here.
+        //
+        // Calling this again on a live process builds a second APS connection
+        // presenting the same push certificate, and Apple allows one. The new
+        // connection evicts the old, the old's resource manager sees "early
+        // eof" and reconnects, which evicts the new, forever. The log shows
+        // exactly that: connect, subscribe to six topics, early eof, connect,
+        // subscribe to nothing, early eof, several times a second. Nothing can
+        // arrive over a socket that is being torn down that fast.
+        {
+            let inner = self.inner.lock().await;
+            if inner.connection.is_some() {
+                if let Some(existing) = inner.config.as_ref() {
+                    if existing.host == host && existing.code == code {
+                        info!("already connected to this relay; not reconnecting");
+                        return Ok(());
+                    }
+                }
+            }
+        }
+
         // Fetching versions first doubles as a reachability check: a wrong
         // address or a stopped relay fails here, with a clear error, instead of
         // surfacing later as an opaque registration failure.
@@ -454,6 +475,21 @@ impl ImessageCore {
             .identity
             .clone()
             .ok_or_else(|| CoreError::new("no identity to register with"))?;
+
+        // The lookup cache has to go with it.
+        //
+        // Keys are cached per handle, empty results included, and an empty one
+        // is trusted for an hour. So a registration that could not resolve
+        // anyone leaves behind a file that answers "nobody" on its behalf long
+        // after it has been replaced - which is why re-registering appeared to
+        // change nothing at all. The log proves it: "Getting keys for" is
+        // followed by the cache lock and then nothing, never a query.
+        let cache_path = self.paths.id_cache();
+        match std::fs::remove_file(&cache_path) {
+            Ok(()) => info!("cleared the lookup cache before re-registering"),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => warn!("couldn't clear the lookup cache: {e}"),
+        }
 
         info!("re-registering with Apple, at the user's request");
         let aps_state = connection.state.read().await.clone();
@@ -899,7 +935,7 @@ impl ImessageCore {
             .ok_or_else(|| CoreError::new("not started"))?;
         client
             .identity
-            .validate_targets(&handles, "com.apple.madrid", &sender)
+            .validate_targets_fresh(&handles, "com.apple.madrid", &sender)
             .await
             .map_err(|e| CoreError::new(format!("couldn't look those up: {e}")))
     }
