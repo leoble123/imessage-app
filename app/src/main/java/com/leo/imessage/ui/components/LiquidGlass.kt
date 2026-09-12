@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -63,29 +64,40 @@ fun Modifier.liquidGlass(
     val body = if (hazeState == null || tint == null) {
         this.clip(shape).drawBehind { drawRect(fill) }
     } else {
+        // Measured off the reference, scanning across a bubble edge: the
+        // wallpaper dips darker for a few pixels just outside the boundary
+        // before the bubble begins. That is a contact shadow, and it is doing
+        // as much of the separating as the surface is - a pane this sheer
+        // would otherwise have nothing but its own rim to sit on.
         this
+            .shadow(elevation = 3.dp, shape = shape, clip = false)
             .clip(shape)
             .hazeChild(
                 state = hazeState,
                 style = HazeStyle(
                     backgroundColor = backdrop,
                     tints = listOf(HazeTint(tint)),
-                    blurRadius = 28.dp,
+                    blurRadius = 30.dp,
                     noiseFactor = 0f,
                 ),
             )
     }
 
-    // One hairline, and a faint one. On dark material it is the light
-    // gathering along the edge; on light material that same white line is
-    // invisible, so the edge takes a shadow instead. Anything stronger than
-    // this is the moulding again.
+    // The rim. The same edge scan shows a bright line just inside the
+    // boundary, peaking at close to twice the brightness of the body before
+    // falling off - not the faint hairline this had, which is why the shape
+    // dissolved into a busy wallpaper.
+    //
+    // This is one line that follows the border, which is the whole difference
+    // between it and the four painted highlights that were here before. Those
+    // sat at fixed places on the bubble regardless of its shape or what was
+    // behind it; a rim is where the surface actually turns.
     return body.border(
         BorderStroke(
-            width = 0.7.dp,
+            width = 1.dp,
             brush = SolidColor(
-                if (dark) Color.White.copy(alpha = 0.14f)
-                else Color.Black.copy(alpha = 0.11f)
+                if (dark) Color.White.copy(alpha = 0.24f)
+                else Color.Black.copy(alpha = 0.14f)
             ),
         ),
         shape = shape,
@@ -118,33 +130,35 @@ object GlassAlpha {
     const val INCOMING = 0.92f
 
     /**
-     * Incoming, over a wallpaper.
+     * Incoming, over a wallpaper - and these are veil alphas, not surface
+     * alphas. The bubble is not a coloured pane at 50% over the wallpaper;
+     * it is the *blurred wallpaper itself* with a thin wash pulled across it.
      *
-     * A neutral tint, and specifically *not* a lightened pane. The previous
-     * version turned the bubble into near-clear white over a dark wallpaper,
-     * reasoning that frosted glass lifts what is behind it. Real frosted
-     * glass does; a dark bubble on a dark background is what the reference
-     * actually shows, because the point is a readable surface for white text
-     * and not a demonstration of optics.
+     * The numbers are measured rather than chosen. Sampling the reference
+     * shot - iOS 26 Messages over a dark photo - and solving each interior
+     * pixel as `wash over wallpaper` gives a white wash at 0.08-0.16 across
+     * three separate spots on one bubble, so 0.13 with a little headroom for
+     * legibility. Nothing in that range resembles the 0.52 charcoal this had,
+     * which is why the bubbles kept sinking into the wallpaper: the wash was
+     * pushing them *down* toward it instead of lifting them off it.
+     *
+     * The light case inverts rather than mirrors. On a pale wallpaper a white
+     * wash is the wallpaper, so the wash goes black - and lighter than its
+     * counterpart, because iOS's own incoming grey on a white ground (#E9E9EB
+     * on #FFFFFF) works out to a black wash at about 0.09.
      */
-    const val INCOMING_ON_DARK = 0.52f
+    const val INCOMING_VEIL_ON_DARK = 0.13f
+    const val INCOMING_VEIL_ON_LIGHT = 0.10f
 
     /**
-     * Incoming, over a *light* wallpaper - and much more opaque than its dark
-     * counterpart, for a reason that is not symmetric.
+     * The fallback when there is a wallpaper but no blur to sample it with.
      *
-     * A dark bubble on a dark wallpaper separates by being a different dark:
-     * the blur softens the wallpaper behind it and the edge falls out of that
-     * on its own. A light bubble on a light wallpaper has no such room. At
-     * sixty percent white it simply dissolved - the wallpaper it was
-     * transmitting was already near-white, so the bubble was transmitting
-     * itself and the text appeared to float on the wallpaper directly.
-     *
-     * The surface has to commit here. It is still glass - it still blurs and
-     * still moves with what is behind it - but it holds enough of its own
-     * grey that the shape survives on white.
+     * A veil alpha is meaningless without the blur underneath it - 13% white
+     * painted flat on a wallpaper is a smear, not a bubble - so this path
+     * gets an opaque surface instead. It should be rare: it means a bubble
+     * was handed a wallpaper and no HazeState.
      */
-    const val INCOMING_ON_LIGHT = 0.84f
+    const val INCOMING_UNBLURRED = 0.88f
 }
 
 /** Rebuilds a bubble gradient at a given transmission, keeping its shape. */
@@ -156,30 +170,40 @@ fun glassFill(color: Color, alpha: Float): Brush =
     SolidColor(color.copy(alpha = color.alpha * alpha))
 
 /**
- * The incoming bubble's fill.
+ * The incoming bubble's fill, for when it is painted rather than blurred.
  *
- * Over the app's own background it stays the familiar grey. Over a wallpaper
- * it becomes a neutral tint that darkens or lightens with the wallpaper
- * rather than with the theme - charcoal under a dark one, white under a light
- * one - so the text on it always has the same surface to sit on.
+ * Deliberately *not* the same value as the tint below. The tint is a wash
+ * that only means anything composited over a live blur of the wallpaper;
+ * this is what gets drawn when there is no blur, so it has to be a surface
+ * that stands on its own.
  */
 fun incomingGlassFill(
     grey: Color,
     overBackground: Boolean,
     backgroundIsDark: Boolean,
-): Brush = SolidColor(incomingGlassTint(grey, overBackground, backgroundIsDark))
+): Brush = SolidColor(
+    when {
+        !overBackground -> grey.copy(alpha = grey.alpha * GlassAlpha.INCOMING)
+        backgroundIsDark -> Color(0xFF2C2C2E).copy(alpha = GlassAlpha.INCOMING_UNBLURRED)
+        else -> Color(0xFFE9E9EB).copy(alpha = GlassAlpha.INCOMING_UNBLURRED)
+    }
+)
 
-/** The same decision as a flat colour, for the blur to be tinted with. */
+/**
+ * The wash the blurred wallpaper is seen through.
+ *
+ * White over a dark wallpaper, black over a light one - in both directions
+ * the bubble is moving *away* from whatever is behind it, which is the only
+ * thing that makes a sheer surface visible. The wallpaper's own colour and
+ * movement survive underneath either way, which is the part that reads as
+ * glass rather than as a panel.
+ */
 fun incomingGlassTint(
     grey: Color,
     overBackground: Boolean,
     backgroundIsDark: Boolean,
 ): Color = when {
     !overBackground -> grey.copy(alpha = grey.alpha * GlassAlpha.INCOMING)
-    backgroundIsDark -> Color(0xFF1A1A1C).copy(alpha = GlassAlpha.INCOMING_ON_DARK)
-    // Grey, not white. White was the obvious choice and the wrong one: a
-    // white pane over a pale wallpaper is the wallpaper. This is close to the
-    // grey iOS uses for an incoming bubble on a light ground, which reads as
-    // a surface against anything short of pure black.
-    else -> Color(0xFFDCDCE2).copy(alpha = GlassAlpha.INCOMING_ON_LIGHT)
+    backgroundIsDark -> Color.White.copy(alpha = GlassAlpha.INCOMING_VEIL_ON_DARK)
+    else -> Color.Black.copy(alpha = GlassAlpha.INCOMING_VEIL_ON_LIGHT)
 }

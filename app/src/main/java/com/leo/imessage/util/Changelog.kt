@@ -36,6 +36,34 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 51,
+            versionName = "0.51.0",
+            date = "12 September 2026",
+            headline = "Incoming bubbles lift off the wallpaper instead of sinking into it.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "Incoming bubbles were being pushed toward the wallpaper rather than " +
+                        "lifted off it - a dark wash over a dark background, which is the " +
+                        "background. They are the blurred wallpaper under a thin bright " +
+                        "wash now, the way a real pane of frosted glass catches light, and " +
+                        "the numbers come off a measurement of the real thing rather than " +
+                        "a guess.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "A rim that can be seen, and a contact shadow under every bubble. The " +
+                        "edge used to be a hairline faint enough to vanish against anything " +
+                        "busy, so the shape had nothing holding it together.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Over a pale wallpaper the wash inverts to dark, so the same bubble " +
+                        "stays readable on a bright background without turning into a slab.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 50,
             versionName = "0.50.0",
             date = "12 September 2026",
