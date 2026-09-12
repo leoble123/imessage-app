@@ -340,6 +340,30 @@ class AccountManager(context: Context) {
         report.toString()
     }
 
+    /**
+     * Puts a handful of conversations that aren't real into the database.
+     *
+     * Alongside the real ones, not instead of them - this is not demo mode,
+     * which swaps the backend out and stops anything arriving. The point is
+     * to have something to look at while the account is rate limited, and
+     * what you look at has to be the real app or it proves nothing.
+     */
+    suspend fun addSampleConversations(): String = withContext(Dispatchers.IO) {
+        val (chats, messages) = SampleData.build()
+        // Removed first, so running it twice refreshes the timestamps rather
+        // than leaving a set from yesterday sitting under a set from today.
+        store.deleteChatsWithPrefix(SampleData.PREFIX)
+        store.importInto(chats, messages)
+        backend?.reloadFromStore()
+        "Added ${chats.size} sample conversations."
+    }
+
+    suspend fun removeSampleConversations(): String = withContext(Dispatchers.IO) {
+        val removed = store.deleteChatsWithPrefix(SampleData.PREFIX)
+        backend?.reloadFromStore()
+        if (removed == 0) "There were none to remove." else "Removed $removed."
+    }
+
     /** Called when the app goes to the background, so nothing is left unsaved. */
     suspend fun flush() = runCatching { store.flush() }
 

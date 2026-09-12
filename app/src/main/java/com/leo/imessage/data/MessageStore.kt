@@ -275,6 +275,18 @@ class MessageStore(context: Context, private val legacyFile: File) {
         reloadLocked()
     }
 
+    /**
+     * Drops every conversation whose id starts with [prefix], and everything
+     * in them. Returns how many went.
+     */
+    suspend fun deleteChatsWithPrefix(prefix: String): Int = lock.withLock {
+        val doomed = _chats.value.map { it.id }.filter { it.startsWith(prefix) }
+        if (doomed.isEmpty()) return@withLock 0
+        db.deleteChats(doomed)
+        reloadLocked()
+        doomed.size
+    }
+
     /** Re-reads everything after something outside this class changed it. */
     suspend fun reload() = lock.withLock { reloadLocked() }
 

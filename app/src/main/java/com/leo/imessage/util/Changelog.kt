@@ -36,6 +36,34 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 46,
+            versionName = "0.46.0",
+            date = "12 September 2026",
+            headline = "Something to look at while the account is stuck.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "Settings → Testing → Add Sample Conversations. Five threads that " +
+                        "aren't real, sitting in the list beside the real ones: a busy " +
+                        "one, a group with a lot waiting, a send that failed, one with a " +
+                        "reaction, a reply, an edit and a retraction in it, and a quiet " +
+                        "one. Remove them and your own messages are untouched.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "They answer back. Send one a message and a reply lands a second " +
+                        "later, which is the only way to watch an arrival, an unread " +
+                        "badge or a notification actually happen.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "Nothing about them touches the network. Their addresses belong to " +
+                        "nobody, and asking Apple about addresses that don't exist is a " +
+                        "good way to deepen the rate limit they're here to work around.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 45,
             versionName = "0.45.0",
             date = "12 September 2026",

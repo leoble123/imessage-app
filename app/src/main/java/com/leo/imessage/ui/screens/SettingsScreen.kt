@@ -61,6 +61,8 @@ fun SettingsScreen(
     onOpenReleaseNotes: () -> Unit = {},
     /** Asks Apple about one address and reports what it said. */
     onCheckHandle: (suspend (String) -> String)? = null,
+    /** Adds or removes the conversations that aren't real. */
+    onSampleConversations: (suspend (Boolean) -> String)? = null,
 ) {
     val palette = LocalPalette.current
     val hazeState = remember { HazeState() }
@@ -199,6 +201,50 @@ fun SettingsScreen(
                     color = palette.tertiaryLabel,
                     modifier = Modifier.padding(horizontal = 32.dp),
                 )
+            }
+
+            if (onSampleConversations != null) {
+                val sampleScope = rememberCoroutineScope()
+                var sampleStatus by remember { mutableStateOf<String?>(null) }
+                ListSection(
+                    header = "Testing",
+                    footer = "Conversations that aren't real, for looking at the app when " +
+                        "there is nothing in it. They never touch the network, and " +
+                        "removing them leaves your own messages alone.",
+                ) {
+                    SettingsRow(
+                        "Add Sample Conversations",
+                        onClick = {
+                            sampleStatus = "Adding…"
+                            sampleScope.launch {
+                                sampleStatus = runCatching { onSampleConversations(true) }
+                                    .getOrElse { it.message ?: "That didn't work." }
+                            }
+                        },
+                    )
+                    SettingsDivider()
+                    SettingsRow(
+                        "Remove Sample Conversations",
+                        destructive = true,
+                        onClick = {
+                            sampleStatus = "Removing…"
+                            sampleScope.launch {
+                                sampleStatus = runCatching { onSampleConversations(false) }
+                                    .getOrElse { it.message ?: "That didn't work." }
+                            }
+                        },
+                    )
+                    sampleStatus?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = palette.secondaryLabel,
+                            modifier = Modifier.padding(
+                                start = 16.dp, end = 16.dp, bottom = 12.dp,
+                            ),
+                        )
+                    }
+                }
             }
 
             ListSection(header = "Appearance") {

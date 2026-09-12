@@ -119,6 +119,10 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onCheckHandle = { raw -> account.checkHandle(raw) },
+                            onSampleConversations = { add ->
+                                if (add) account.addSampleConversations()
+                                else account.removeSampleConversations()
+                            },
                             onImport = { uri ->
                                 val r = account.importFromOpenBubbles(uri)
                                 if (r.messages == 0 && r.duplicates > 0) {

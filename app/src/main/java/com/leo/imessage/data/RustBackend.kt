@@ -290,6 +290,17 @@ class RustBackend(
         )
         append(pending)
 
+        // A sample conversation never touches the wire. Its handles belong to
+        // nobody, so a send would be a lookup for an address that cannot
+        // exist - and asking Apple about addresses that do not exist is a
+        // good way to deepen the rate limit these threads are here to work
+        // around.
+        if (SampleData.isSample(chatId)) {
+            replaceId(localId, "$localId-sent", DeliveryState.DELIVERED)
+            scheduleSampleReply(chat, text)
+            return
+        }
+
         try {
             // Attachments are uploaded before the message goes out, so this
             // path is a different call rather than an extra argument. Sending
@@ -423,6 +434,7 @@ class RustBackend(
 
     private suspend fun sendTapback(message: Message, reaction: String, added: Boolean) {
         val chat = store.chat(message.chatId) ?: return
+        if (SampleData.isSample(chat.id)) return
         runCatching {
             core.sendTapback(
                 participants = chat.sendTargets(),
@@ -467,6 +479,7 @@ class RustBackend(
                 editedAt = System.currentTimeMillis(),
             )
         }
+        if (SampleData.isSample(chat.id)) return
         runCatching {
             core.sendEdit(
                 participants = chat.sendTargets(),
@@ -486,6 +499,7 @@ class RustBackend(
         // other side, which is the point, but hiding it from yourself as well
         // just means you can't remember what you retracted.
         updateMessage(messageId) { it.copy(unsentText = it.text, isUnsent = true, text = "") }
+        if (SampleData.isSample(chat.id)) return
         runCatching {
             core.sendUnsend(
                 participants = chat.sendTargets(),
@@ -499,6 +513,7 @@ class RustBackend(
 
     override suspend fun setTyping(chatId: String, typing: Boolean) {
         val chat = store.chat(chatId) ?: return
+        if (SampleData.isSample(chat.id)) return
         runCatching {
             core.sendTyping(
                 participants = chat.sendTargets(),
@@ -513,6 +528,7 @@ class RustBackend(
         val chat = store.chat(chatId) ?: return
         if (chat.unreadCount == 0) return
         updateChat(chatId) { it.copy(unreadCount = 0) }
+        if (SampleData.isSample(chat.id)) return
         runCatching {
             core.sendRead(
                 participants = chat.sendTargets(),
@@ -525,6 +541,7 @@ class RustBackend(
     override suspend fun markUnread(chatId: String) {
         val chat = store.chat(chatId) ?: return
         updateChat(chatId) { it.copy(unreadCount = maxOf(it.unreadCount, 1)) }
+        if (SampleData.isSample(chat.id)) return
         runCatching {
             core.sendMarkUnread(
                 participants = chat.sendTargets(),
@@ -938,6 +955,34 @@ class RustBackend(
 
     private suspend fun replaceId(oldId: String, newId: String, state: DeliveryState) {
         store.adoptGuid(oldId, newId, state)
+    }
+
+    /**
+     * Answers back, so a sample thread behaves like a conversation.
+     *
+     * Not just decoration: an arriving message is what exercises the unread
+     * badge, the notification, the transcript's insert animation and the
+     * flinch an emphatic message makes - and none of those can be tested by
+     * a thread that only ever listens.
+     */
+    private fun scheduleSampleReply(chat: Chat, toWhat: String) {
+        val other = chat.participants.firstOrNull() ?: return
+        scope.launch {
+            delay(1_400)
+            val watching = appVisible && chat.id == openChatId
+            append(
+                Message(
+                    id = "${SampleData.PREFIX}${UUID.randomUUID()}",
+                    chatId = chat.id,
+                    text = SampleData.replyTo(toWhat),
+                    timestamp = System.currentTimeMillis(),
+                    isFromMe = false,
+                    senderId = other.id,
+                    deliveryState = DeliveryState.DELIVERED,
+                ),
+                incrementUnread = !watching,
+            )
+        }
     }
 
     /** True on Wi-Fi, or anything else the system doesn't bill by the byte. */
