@@ -141,6 +141,17 @@ impl ImessageCore {
         android_logger::init_once(
             android_logger::Config::default()
                 .with_max_level(log::LevelFilter::Debug)
+                // Everything at debug except rustpush::util, which logs every
+                // acquisition and release of every mutex - roughly fifteen
+                // lines per keepalive and the overwhelming majority of the
+                // volume. It pushed the interesting part off the end of the
+                // buffer: an exported log covered five idle minutes and
+                // contained not one thing that had happened.
+                .with_filter(
+                    android_logger::FilterBuilder::new()
+                        .parse("debug,rustpush::util=warn")
+                        .build(),
+                )
                 .with_tag("imessage-core"),
         );
 

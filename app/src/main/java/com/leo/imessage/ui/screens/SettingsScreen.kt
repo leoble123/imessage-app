@@ -764,7 +764,7 @@ private fun shareDiagnostics(
  */
 private fun recentCoreLog(): String = runCatching {
     val process = ProcessBuilder(
-        listOf("logcat", "-d", "-v", "time", "-t", "1200", "imessage-core:D", "*:S")
+        listOf("logcat", "-d", "-v", "time", "-t", "4000", "imessage-core:D", "*:S")
     ).redirectErrorStream(true).start()
     val text = process.inputStream.bufferedReader().use { it.readText() }
     process.waitFor()

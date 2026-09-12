@@ -36,6 +36,29 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 60,
+            versionName = "0.60.0",
+            date = "12 September 2026",
+            headline = "The log drowned the evidence in mutexes.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "The protocol log is readable. Every acquisition and release of " +
+                        "every lock was being written out - about fifteen lines per " +
+                        "keepalive - so an exported log covered five idle minutes and " +
+                        "contained nothing that had actually happened. The send it was " +
+                        "meant to capture had already scrolled away.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "The push connection is holding. The reconnect loop that was tearing " +
+                        "it down several times a second is gone - it now sits on one " +
+                        "socket and pings once a minute, which is what a connection that " +
+                        "can receive anything looks like.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 59,
             versionName = "0.59.0",
             date = "12 September 2026",
