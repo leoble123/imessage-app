@@ -36,6 +36,31 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 59,
+            versionName = "0.59.0",
+            date = "12 September 2026",
+            headline = "Sending asks Apple again, so nothing here needs re-registering.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "A send now refreshes the lookup rather than accepting a cached " +
+                        "answer. An empty result was cached like any other and trusted " +
+                        "for an hour, so a single failed lookup made that person " +
+                        "unreachable for an hour with no request sent at all. A minute-" +
+                        "long floor still applies, so this costs a query the client " +
+                        "would make anyway.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "Recovering no longer means registering. Clearing that cache was " +
+                        "bundled into re-registration, which is the one genuinely rate-" +
+                        "limited step and a bad thing to need on every attempt. " +
+                        "Re-register is still there for when the registration really is " +
+                        "the problem; it is no longer the price of a stale lookup.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 58,
             versionName = "0.58.0",
             date = "12 September 2026",
