@@ -316,27 +316,73 @@ class AccountManager(context: Context) {
         val backend = backend ?: return@withContext "Not signed in."
         val normalized = runCatching { Handles.normalize(raw) }.getOrNull()
             ?: return@withContext "Couldn't make sense of \"$raw\"."
-        val sender = backend.handles().firstOrNull()
-            ?: return@withContext "This account has no iMessage address."
+        val mine = backend.handles()
+        if (mine.isEmpty()) return@withContext "This account has no iMessage address."
 
         val report = StringBuilder()
         report.appendLine("Asked about: $normalized")
-        report.appendLine("Asked as: $sender")
-        try {
-            val found = core.validateTargets(listOf(normalized), sender)
-            if (found.isEmpty()) {
-                report.append(
-                    "Apple answered, and named nobody. That is either a rate " +
-                        "limit or that address genuinely has no iMessage."
-                )
-            } else {
-                report.append("Reachable on iMessage: ${found.joinToString(", ")}")
-            }
-        } catch (e: Throwable) {
-            // The status number in here is the useful part - it is Apple's
-            // own word for what it objected to.
-            report.append("Apple refused the lookup: ${e.message ?: e::class.java.simpleName}")
+        report.appendLine("Typed as: ${raw.trim()}")
+        report.appendLine()
+        report.appendLine("This account is registered as:")
+        mine.forEach { report.appendLine("  $it") }
+        if (mine.any { it.equals(normalized, ignoreCase = true) }) {
+            report.appendLine()
+            report.appendLine(
+                "Note: that address is one of yours. Sending to yourself skips " +
+                    "the check that fails for everyone else, so a send to it " +
+                    "reporting success proves nothing."
+            )
         }
+        report.appendLine()
+
+        // Every handle, not just the first one.
+        //
+        // The send path picks whichever handle comes back first and asks
+        // under that one, so if the account holds several and only some can
+        // resolve anyone, a single-sender check agrees with the failure and
+        // explains nothing. Asking under each of them separates "this
+        // account cannot look anyone up" from "this account is asking as the
+        // wrong one of its own addresses", and those have completely
+        // different fixes.
+        var anyReachable = false
+        var anyRefused = false
+        for (sender in mine) {
+            try {
+                val found = core.validateTargets(listOf(normalized), sender)
+                if (found.isEmpty()) {
+                    report.appendLine("as $sender -> answered, named nobody")
+                } else {
+                    anyReachable = true
+                    report.appendLine("as $sender -> reachable: ${found.joinToString(", ")}")
+                }
+            } catch (e: Throwable) {
+                anyRefused = true
+                // The status number in here is the useful part - it is
+                // Apple's own word for what it objected to.
+                report.appendLine(
+                    "as $sender -> refused: ${e.message ?: e::class.java.simpleName}"
+                )
+            }
+        }
+
+        report.appendLine()
+        report.append(
+            when {
+                anyReachable ->
+                    "Reachable. If sending still fails, this app is asking under " +
+                        "the wrong one of your addresses - that is a bug here, not " +
+                        "a limit on your account."
+                anyRefused ->
+                    "Apple refused the lookup outright. That is the one answer that " +
+                        "really is a throttle or a block, and the status code above " +
+                        "says which."
+                else ->
+                    "Every address answered and named nobody. Apple is talking to " +
+                        "this account, so it is not blocked - either that person " +
+                        "genuinely has no iMessage, or this account's registration " +
+                        "is not in a state Apple will resolve anyone for."
+            }
+        )
         report.toString()
     }
 

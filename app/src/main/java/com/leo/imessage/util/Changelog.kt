@@ -36,6 +36,29 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 53,
+            versionName = "0.53.0",
+            date = "12 September 2026",
+            headline = "Check iMessage Availability now asks under every address, not just one.",
+            changes = listOf(
+                Change(
+                    ChangeKind.BETTER,
+                    "The handle check tries the lookup under each of your registered " +
+                        "addresses separately and prints what each one answered. " +
+                        "Sends only ever ask under the first, so a check that also " +
+                        "asked under one address could only ever agree with the " +
+                        "failure and explain nothing.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "It also lists the addresses this account is registered as, and " +
+                        "says outright when the one you asked about is your own - " +
+                        "sending to yourself skips the check that fails for everyone " +
+                        "else, so it proves nothing either way.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 52,
             versionName = "0.52.0",
             date = "12 September 2026",
