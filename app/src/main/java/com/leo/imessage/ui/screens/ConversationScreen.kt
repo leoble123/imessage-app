@@ -318,6 +318,7 @@ fun ConversationScreen(
     }
 
     // Swipe the thread left to uncover per-message timestamps.
+    val convSettings = com.leo.imessage.ui.theme.LocalSettings.current
     val stampReveal = remember { androidx.compose.animation.core.Animatable(0f) }
 
     // Keep the newest message in view. The first pass jumps without
@@ -379,7 +380,11 @@ fun ConversationScreen(
                     // screen, so nothing about the background moves.
                     .imePadding()
                     .nestedScroll(dismissKeyboardOnDrag)
-                .pointerInput(Unit) {
+                // Keyed on the setting: turning it off has to tear the
+                // detector down, not leave one installed that swallows
+                // horizontal drags and reveals nothing.
+                .pointerInput(convSettings.showTimestampsOnSwipe) {
+                    if (!convSettings.showTimestampsOnSwipe) return@pointerInput
                     detectHorizontalDragGestures(
                         onDragEnd = {
                             scope.launch { stampReveal.animateTo(0f, Motion.snappy()) }
@@ -438,6 +443,7 @@ fun ConversationScreen(
 
                 com.leo.imessage.ui.components.SwipeToReply(
                     outgoing = row.message.isFromMe,
+                    enabled = convSettings.swipeToReply,
                     onReply = {
                         replyingTo = row.message
                         composerFocus.requestFocus()
@@ -488,7 +494,7 @@ fun ConversationScreen(
                 }
             }
 
-            if (chat.isTyping) {
+            if (chat.isTyping && convSettings.showTypingIndicators) {
                 item(key = "typing") {
                     Box(Modifier.padding(top = 6.dp)) {
                         TypingIndicator()
@@ -560,6 +566,15 @@ fun ConversationScreen(
                     onAttach = { added -> staged = staged + added },
                     onRequestEffects = { showEffectPicker = true },
                     onRequestPoll = { showPollComposer = true },
+                    // Into the draft rather than straight out the door: a
+                    // template is usually the start of a message, and a tap
+                    // that sends irreversibly is a bad thing to put one
+                    // thumb-width from the attachment menu.
+                    onQuickReply = { template ->
+                        onDraftChange(if (draft.isBlank()) template else "$draft $template")
+                        composerFocus.requestFocus()
+                        keyboard?.show()
+                    },
                     onDismiss = {
                         showTray = false
                         trayRecording = false

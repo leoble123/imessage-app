@@ -343,11 +343,7 @@ class RustBackend(
             // one that says it failed.
             Log.e(TAG, "send failed", e)
             lastSendReport = "failed: ${e::class.java.simpleName}: ${e.message}"
-            val reason = buildString {
-                append(e::class.java.simpleName.removeSuffix("Exception"))
-                val detail = e.message?.removePrefix("reason=")?.trim()
-                if (!detail.isNullOrBlank()) append(": ").append(detail)
-            }
+            val reason = humaniseFailure(e)
             updateMessage(localId) {
                 it.copy(deliveryState = DeliveryState.FAILED, failureReason = reason)
             }
@@ -1054,4 +1050,34 @@ private fun String.toTapbackKind(): TapbackKind? = when (this) {
     "emphasize" -> TapbackKind.EXCLAIM
     "question" -> TapbackKind.QUESTION
     else -> null
+}
+
+/**
+ * Turns a send failure into something that is true.
+ *
+ * One case needs rewriting rather than passing through. rustpush's wording
+ * for NoValidTargets says the recipient may not have iMessage *or* that you
+ * may be rate limited, and the second half of that is misleading in a way
+ * that costs days: it is the message people read when nothing sends, and it
+ * tells them the fix is to wait.
+ *
+ * The two are distinguishable, and not by guessing. A rate limit comes back
+ * from the IDS lookup as an error - LookupFailed with a status - and
+ * propagates as one. NoValidTargets is only reached *after* a lookup that
+ * succeeded, when Apple answered and had no iMessage identities registered
+ * for that address. An answered query is not a refused one, so this says so
+ * instead of offering patience as the remedy for a wrong phone number.
+ */
+internal fun humaniseFailure(e: Throwable): String {
+    val detail = e.message?.removePrefix("reason=")?.trim().orEmpty()
+    if (detail.contains("does not have iMessage or you are being rate-limited")) {
+        return "No iMessage account at this address. Apple answered the lookup " +
+            "and had nothing registered for it - which is not the same as a rate " +
+            "limit, since a rate limit comes back as a refusal rather than an " +
+            "empty answer. Check the number or email, or try their other one."
+    }
+    return buildString {
+        append(e::class.java.simpleName.removeSuffix("Exception"))
+        if (detail.isNotBlank()) append(": ").append(detail)
+    }
 }

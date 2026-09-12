@@ -41,8 +41,18 @@ fun SwipeToReply(
     modifier: Modifier = Modifier,
     /** Your own messages sit at the trailing edge and mirror the gesture. */
     outgoing: Boolean = false,
+    /**
+     * Off means the bubble is passed straight through with no gesture
+     * wrapper at all, rather than a wrapper that quietly ignores drags -
+     * a disabled detector still competes with the list's own scrolling.
+     */
+    enabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
+    if (!enabled) {
+        Box(modifier) { content() }
+        return
+    }
     val palette = LocalPalette.current
     val haptics = com.leo.imessage.ui.components.rememberHaptics()
     val scope = rememberCoroutineScope()

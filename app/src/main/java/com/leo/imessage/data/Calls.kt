@@ -212,6 +212,12 @@ class Calls(
         get() = audio?.muted ?: false
         set(value) { audio?.muted = value }
 
+    /**
+     * Loudspeaker or earpiece. Returns the route that actually took effect,
+     * which is not always the one asked for.
+     */
+    fun setSpeaker(on: Boolean): Boolean = audio?.setSpeaker(on) ?: false
+
     /** True when there is a microphone path at all. */
     val hasAudio: Boolean get() = audio != null
 

@@ -36,6 +36,49 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 52,
+            versionName = "0.52.0",
+            date = "12 September 2026",
+            headline = "A FaceTime screen worth looking at, and six settings that finally do something.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "The call screen moves. The caller's own two colours drift behind " +
+                        "them as three slow blobs, rings leave the avatar while it is " +
+                        "ringing, and the controls sit in one capsule of glass instead of " +
+                        "loose on a flat gradient.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Speakerphone, during a call. It picks the output device explicitly " +
+                        "rather than setting the old flag that newer Android quietly " +
+                        "ignores, and the button follows the route that actually took " +
+                        "effect rather than the one it asked for.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Six settings were switches wired to nothing: Compact Chat List, " +
+                        "Show Typing Indicators, Swipe to Reply, Swipe for Timestamps, " +
+                        "Unread Badges, and Quick Replies. Every one of them now changes " +
+                        "what the app does.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Quick Replies had somewhere to be written and nowhere to be used - " +
+                        "the hook for them was declared and never called. They appear " +
+                        "above the attachment menu now, and land in the draft rather " +
+                        "than sending on one tap.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "A failed send no longer blames a rate limit it cannot see. The old " +
+                        "wording offered patience for what is usually an address with no " +
+                        "iMessage on it, and the two reach the app differently enough to " +
+                        "tell apart.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 51,
             versionName = "0.51.0",
             date = "12 September 2026",

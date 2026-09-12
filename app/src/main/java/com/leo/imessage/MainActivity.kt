@@ -168,6 +168,7 @@ class MainActivity : ComponentActivity() {
                         onHangUp = { lifecycleScope.launch { liveCall?.hangUp() } },
                         onDismiss = { liveCall?.dismiss() },
                         onMuteChange = { liveCall?.muted = it },
+                        onSpeakerChange = { liveCall?.setSpeaker(it) ?: false },
                     )
                 }
             }

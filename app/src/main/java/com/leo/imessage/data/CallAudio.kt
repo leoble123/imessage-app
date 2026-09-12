@@ -117,7 +117,51 @@ class CallAudio(
 
     private fun restoreRouting() {
         val audio = context.getSystemService(AudioManager::class.java) ?: return
+        runCatching {
+            if (android.os.Build.VERSION.SDK_INT >= 31) audio.clearCommunicationDevice()
+        }
         audio.mode = previousMode
+    }
+
+    /** Whether the call is currently on the loudspeaker. */
+    @Volatile
+    var speakerOn: Boolean = false
+        private set
+
+    /**
+     * Earpiece or loudspeaker.
+     *
+     * Two routes because there are two APIs and the old one lies on new
+     * releases: setSpeakerphoneOn was deprecated in API 31 and on some
+     * devices since then it returns without doing anything, so the modern
+     * path picks the output device explicitly and the legacy flag is only
+     * the fallback. Either way it reports back what actually took effect
+     * rather than what was asked for, so a control that silently failed
+     * doesn't sit there looking engaged.
+     */
+    fun setSpeaker(on: Boolean): Boolean {
+        val audio = context.getSystemService(AudioManager::class.java) ?: return speakerOn
+        val applied = runCatching {
+            if (android.os.Build.VERSION.SDK_INT >= 31) {
+                val want = if (on) {
+                    android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                } else {
+                    android.media.AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+                }
+                val device = audio.availableCommunicationDevices.firstOrNull { it.type == want }
+                if (device != null) audio.setCommunicationDevice(device)
+                else if (!on) { audio.clearCommunicationDevice(); true }
+                else false
+            } else {
+                @Suppress("DEPRECATION")
+                audio.isSpeakerphoneOn = on
+                true
+            }
+        }.getOrDefault(false)
+
+        speakerOn = if (applied) on else speakerOn
+        if (!applied) Log.w(TAG, "speaker route to $on was refused by the platform")
+        return speakerOn
     }
 
     // --- Playback -----------------------------------------------------------

@@ -17,6 +17,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -54,6 +55,7 @@ import com.leo.imessage.data.Attachment
 import com.leo.imessage.data.MessageEffect
 import com.leo.imessage.media.MediaTools
 import com.leo.imessage.ui.theme.LocalPalette
+import com.leo.imessage.ui.theme.LocalSettings
 import com.leo.imessage.ui.theme.Motion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -213,6 +215,52 @@ fun AttachmentTray(
                     }
                 }
             } else {
+                // Quick Replies, where they are actually reachable.
+                //
+                // The setting has existed for a while and the callback for it
+                // was declared right here and then never called by anything,
+                // so a list you could carefully write in Settings had nowhere
+                // in the app that would ever offer it back to you. They sit
+                // above the menu rather than inside it because they are text
+                // of different lengths, which is a scrolling row, not rows in
+                // a fixed-width card.
+                val templates = LocalSettings.current.templates
+                if (templates.isNotEmpty()) {
+                    Row(
+                        Modifier
+                            .width(258.dp)
+                            .horizontalScroll(androidx.compose.foundation.rememberScrollState())
+                            .padding(bottom = 10.dp),
+                    ) {
+                        templates.forEach { template ->
+                            GlassSheet(
+                                shape = RoundedCornerShape(18.dp),
+                                modifier = Modifier
+                                    .padding(end = 7.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {
+                                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        onQuickReply(template)
+                                        onDismiss()
+                                    },
+                                hazeState = hazeState,
+                                darkBase = darkBase,
+                                tintAlpha = 0.6f,
+                            ) {
+                                Text(
+                                    text = template,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = palette.label,
+                                    maxLines = 1,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
                 GlassSheet(
                     shape = RoundedCornerShape(26.dp),
                     modifier = Modifier.width(258.dp),

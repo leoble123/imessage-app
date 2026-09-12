@@ -748,7 +748,17 @@ private fun ChatRow(
     showSeparator: Boolean = false,
 ) {
     val palette = LocalPalette.current
+    val badgeSettings = com.leo.imessage.ui.theme.LocalSettings.current
     val rowHaptics = com.leo.imessage.ui.components.rememberHaptics()
+
+    // Compact trims the row rather than redesigning it: the avatar comes
+    // down, the breathing room around it comes down with it, and the preview
+    // drops to a single line. Roughly a third more conversations on screen,
+    // and nothing moves anywhere it wasn't already.
+    val compact = badgeSettings.compactChatList
+    val avatarSize = if (compact) 38.dp else 50.dp
+    val avatarBox = if (compact) 44.dp else 58.dp
+    val rowPadding = if (compact) 6.dp else 10.dp
 
     // iOS highlights a row the instant you touch it and clears the moment you
     // lift - no ripple, no delay. That immediacy is most of why taps feel
@@ -809,7 +819,7 @@ private fun ChatRow(
                         },
                     )
                 }
-                .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+                .padding(start = 16.dp, end = 16.dp, top = rowPadding, bottom = rowPadding),
             verticalAlignment = Alignment.Top,
         ) {
             // The selection circle slides the row over rather than appearing
@@ -842,7 +852,7 @@ private fun ChatRow(
                 }
             }
             Box(Modifier.size(14.dp).padding(top = 20.dp)) {
-                if (chat.unreadCount > 0) {
+                if (chat.unreadCount > 0 && badgeSettings.showUnreadBadges) {
                     Box(
                         Modifier
                             .size(9.dp)
@@ -858,7 +868,7 @@ private fun ChatRow(
             // looks like itself whether it is pinned or in the list.
             Box(
                 Modifier
-                    .size(58.dp)
+                    .size(avatarBox)
                     .drawBehind {
                         if (chat.unreadCount == 0) return@drawBehind
                         val stroke = 2.dp.toPx()
@@ -875,9 +885,9 @@ private fun ChatRow(
                 contentAlignment = Alignment.Center,
             ) {
                 if (chat.isGroup) {
-                    GroupAvatar(chat.participants, 50.dp)
+                    GroupAvatar(chat.participants, avatarSize)
                 } else {
-                    Avatar(chat.participants.first(), 50.dp)
+                    Avatar(chat.participants.first(), avatarSize)
                 }
             }
 
@@ -972,9 +982,11 @@ private fun RowPreview(
     tint: Color,
 ) {
     val palette = LocalPalette.current
+    val rowSettings = com.leo.imessage.ui.theme.LocalSettings.current
+    val previewLines = if (rowSettings.compactChatList) 1 else 2
     val message = chat.lastMessage
 
-    if (chat.isTyping) {
+    if (chat.isTyping && rowSettings.showTypingIndicators) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "typing",
@@ -992,7 +1004,7 @@ private fun RowPreview(
             text = "Draft: $draft",
             style = MaterialTheme.typography.bodyMedium,
             color = AppleColors.Orange,
-            maxLines = 2,
+            maxLines = previewLines,
             overflow = TextOverflow.Ellipsis,
         )
         return
@@ -1086,7 +1098,7 @@ private fun RowPreview(
             },
             style = MaterialTheme.typography.bodyMedium,
             color = if (chat.unreadCount > 0) palette.label else palette.secondaryLabel,
-            maxLines = if (visual != null) 1 else 2,
+            maxLines = if (visual != null) 1 else previewLines,
             overflow = TextOverflow.Ellipsis,
         )
     }
@@ -1136,9 +1148,14 @@ private const val PULL_RESISTANCE = 0.5f
 @Composable
 private fun InboxStatusLine(chats: List<Chat>, showArchived: Boolean) {
     val palette = LocalPalette.current
-    val status = remember(chats, showArchived) {
+    val summarySettings = com.leo.imessage.ui.theme.LocalSettings.current
+    val status = remember(chats, showArchived, summarySettings.showTypingIndicators) {
         val live = chats.filter { it.isArchived == showArchived }
-        val typing = live.filter { it.isTyping }
+        val typing = if (summarySettings.showTypingIndicators) {
+            live.filter { it.isTyping }
+        } else {
+            emptyList()
+        }
         val unread = live.filter { it.unreadCount > 0 }
         val total = unread.sumOf { it.unreadCount }
         when {
