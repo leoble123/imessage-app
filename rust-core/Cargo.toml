@@ -24,7 +24,7 @@ crate-type = ["cdylib", "staticlib", "lib"]
 # it takes the anisette/validation-data problem off the device entirely and
 # asks a relay server for it instead. That's the path OpenBubbles itself
 # uses, and it's what the relay already running on your VM answers.
-rustpush = { path = "../vendor/rustpush", default-features = false, features = ["remote-anisette-v3"] }
+rustpush = { path = "../vendor/rustpush", default-features = false, features = ["remote-anisette-v3", "macos-validation-data"] }
 uniffi = { version = "0.28", features = ["tokio"] }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros"] }
 anyhow = "1.0"

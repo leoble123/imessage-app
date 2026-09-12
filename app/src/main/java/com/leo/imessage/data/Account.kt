@@ -133,6 +133,19 @@ class AccountManager(context: Context) {
         private set(value) = prefs.edit().putString(KEY_CODE, value).apply()
 
     /**
+     * Exported Mac hardware, base64, when signing in as a real machine.
+     *
+     * Takes precedence over the relay when both are set. A relay manufactures
+     * validation data by emulating Apple's own IMDAppleServices; a Mac has the
+     * hardware that data describes. Nothing visible from here distinguishes
+     * them - registration is accepted either way and the push connection comes
+     * up either way - so when a real machine is on offer it is the one used.
+     */
+    var hardwareBlob: String?
+        get() = prefs.getString(KEY_HARDWARE, null)
+        private set(value) = prefs.edit().putString(KEY_HARDWARE, value).apply()
+
+    /**
      * Reconnects using saved details, if there are any.
      *
      * Returns true when the app can go straight to the conversation list. This
@@ -143,14 +156,19 @@ class AccountManager(context: Context) {
         // Both are written together, so one without the other means the
         // saved setup is incomplete. Returning early without saying so would
         // leave the app sitting on the silent Restoring screen forever.
+        val saved = hardwareBlob
         val host = relayHost
         val code = relayCode
-        if (host.isNullOrBlank() || code.isNullOrBlank()) {
+        if (saved.isNullOrBlank() && (host.isNullOrBlank() || code.isNullOrBlank())) {
             _state.value = AccountState.NeedsRelay
             return@withContext false
         }
         try {
-            core.configureRelay(host, code, null)
+            if (!saved.isNullOrBlank()) {
+                core.configureHardware(android.util.Base64.decode(saved, android.util.Base64.DEFAULT))
+            } else {
+                core.configureRelay(host!!, code!!, null)
+            }
             if (!core.isRegistered()) {
                 _state.value = AccountState.NeedsSignIn
                 return@withContext false
@@ -204,6 +222,35 @@ class AccountManager(context: Context) {
             core.configureRelay(normalized, code.trim(), null)
             relayHost = normalized
             relayCode = code.trim()
+            if (core.isRegistered()) becomeReady()
+            else _state.value = AccountState.NeedsSignIn
+        } catch (e: Throwable) {
+            _state.value = AccountState.Failed(e.readable(), AccountState.NeedsRelay)
+        }
+    }
+
+    /**
+     * The other step one: sign in as a Mac instead of through a relay.
+     *
+     * Takes the blob an OpenAbsinthe export produces - the tag OABS, a shared
+     * flag, then the machine's model, MAC address, serial, UUIDs, board id,
+     * build number, ROM and board serial, each also in the sealed form Apple's
+     * validation produces.
+     */
+    suspend fun configureHardware(base64: String) = withContext(Dispatchers.IO) {
+        val cleaned = base64.trim().replace("\n", "").replace(" ", "")
+        val bytes = try {
+            android.util.Base64.decode(cleaned, android.util.Base64.DEFAULT)
+        } catch (e: Throwable) {
+            _state.value = AccountState.Failed(
+                "That isn't valid base64 - paste the whole hardware string.",
+                AccountState.NeedsRelay,
+            )
+            return@withContext
+        }
+        try {
+            core.configureHardware(bytes)
+            hardwareBlob = cleaned
             if (core.isRegistered()) becomeReady()
             else _state.value = AccountState.NeedsSignIn
         } catch (e: Throwable) {
@@ -504,6 +551,7 @@ class AccountManager(context: Context) {
         /** Apple's rate limits are measured in hours, so this is generous. */
         const val REREGISTER_INTERVAL_MS = 24 * 60 * 60 * 1000L
         const val KEY_CODE = "relay_code"
+        const val KEY_HARDWARE = "hardware_blob"
     }
 }
 

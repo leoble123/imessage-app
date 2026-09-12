@@ -80,6 +80,10 @@ fun SetupScreen(
     // Kept across steps so going back doesn't wipe what was already typed.
     var host by remember { mutableStateOf(account.relayHost.orEmpty()) }
     var code by remember { mutableStateOf(account.relayCode.orEmpty()) }
+    // Two ways to be a device Apple will talk to, and the screen has to offer
+    // both: a relay that emulates one, or the exported identity of a real Mac.
+    var useMac by remember { mutableStateOf(account.hardwareBlob != null) }
+    var hardware by remember { mutableStateOf(account.hardwareBlob.orEmpty()) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var factor by remember { mutableStateOf("") }
@@ -141,7 +145,32 @@ fun SetupScreen(
                 label = "setup-step",
             ) { _ ->
                 when (state) {
-                    AccountState.NeedsRelay -> Step(
+                    AccountState.NeedsRelay -> if (useMac) Step(
+                        title = "Use a Mac",
+                        detail = "Paste the hardware identity exported from your Mac. " +
+                            "A relay imitates a Mac to satisfy Apple; this is one, so " +
+                            "there is nothing to imitate and nothing to keep running.",
+                        action = "Continue",
+                        busy = busy,
+                        enabled = hardware.isNotBlank(),
+                        onAction = { run { account.configureHardware(hardware) } },
+                    ) {
+                        Field(
+                            value = hardware,
+                            onValueChange = { hardware = it },
+                            placeholder = "OABS…",
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            "Use a registration server instead",
+                            color = palette.secondaryLabel,
+                            fontSize = 14.sp,
+                            modifier = Modifier.clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { useMac = false },
+                        )
+                    } else Step(
                         title = "Connect your server",
                         detail = "Enter the address of your registration server and the " +
                             "pairing code it printed. This is what lets the app " +
@@ -164,6 +193,16 @@ fun SetupScreen(
                             placeholder = "Pairing code",
                         )
                         Spacer(Modifier.height(16.dp))
+                        Text(
+                            "I have a Mac",
+                            color = palette.secondaryLabel,
+                            fontSize = 14.sp,
+                            modifier = Modifier.clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { useMac = true },
+                        )
+                        Spacer(Modifier.height(10.dp))
                         Text(
                             "Look around with sample data",
                             color = palette.secondaryLabel,

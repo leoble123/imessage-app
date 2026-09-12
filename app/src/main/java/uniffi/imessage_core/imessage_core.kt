@@ -849,6 +849,8 @@ internal open class UniffiVTableCallbackInterfaceEventListener(
 
 
 
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -898,6 +900,8 @@ internal interface UniffiLib : Library {
     fun uniffi_imessage_core_fn_method_imessagecore_answer_call(`ptr`: Pointer,`callId`: RustBuffer.ByValue,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_complete_registration(`ptr`: Pointer,
+    ): Long
+    fun uniffi_imessage_core_fn_method_imessagecore_configure_hardware(`ptr`: Pointer,`encoded`: RustBuffer.ByValue,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_configure_relay(`ptr`: Pointer,`host`: RustBuffer.ByValue,`code`: RustBuffer.ByValue,`token`: RustBuffer.ByValue,
     ): Long
@@ -1087,6 +1091,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_complete_registration(
     ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_configure_hardware(
+    ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_configure_relay(
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_create_call_link(
@@ -1188,6 +1194,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_complete_registration() != 22083.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_configure_hardware() != 44602.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_configure_relay() != 36876.toShort()) {
@@ -2187,6 +2196,24 @@ public interface ImessageCoreInterface {
     suspend fun `completeRegistration`()
     
     /**
+     * Signs in as a real Mac, using hardware identity exported from one.
+     *
+     * The blob is OpenAbsinthe's: the ASCII tag OABS, one byte saying whether
+     * the machine is shared, then a protobuf carrying the Mac's product name,
+     * MAC address, serial, platform and disk UUIDs, board id, build number,
+     * ROM and MLB - each also in the encrypted form Apple's own validation
+     * produces - plus the OS version and user agents that have to match it.
+     *
+     * This exists because a relay and a Mac are not equivalent. A relay
+     * manufactures validation data by emulating IMDAppleServices; a Mac has
+     * the hardware the data describes. Everything visible from this side
+     * looks identical either way - registration is accepted, the push
+     * connection comes up - and the difference only shows in whether Apple
+     * will resolve anybody for the identity afterwards.
+     */
+    suspend fun `configureHardware`(`encoded`: kotlin.ByteArray)
+    
+    /**
      * Points the core at a registration relay and opens the push connection.
      *
      * `code` is the pairing code the relay prints; `token` is only used by
@@ -2526,6 +2553,44 @@ open class ImessageCore: Disposable, AutoCloseable, ImessageCoreInterface {
             UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_complete_registration(
                 thisPtr,
                 
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+        
+        // Error FFI converter
+        CoreException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Signs in as a real Mac, using hardware identity exported from one.
+     *
+     * The blob is OpenAbsinthe's: the ASCII tag OABS, one byte saying whether
+     * the machine is shared, then a protobuf carrying the Mac's product name,
+     * MAC address, serial, platform and disk UUIDs, board id, build number,
+     * ROM and MLB - each also in the encrypted form Apple's own validation
+     * produces - plus the OS version and user agents that have to match it.
+     *
+     * This exists because a relay and a Mac are not equivalent. A relay
+     * manufactures validation data by emulating IMDAppleServices; a Mac has
+     * the hardware the data describes. Everything visible from this side
+     * looks identical either way - registration is accepted, the push
+     * connection comes up - and the difference only shows in whether Apple
+     * will resolve anybody for the identity afterwards.
+     */
+    @Throws(CoreException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `configureHardware`(`encoded`: kotlin.ByteArray) {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_configure_hardware(
+                thisPtr,
+                FfiConverterByteArray.lower(`encoded`),
             )
         },
         { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_void(future, callback, continuation) },

@@ -36,6 +36,29 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 61,
+            versionName = "0.61.0",
+            date = "12 September 2026",
+            headline = "Sign in as your actual Mac instead of a server pretending to be one.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "The app can take a Mac's exported hardware identity instead of a " +
+                        "registration server. The server manufactures validation data by " +
+                        "emulating Apple's own software; a Mac has the hardware that data " +
+                        "claims to describe. Nothing visible from here told them apart - " +
+                        "registration was accepted either way and the connection came up " +
+                        "either way - which is why it took this long to suspect.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Nothing is pinned to a relay any more. The device identity was the " +
+                        "one part of the setup that could not be swapped out, which " +
+                        "quietly made an emulated one the only option there was.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 60,
             versionName = "0.60.0",
             date = "12 September 2026",
