@@ -317,7 +317,7 @@ fun MessageInputBar(
                         Text(
                             text = placeholder,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = palette.tertiaryLabel,
+                            color = palette.secondaryLabel,
                         )
                     }
                     BasicTextField(

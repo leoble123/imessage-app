@@ -5,161 +5,130 @@ import androidx.compose.foundation.border
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeChild
 
 /**
- * The glass material used for message bubbles.
+ * The glass a message bubble is made of.
  *
- * Glass is four things stacked, and only the first is the transparency:
+ * This used to stack four painted highlights on every bubble - a sheen down
+ * the top third, a lit rim with a refraction band under it, a caustic bounce
+ * off the bottom edge, and a diagonal glare off the leading corner - on the
+ * theory that naming the optical effects of real glass and drawing each one
+ * would add up to glass. It does not. It adds up to a plastic moulding with
+ * reflections printed on it, because all four are *painted*: they sit in the
+ * same place whatever is behind the bubble, and nothing that ignores its
+ * surroundings reads as transparent.
  *
- *  1. **Transmission.** What's behind genuinely shows through. Note that a
- *     backdrop blur over a smooth background is mathematically identical to
- *     alpha compositing over it - blurring a gradient returns the same
- *     gradient - so this isn't standing in for a blur, it *is* one, at no
- *     cost, on every bubble on screen.
- *  2. **Specular sheen.** Light catches the top of a curved surface.
- *  3. **A lit rim, with refraction under it.** The edge of a glass slab
- *     gathers light along the top and bends it just inside the boundary.
- *     Biggest tell there is, and the cheapest.
- *  4. **Caustic bounce.** Light returning up through the body off the
- *     bottom inside edge.
+ * What actually makes a bubble read as glass is one thing done properly:
+ * genuinely sampling what is behind it. Blur the wallpaper, tint it, and
+ * stop. The reference material this is matched against - iOS 26 Messages
+ * over an animated background - has no sheen, no glare, and a rim you have
+ * to go looking for. The colour moving behind the bubble is the whole
+ * effect.
+ *
+ * So: a real backdrop blur where there is a wallpaper worth blurring, a flat
+ * tint over it, and at most a hairline. Over the app's plain background there
+ * is nothing behind a bubble but paint, so it stays opaque - which is also
+ * what iOS does there.
  */
 fun Modifier.liquidGlass(
     shape: Shape,
     fill: Brush,
-    /** Lighting inverts over dark material, the way it does on iOS. */
+    /**
+     * The wallpaper to look through, if there is one. Null means the bubble
+     * sits on flat paint and there is nothing to transmit.
+     */
+    hazeState: HazeState? = null,
+    /**
+     * The flat tint the blur is seen through.
+     *
+     * Separate from [fill] because a blur is tinted by one colour, not a
+     * gradient - and the bubbles that take the blur are the incoming ones,
+     * which are a single colour anyway. Null falls back to the opaque path.
+     */
+    tint: Color? = null,
+    /** The colour the blur is composited against - the wallpaper's own base. */
+    backdrop: Color = Color.Black,
+    /** Lighting inverts over dark material. */
     dark: Boolean,
-    /** Off restores an opaque, pre-glass bubble. */
-    enabled: Boolean = true,
 ): Modifier {
-    if (!enabled) return this.clip(shape).drawBehind { drawRect(fill) }
-
-    return this
-        .clip(shape)
-        .drawBehind {
-            drawRect(fill)
-
-            // Sheen across the top third.
-            drawRect(
-                Brush.verticalGradient(
-                    0f to Color.White.copy(alpha = if (dark) 0.17f else 0.30f),
-                    0.34f to Color.White.copy(alpha = if (dark) 0.05f else 0.08f),
-                    0.62f to Color.Transparent,
-                    startY = 0f,
-                    endY = size.height,
-                )
-            )
-
-            // Refraction just inside the rim: a thin band where the surface
-            // curves away and compresses what's behind it. Drawn as an inset
-            // stroke so it hugs the silhouette instead of the bounding box.
-            val outline = shape.createOutline(size, layoutDirection, this)
-            drawOutline(
-                outline = outline,
-                brush = Brush.verticalGradient(
-                    listOf(
-                        Color.White.copy(alpha = if (dark) 0.22f else 0.40f),
-                        Color.White.copy(alpha = 0f),
-                    ),
-                    startY = 0f,
-                    endY = size.height * 0.55f,
-                ),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(
-                    width = 3.dp.toPx(),
+    val body = if (hazeState == null || tint == null) {
+        this.clip(shape).drawBehind { drawRect(fill) }
+    } else {
+        this
+            .clip(shape)
+            .hazeChild(
+                state = hazeState,
+                style = HazeStyle(
+                    backgroundColor = backdrop,
+                    tints = listOf(HazeTint(tint)),
+                    blurRadius = 28.dp,
+                    noiseFactor = 0f,
                 ),
             )
+    }
 
-            // Caustic bounce along the bottom inside edge.
-            drawRect(
-                Brush.verticalGradient(
-                    0.74f to Color.Transparent,
-                    1f to Color.White.copy(alpha = if (dark) 0.10f else 0.17f),
-                    startY = 0f,
-                    endY = size.height,
-                )
-            )
-
-            // Diagonal highlight off the leading top corner - what keeps the
-            // surface from reading as a flat gradient.
-            drawRect(
-                Brush.radialGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = if (dark) 0.11f else 0.20f),
-                        Color.Transparent,
-                    ),
-                    center = Offset(size.width * 0.18f, 0f),
-                    radius = size.height * 1.6f,
-                )
-            )
-        }
-        .border(
-            BorderStroke(
-                width = 0.9.dp,
-                // On dark material the whole rim is lit. On light material a
-                // white rim is invisible, so the edge goes bright at the top
-                // and picks up a faint shadow underneath - which is what
-                // separates a pale glass pane from a flat rectangle.
-                brush = if (dark) {
-                    Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = 0.40f),
-                            Color.White.copy(alpha = 0.13f),
-                            Color.White.copy(alpha = 0.06f),
-                        )
-                    )
-                } else {
-                    Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = 0.85f),
-                            Color.Black.copy(alpha = 0.04f),
-                            Color.Black.copy(alpha = 0.09f),
-                        )
-                    )
-                },
+    // One hairline, and a faint one. On dark material it is the light
+    // gathering along the edge; on light material that same white line is
+    // invisible, so the edge takes a shadow instead. Anything stronger than
+    // this is the moulding again.
+    return body.border(
+        BorderStroke(
+            width = 0.7.dp,
+            brush = SolidColor(
+                if (dark) Color.White.copy(alpha = 0.14f)
+                else Color.Black.copy(alpha = 0.07f)
             ),
-            shape = shape,
-        )
+        ),
+        shape = shape,
+    )
 }
 
 /**
  * How much of the backdrop a bubble lets through.
  *
- * Adaptive, and it has to be: over the default background there is nothing
- * behind a bubble but flat paint, so transparency buys nothing and
- * legibility is all that matters - iOS itself draws opaque bubbles there.
- * Over a chosen background there's something worth seeing, so the material
- * opens right up.
+ * Over the app's own background there is nothing behind a bubble but flat
+ * paint, so transparency buys nothing and legibility is all that matters -
+ * iOS draws opaque bubbles there too. Over a wallpaper the material opens up,
+ * but only as far as the text on it can survive.
  */
 object GlassAlpha {
-    const val OUTGOING = 0.90f
 
     /**
-     * Split by how dark the backdrop is, because white text has to survive
-     * it. Over a dark background a translucent blue only gets deeper, so it
-     * can open right up; over a light one the same alpha washes the blue out
-     * until the label on top stops being readable, so it stays more closed.
-     */
-    const val OUTGOING_ON_DARK_BACKGROUND = 0.62f
-    const val OUTGOING_ON_LIGHT_BACKGROUND = 0.82f
-
-    /**
-     * Incoming bubbles over a background stop being grey paint entirely.
+     * Outgoing bubbles stay essentially solid, wallpaper or not.
      *
-     * Painting translucent grey over a colour just gives you *grey* - which
-     * is exactly what a tinted background used to look like. Real frosted
-     * glass doesn't add grey, it lifts and desaturates whatever is behind
-     * it, so over a background the fill becomes a near-clear white pane and
-     * the background's own colour is what you see.
+     * This is the correction the reference images forced. A blue bubble at
+     * sixty percent over a purple wallpaper is not a glass blue bubble, it is
+     * a purple bubble - the tint loses to whatever is behind it, and the one
+     * colour in the app that carries meaning stops being reliable. iOS keeps
+     * its outgoing bubbles opaque over every background it ships, and so does
+     * this.
      */
+    const val OUTGOING = 0.97f
+
+    /** Incoming, on the plain background: the familiar grey, opaque. */
     const val INCOMING = 0.92f
-    const val INCOMING_PANE_ON_LIGHT = 0.34f
-    const val INCOMING_PANE_ON_DARK = 0.17f
+
+    /**
+     * Incoming, over a wallpaper.
+     *
+     * A neutral tint, and specifically *not* a lightened pane. The previous
+     * version turned the bubble into near-clear white over a dark wallpaper,
+     * reasoning that frosted glass lifts what is behind it. Real frosted
+     * glass does; a dark bubble on a dark background is what the reference
+     * actually shows, because the point is a readable surface for white text
+     * and not a demonstration of optics.
+     */
+    const val INCOMING_ON_DARK = 0.52f
+    const val INCOMING_ON_LIGHT = 0.60f
 }
 
 /** Rebuilds a bubble gradient at a given transmission, keeping its shape. */
@@ -173,16 +142,24 @@ fun glassFill(color: Color, alpha: Float): Brush =
 /**
  * The incoming bubble's fill.
  *
- * Over the app's own background it stays the familiar grey. Over a chosen
- * background it becomes a clear pane instead, so the background reads
- * through as itself rather than through a grey wash.
+ * Over the app's own background it stays the familiar grey. Over a wallpaper
+ * it becomes a neutral tint that darkens or lightens with the wallpaper
+ * rather than with the theme - charcoal under a dark one, white under a light
+ * one - so the text on it always has the same surface to sit on.
  */
 fun incomingGlassFill(
     grey: Color,
     overBackground: Boolean,
     backgroundIsDark: Boolean,
-): Brush = when {
-    !overBackground -> glassFill(grey, GlassAlpha.INCOMING)
-    backgroundIsDark -> SolidColor(Color.White.copy(alpha = GlassAlpha.INCOMING_PANE_ON_DARK))
-    else -> SolidColor(Color.White.copy(alpha = GlassAlpha.INCOMING_PANE_ON_LIGHT))
+): Brush = SolidColor(incomingGlassTint(grey, overBackground, backgroundIsDark))
+
+/** The same decision as a flat colour, for the blur to be tinted with. */
+fun incomingGlassTint(
+    grey: Color,
+    overBackground: Boolean,
+    backgroundIsDark: Boolean,
+): Color = when {
+    !overBackground -> grey.copy(alpha = grey.alpha * GlassAlpha.INCOMING)
+    backgroundIsDark -> Color(0xFF1A1A1C).copy(alpha = GlassAlpha.INCOMING_ON_DARK)
+    else -> Color.White.copy(alpha = GlassAlpha.INCOMING_ON_LIGHT)
 }

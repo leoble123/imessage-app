@@ -36,6 +36,39 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 49,
+            versionName = "0.49.0",
+            date = "12 September 2026",
+            headline = "Bubbles that take their colour from the wallpaper, not from a painted-on shine.",
+            changes = listOf(
+                Change(
+                    ChangeKind.BETTER,
+                    "Glass bubbles are real glass now. The old ones wore four painted " +
+                        "highlights - a sheen, a lit rim, a caustic bounce, a diagonal " +
+                        "glare - which sat in the same place no matter what was behind " +
+                        "them, so they read as moulded plastic. They blur the wallpaper " +
+                        "underneath instead, with a single hairline edge.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Incoming bubbles over a dark wallpaper had it backwards: a near-clear " +
+                        "white pane where iOS uses charcoal. Outgoing bubbles stay close " +
+                        "to solid, because blue thinned over a purple background stops " +
+                        "being blue.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "The conversation title read through its own pill on a busy wallpaper. " +
+                        "The pill is thicker, and the whole header flips light or dark to " +
+                        "follow the wallpaper rather than the theme.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "The message placeholder no longer disappears into a bright background.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 48,
             versionName = "0.48.0",
             date = "12 September 2026",

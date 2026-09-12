@@ -171,7 +171,29 @@ fun ConversationScreen(
     onFaceTime: () -> Unit = {},
     backgroundId: String = "none",
 ) {
-    val palette = LocalPalette.current
+    // The wallpaper decides the treatment for this screen, not the theme.
+    // The glass already took its cue from the wallpaper; the text on it did
+    // not, so a dark wallpaper under a light theme left black placeholder
+    // text and a black title on a dark capsule. Flipping it once here beats
+    // flipping a colour at every call site, and is the same fix the
+    // conversation list got.
+    val themePalette = LocalPalette.current
+    val wallpaperId = backgroundId
+    val palette = run {
+        val bg = com.leo.imessage.ui.theme.backgroundById(wallpaperId)
+        if (bg.brush != null && bg.isDark != themePalette.isDark) {
+            val base = if (bg.isDark) com.leo.imessage.ui.theme.AppPalette.Dark
+                else com.leo.imessage.ui.theme.AppPalette.Light
+            base.copy(
+                accent = themePalette.accent,
+                outgoingBubble = themePalette.outgoingBubble,
+                outgoingBubbleColors = themePalette.outgoingBubbleColors,
+                outgoingBubbleFlat = themePalette.outgoingBubbleFlat,
+            )
+        } else {
+            themePalette
+        }
+    }
     val density = androidx.compose.ui.platform.LocalDensity.current
     val listState = rememberLazyListState()
     val hazeState = remember { HazeState() }
@@ -319,12 +341,17 @@ fun ConversationScreen(
     val dismissKeyboardOnDrag =
         com.leo.imessage.ui.components.rememberKeyboardDismissConnection()
 
-    val background = com.leo.imessage.ui.theme.backgroundById(backgroundId)
+    val background = com.leo.imessage.ui.components.rememberBackground(backgroundId)
+    // The wallpaper on its own. Bubbles cannot sample the screen's own blur
+    // source, because they are inside it and a pane blurring a picture it is
+    // part of feeds back into itself.
+    val wallpaperHaze = remember { HazeState() }
     // Both shells float over the transcript now, so the list has to reserve
     // room for them itself rather than being squeezed between two bars.
     var navBarHeight by remember { mutableStateOf(104.dp) }
     var composerHeight by remember { mutableStateOf(56.dp) }
 
+    androidx.compose.runtime.CompositionLocalProvider(LocalPalette provides palette) {
     Box(Modifier.fillMaxSize()) {
         // The wallpaper and the transcript are one blur source together. If
         // only the messages were sampled, the floating glass would find
@@ -336,7 +363,10 @@ fun ConversationScreen(
                 .fillMaxSize()
                 .glassSource(hazeState)
         ) {
-            com.leo.imessage.ui.components.ChatWallpaper(background)
+            com.leo.imessage.ui.components.ChatWallpaper(
+                background = background,
+                modifier = Modifier.glassSource(wallpaperHaze),
+            )
 
             LazyColumn(
                 state = listState,
@@ -424,6 +454,8 @@ fun ConversationScreen(
                         row = row,
                         onCustomBackground = background.brush != null,
                         backgroundIsDark = background.brush != null && background.isDark,
+                        wallpaperHaze = wallpaperHaze,
+                        backdropColor = if (background.isDark) Color.Black else Color.White,
                         colorSeed = chat.id,
                         onReply = {
                             replyingTo = row.message
@@ -821,6 +853,7 @@ fun ConversationScreen(
                 }
             },
         )
+    }
     }
 }
 

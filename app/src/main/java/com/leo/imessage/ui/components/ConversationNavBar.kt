@@ -112,6 +112,15 @@ fun ConversationNavBar(
                     modifier = Modifier.clip(RoundedCornerShape(11.dp)),
                     hazeState = hazeState,
                     darkBase = darkBase,
+                    shape = RoundedCornerShape(11.dp),
+                    // Thicker than the bars. This one floats over the
+                    // transcript rather than over a background, and at bar
+                    // opacity the message behind it read straight through the
+                    // capsule - both the name and the message underneath were
+                    // unreadable at once.
+                    fill = com.leo.imessage.ui.theme.Materials.thick(
+                        darkBase ?: LocalPalette.current.isDark
+                    ),
                 ) {
                 Row(
                     Modifier.padding(horizontal = 9.dp, vertical = 3.dp),

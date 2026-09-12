@@ -67,6 +67,16 @@ fun MessageBubble(
     onCustomBackground: Boolean = false,
     /** Whether that background is dark, so the glass and text adapt to it. */
     backgroundIsDark: Boolean = false,
+    /**
+     * The wallpaper on its own, for the bubble to look through.
+     *
+     * Deliberately not the screen's blur source, which contains the
+     * transcript: a bubble sampling a picture it is part of feeds back into
+     * itself. This holds the wallpaper and nothing else.
+     */
+    wallpaperHaze: dev.chrisbanes.haze.HazeState? = null,
+    /** What the wallpaper is painted on, for the blur to composite against. */
+    backdropColor: androidx.compose.ui.graphics.Color = Color.Black,
     /** Identifies the conversation, for per-chat bubble colour. */
     colorSeed: String = "",
     onReply: () -> Unit = {},
@@ -204,12 +214,11 @@ fun MessageBubble(
             val style = settings.bubbleStyle
             val glass = style == com.leo.imessage.ui.theme.BubbleStyle.GLASS
             val overBackground = glass && onCustomBackground
-            val transmission = when {
-                !glass -> 1f
-                overBackground && backgroundIsDark -> GlassAlpha.OUTGOING_ON_DARK_BACKGROUND
-                overBackground -> GlassAlpha.OUTGOING_ON_LIGHT_BACKGROUND
-                else -> GlassAlpha.OUTGOING
-            }
+            // Outgoing stays essentially solid whatever is behind it. Opened
+            // up over a wallpaper it stops being blue and becomes whatever
+            // the wallpaper is, and blue is the one colour here that means
+            // something.
+            val transmission = if (glass) GlassAlpha.OUTGOING else 1f
             val fill: Brush = when {
                 !outgoing -> if (glass) {
                     incomingGlassFill(
@@ -254,6 +263,16 @@ fun MessageBubble(
                 overBackground -> backgroundIsDark
                 else -> palette.isDark
             }
+            // Only the incoming bubble transmits, and only over a wallpaper.
+            // Everything else is opaque, so a blur would cost a pass per
+            // bubble to produce the fill it already has.
+            val transmitting = overBackground && !outgoing
+            val bubbleHaze = if (transmitting) wallpaperHaze else null
+            val bubbleTint = if (transmitting) {
+                incomingGlassTint(palette.incomingBubble, true, backgroundIsDark)
+            } else {
+                null
+            }
 
             if (msg.isUnsent) {
                 UnsentBubble(msg)
@@ -276,7 +295,14 @@ fun MessageBubble(
                             com.leo.imessage.data.MediaKind.AUDIO -> Box(
                                 Modifier
                                     .padding(bottom = 3.dp)
-                                    .liquidGlass(shape, fill, glassDark, glass)
+                                    .liquidGlass(
+                                        shape = shape,
+                                        fill = fill,
+                                        hazeState = bubbleHaze,
+                                        tint = bubbleTint,
+                                        backdrop = backdropColor,
+                                        dark = glassDark,
+                                    )
                                     .pointerInput(msg.id) {
                                         detectTapGestures(
                                             onLongPress = {
@@ -307,7 +333,14 @@ fun MessageBubble(
                     if (poll != null) {
                         Box(
                             Modifier
-                                .liquidGlass(shape, fill, glassDark, glass)
+                                .liquidGlass(
+                                        shape = shape,
+                                        fill = fill,
+                                        hazeState = bubbleHaze,
+                                        tint = bubbleTint,
+                                        backdrop = backdropColor,
+                                        dark = glassDark,
+                                    )
                                 .pointerInput(msg.id) {
                                     detectTapGestures(
                                         onLongPress = {
@@ -370,8 +403,10 @@ fun MessageBubble(
                                 .liquidGlass(
                                     shape = shape,
                                     fill = fill,
+                                    hazeState = bubbleHaze,
+                                    tint = bubbleTint,
+                                    backdrop = backdropColor,
                                     dark = glassDark,
-                                    enabled = glass,
                                 )
                                 .pointerInput(msg.id) {
                                     detectTapGestures(
