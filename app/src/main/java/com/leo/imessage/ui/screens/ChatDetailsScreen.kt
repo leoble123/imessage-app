@@ -113,7 +113,7 @@ fun ChatDetailsScreen(
             }
 
             ListSection(header = "Background") {
-                BackgroundPicker(
+                com.leo.imessage.ui.components.BackgroundPicker(
                     selectedId = selectedBackgroundId,
                     onSelect = onSelectBackground,
                 )
@@ -236,54 +236,3 @@ fun ChatDetailsScreen(
     }
 }
 
-@Composable
-private fun BackgroundPicker(
-    selectedId: String,
-    onSelect: (String) -> Unit,
-) {
-    val palette = LocalPalette.current
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 14.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        ChatBackgrounds.forEach { bg ->
-            val selected = bg.id == selectedId
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(
-                    Modifier
-                        .size(width = 54.dp, height = 88.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .then(
-                            if (bg.brush != null) Modifier.background(bg.brush)
-                            else Modifier.background(palette.background)
-                        )
-                        .border(
-                            width = if (selected) 2.5.dp else 1.dp,
-                            color = if (selected) palette.accent else palette.separator,
-                            shape = RoundedCornerShape(10.dp),
-                        )
-                        .clickable { onSelect(bg.id) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    // The swatch runs the real thing, so a dynamic background
-                    // is obviously moving before you commit to it.
-                    if (bg.isDynamic) {
-                        com.leo.imessage.ui.components.ChatWallpaper(
-                            background = bg,
-                            modifier = Modifier.matchParentSize(),
-                        )
-                    }
-                }
-                Spacer(Modifier.height(5.dp))
-                Text(
-                    if (bg.isDynamic) "${bg.name} ✦" else bg.name,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (selected) palette.accent else palette.secondaryLabel,
-                )
-            }
-        }
-    }
-}

@@ -130,6 +130,15 @@ class AppSettings(private val store: SettingsStore? = null) {
     var sendWithReturn by bool("send_with_return", false)
     var lowPowerAnimations by bool("reduce_motion", false)
 
+    /**
+     * The wallpaper behind the conversation list.
+     *
+     * "none" is the flat theme background, which is the default and the one
+     * that gets out of the way. The adaptive ones follow the clock, the
+     * weather, or both.
+     */
+    var homeBackground by text("home_background", "none")
+
 
     /**
      * Gives every conversation its own colour, derived from who it's with.

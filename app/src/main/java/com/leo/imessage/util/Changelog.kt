@@ -36,6 +36,53 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 48,
+            versionName = "0.48.0",
+            date = "12 September 2026",
+            headline = "Backgrounds that follow the clock and the sky.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "The conversation list can have a wallpaper again - Settings → " +
+                        "Appearance → Home Background - including three that work " +
+                        "themselves out: Time of Day, Weather, and both together.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Weather is read from your approximate location, using only the " +
+                        "position your phone already knew rather than waking the GPS. " +
+                        "Nothing is asked for until you pick one of those backgrounds, " +
+                        "and refusing it falls back to the clock, which needs nothing.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Unnamed numbers had avatars reading \"+5\". Initials were taken from " +
+                        "the first letter of each word, and an unnamed conversation is " +
+                        "titled with a phone number. A number has no initials, so those " +
+                        "now show a person the way iOS does.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "The unread liquid vanished instead of draining when you opened a " +
+                        "chat. The animation was written; the whole thing was being " +
+                        "removed before it could play.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "Unread level no longer scales in a straight line. It rises fast over " +
+                        "the first few messages, where the difference is worth seeing, " +
+                        "and flattens toward a ceiling it never reaches - so a hundred " +
+                        "unread no longer drowns the face underneath.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "The liquid clings to the glass at the edges instead of running " +
+                        "straight into it, and sits almost still until something lands, " +
+                        "which is when it briefly comes alive.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 47,
             versionName = "0.47.0",
             date = "12 September 2026",

@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -32,12 +35,23 @@ fun Avatar(
             .background(avatarGradientFor(contact.id)),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = contact.initials,
-            color = Color.White,
-            fontSize = (size.value * 0.38f).sp,
-            fontWeight = FontWeight.Medium,
-        )
+        if (contact.initials.isEmpty()) {
+            // Nobody whose name we know. iOS draws a person here rather than
+            // trying to make letters out of a phone number, and so does this.
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.85f),
+                modifier = Modifier.size(size * 0.55f),
+            )
+        } else {
+            Text(
+                text = contact.initials,
+                color = Color.White,
+                fontSize = (size.value * 0.38f).sp,
+                fontWeight = FontWeight.Medium,
+            )
+        }
     }
 }
 

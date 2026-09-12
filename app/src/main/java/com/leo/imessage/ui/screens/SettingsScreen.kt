@@ -247,8 +247,45 @@ fun SettingsScreen(
                 }
             }
 
-            ListSection(header = "Appearance") {
-
+            ListSection(
+                header = "Appearance",
+                footer = "The weather backgrounds ask what the sky is doing where you " +
+                    "are. They only ever read the position your phone already knew, and " +
+                    "saying no just leaves the background following the clock.",
+            ) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        "Home Background",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = palette.label,
+                        modifier = Modifier.padding(bottom = 9.dp),
+                    )
+                    val locationPrompt =
+                        androidx.activity.compose.rememberLauncherForActivityResult(
+                            androidx.activity.result.contract.ActivityResultContracts
+                                .RequestPermission()
+                        ) { }
+                    com.leo.imessage.ui.components.BackgroundPicker(
+                        selectedId = settings.homeBackground,
+                        onSelect = { id ->
+                            settings.homeBackground = id
+                            // Asked for at the moment it is needed and not
+                            // before, which is the only time the reason for
+                            // it is obvious.
+                            val wantsWeather =
+                                id == com.leo.imessage.ui.theme.AdaptiveBackgrounds.WEATHER ||
+                                    id == com.leo.imessage.ui.theme.AdaptiveBackgrounds.BOTH
+                            if (wantsWeather &&
+                                !com.leo.imessage.data.WeatherSource.hasPermission(context)
+                            ) {
+                                locationPrompt.launch(
+                                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            }
+                        },
+                    )
+                }
+                SettingsDivider()
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Text(
                         "Theme",

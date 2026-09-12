@@ -91,7 +91,24 @@ fun ChatListScreen(
     recentMessages: ((String) -> List<com.leo.imessage.data.Message>)? = null,
     drafts: Map<String, String> = emptyMap(),
 ) {
-    val palette = LocalPalette.current
+    val settingsForBackground = com.leo.imessage.ui.theme.LocalSettings.current
+    val wallpaper = com.leo.imessage.ui.components.rememberBackground(
+        settingsForBackground.homeBackground,
+    )
+    val onWallpaper = wallpaper.brush != null
+    val themePalette = LocalPalette.current
+    // A dark wallpaper under a light theme would leave black text on it. The
+    // wallpaper decides the treatment for this screen rather than the theme,
+    // which is one line here instead of a flipped colour at forty call sites.
+    val palette = remember(themePalette, onWallpaper, wallpaper.isDark) {
+        if (onWallpaper && wallpaper.isDark != themePalette.isDark) {
+            val base = if (wallpaper.isDark) com.leo.imessage.ui.theme.AppPalette.Dark
+                else com.leo.imessage.ui.theme.AppPalette.Light
+            base.copy(accent = themePalette.accent)
+        } else {
+            themePalette
+        }
+    }
     val listState = rememberLazyListState()
     val hazeState = remember { HazeState() }
     var query by remember { mutableStateOf("") }
@@ -203,15 +220,21 @@ fun ChatListScreen(
     val navBarBottom = androidx.compose.foundation.layout.WindowInsets.navigationBars
         .asPaddingValues().calculateBottomPadding()
 
-    Box(Modifier.fillMaxSize().background(palette.background)) {
-        // The list is the blur source; the floating controls sample it, so
-        // rows visibly smear through them on their way past.
+    androidx.compose.runtime.CompositionLocalProvider(LocalPalette provides palette) {
+    Box(Modifier.fillMaxSize()) {
+        // The wallpaper and the list are one blur source, so the floating
+        // controls sample both - a bar passing over a plain stretch of
+        // wallpaper still has something to blur.
         Box(
             Modifier
                 .fillMaxSize()
                 .nestedScroll(pullConnection)
                 .glassSource(hazeState),
         ) {
+            com.leo.imessage.ui.components.ChatWallpaper(
+                background = wallpaper,
+                modifier = Modifier.fillMaxSize(),
+            )
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -655,6 +678,7 @@ fun ChatListScreen(
             )
         }
     }
+    }
 }
 
 @Composable
@@ -731,7 +755,10 @@ private fun ChatRow(
     // direct rather than laggy.
     var pressed by remember { mutableStateOf(false) }
     val pressTint by androidx.compose.animation.animateColorAsState(
-        targetValue = if (pressed) palette.fieldBackground else palette.background,
+        // Transparent at rest so a wallpaper shows through the list. The
+        // swipe rails are hidden until the row moves, and the row goes solid
+        // over its first few pixels of travel, so nothing leaks.
+        targetValue = if (pressed) palette.fieldBackground else Color.Transparent,
         animationSpec = if (pressed) Motion.fade(40) else Motion.fade(220),
         label = "rowPress",
     )

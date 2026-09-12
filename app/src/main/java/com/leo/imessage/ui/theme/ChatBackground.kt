@@ -127,5 +127,21 @@ val ChatBackgrounds: List<ChatBackground> = listOf(
     ),
 )
 
+/**
+ * The ones the picker offers on top of the fixed list.
+ *
+ * Placeholders: their real colours are worked out when they are drawn, from
+ * the clock and the sky. They carry a representative palette so the swatch
+ * still looks like what you are choosing.
+ */
+val AdaptiveChatBackgrounds: List<ChatBackground> = listOf(
+    timeBackground(),
+    weatherBackground(com.leo.imessage.data.Conditions(com.leo.imessage.data.Sky.RAIN, true)),
+    timeAndWeatherBackground(com.leo.imessage.data.Conditions(com.leo.imessage.data.Sky.CLEAR, true)),
+)
+
+/** Everything a picker should list, fixed and adaptive together. */
+val AllChatBackgrounds: List<ChatBackground> get() = ChatBackgrounds + AdaptiveChatBackgrounds
+
 fun backgroundById(id: String): ChatBackground =
-    ChatBackgrounds.firstOrNull { it.id == id } ?: ChatBackgrounds.first()
+    AllChatBackgrounds.firstOrNull { it.id == id } ?: ChatBackgrounds.first()

@@ -49,6 +49,7 @@ import com.leo.imessage.ui.theme.LocalPalette
 import com.leo.imessage.ui.theme.LocalSettings
 import com.leo.imessage.ui.theme.chatRingColorsFor
 import com.leo.imessage.ui.theme.chatTintFor
+import kotlin.math.exp
 import kotlin.math.sin
 
 /**
@@ -340,37 +341,54 @@ private val DOCK_AVATAR = 34.dp
  * Unread, as a level the circle fills to rather than a badge stuck on it.
  *
  * A dot answers "is there something". This answers "how much", which is the
- * question you actually have when you glance at a row of faces - one message
- * waiting and eleven waiting should not look the same, and on iOS they do.
+ * question you actually have when you glance at a row of faces.
  *
- * What makes it read as liquid rather than as a green rectangle is entirely
- * in the surface. The first version of this was one sine wave under one flat
- * fill, and a single sine at this size is a straight line: the whole thing
- * came out as a coloured wash over the avatar with a hard edge across it.
- * Three things fix that, and they are the three things an actual surface of
- * water has:
+ * The level is deliberately not proportional to the count. Proportional
+ * scaling sounds right and is wrong twice over: one unread barely shows, and
+ * anything past a dozen drowns the face you are trying to recognise. This
+ * rises fast at the start, where the difference between one and three is
+ * genuinely interesting, and flattens off toward a ceiling it never reaches,
+ * because the gap left at the top is most of what makes it read as a liquid
+ * in a container rather than a filled shape.
  *
- *  - **Two waves, not one.** Different frequencies, different speeds. Summed,
- *    they never repeat inside the width of the circle, so the crest travels
- *    instead of the whole line sliding.
- *  - **Depth.** The body is graded from nearly clear at the surface to its
- *    full colour at the bottom, because that is what a tinted volume does.
- *    Flat colour is what makes something look printed on.
- *  - **A meniscus.** A bright line riding exactly on the surface. This is the
- *    single detail doing most of the work - it is what tells the eye there is
- *    a boundary between two materials rather than an edge where a shape was
- *    cropped.
+ * What makes it read as liquid at all is the surface. Two waves at different
+ * speeds so the crest travels rather than the line sliding; a body graded
+ * from nearly clear at the top to full colour at depth, because that is what
+ * a tinted volume does; a meniscus riding the surface, which is the detail
+ * that says "boundary between two materials" rather than "shape that got
+ * cropped"; and the surface pulled up where it meets the glass, which is
+ * what water actually does and is the difference between a liquid and a
+ * wavy line.
+ *
+ * It is nearly still when nothing is happening. Motion here is a signal, and
+ * a signal that never stops is decoration.
  */
 @Composable
 private fun UnreadLevel(chat: Chat, diameter: Dp, tint: Color) {
-    if (chat.unreadCount <= 0) return
     val settings = LocalSettings.current
-    val level = (chat.unreadCount / 10f).coerceIn(0.2f, 0.94f)
+    val target = levelFor(chat.unreadCount)
 
-    // Settles into place rather than appearing at it, which is most of why it
-    // reads as something poured in.
     val filled = remember { Animatable(0f) }
-    LaunchedEffect(level) { filled.animateTo(level, com.leo.imessage.ui.theme.Motion.gentle()) }
+    // Kept composed at zero rather than removed, so emptying is something you
+    // watch drain. Returning early the moment the count hit zero meant the
+    // spring below never got to run and the liquid simply vanished.
+    if (chat.unreadCount <= 0 && filled.value <= 0.001f) return
+
+    LaunchedEffect(target) {
+        filled.animateTo(target, com.leo.imessage.ui.theme.Motion.gentle())
+    }
+
+    // A message landing disturbs the surface and settles. This is the only
+    // thing that ever makes it move much, which is why it reads as an event.
+    val splash = remember { Animatable(0f) }
+    var lastCount by remember { mutableStateOf(chat.unreadCount) }
+    LaunchedEffect(chat.unreadCount) {
+        val arrived = chat.unreadCount > lastCount
+        lastCount = chat.unreadCount
+        if (!arrived || settings.lowPowerAnimations) return@LaunchedEffect
+        splash.snapTo(1f)
+        splash.animateTo(0f, tween(1600, easing = LinearEasing))
+    }
 
     val phase = if (settings.lowPowerAnimations) {
         null
@@ -378,7 +396,7 @@ private fun UnreadLevel(chat: Chat, diameter: Dp, tint: Color) {
         rememberInfiniteTransition(label = "unreadLevel").animateFloat(
             initialValue = 0f,
             targetValue = TWO_PI,
-            animationSpec = infiniteRepeatable(tween(4200, easing = LinearEasing)),
+            animationSpec = infiniteRepeatable(tween(5200, easing = LinearEasing)),
             label = "unreadSway",
         )
     }
@@ -391,57 +409,59 @@ private fun UnreadLevel(chat: Chat, diameter: Dp, tint: Color) {
                 val w = size.width
                 val h = size.height
                 val t = phase?.value ?: 0f
-                val rest = h * (1f - filled.value)
-                val amplitude = (w * 0.045f).coerceAtMost(rest.coerceAtLeast(0f))
+                val level = filled.value
+                if (level <= 0.001f) return@drawBehind
+                val rest = h * (1f - level)
 
-                // The surface, sampled once and used for both the body and
-                // the line on top of it, so the two can never disagree.
+                // Almost flat at rest; briefly alive when something lands.
+                val calm = w * 0.012f
+                val amplitude = (calm + w * 0.055f * splash.value)
+                    .coerceAtMost(rest.coerceAtLeast(0f))
+
                 fun surfaceAt(x: Float): Float {
-                    val u = x / w
-                    return rest +
-                        sin(t + u * TWO_PI * 1.15f) * amplitude +
-                        sin(-t * 0.63f + u * TWO_PI * 2.30f) * amplitude * 0.42f
+                    val u = (x / w).coerceIn(0f, 1f)
+                    val wave = sin(t + u * TWO_PI * 1.15f) +
+                        sin(-t * 0.63f + u * TWO_PI * 2.30f) * 0.42f
+                    // Surface tension: held up against the glass on both
+                    // sides and free in the middle. Without it the wave runs
+                    // straight into the wall and gets guillotined by the clip.
+                    val wall = sin(u * kotlin.math.PI.toFloat())
+                    val cling = (1f - wall) * w * 0.035f
+                    return rest + wave * amplitude * wall - cling
                 }
 
-                val steps = 28
-                val body = Path().apply {
-                    moveTo(0f, surfaceAt(0f))
+                val steps = 30
+                fun trace(path: Path) {
+                    path.moveTo(0f, surfaceAt(0f))
                     for (i in 1..steps) {
                         val x = w * i / steps
-                        lineTo(x, surfaceAt(x))
+                        path.lineTo(x, surfaceAt(x))
                     }
+                }
+
+                val body = Path().apply {
+                    trace(this)
                     lineTo(w, h)
                     lineTo(0f, h)
                     close()
                 }
-
-                // Nearly clear where it meets the air, full colour at depth.
                 drawPath(
                     path = body,
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            tint.copy(alpha = 0.26f),
-                            tint.copy(alpha = 0.50f),
-                            tint.copy(alpha = 0.66f),
+                            tint.copy(alpha = 0.24f),
+                            tint.copy(alpha = 0.48f),
+                            tint.copy(alpha = 0.64f),
                         ),
                         startY = rest - amplitude,
                         endY = h,
                     ),
                 )
 
-                // The meniscus. Drawn as its own stroke rather than as the
-                // edge of the fill, because a fill's edge is exactly as sharp
-                // as the shape and a surface is not.
-                val line = Path().apply {
-                    moveTo(0f, surfaceAt(0f))
-                    for (i in 1..steps) {
-                        val x = w * i / steps
-                        lineTo(x, surfaceAt(x))
-                    }
-                }
                 // Denser band first, glint on top of it. The other way round
                 // paints the thick line over the thin one and the highlight
                 // is simply not there.
+                val line = Path().apply { trace(this) }
                 drawPath(
                     path = line,
                     color = tint.copy(alpha = 0.85f),
@@ -455,5 +475,21 @@ private fun UnreadLevel(chat: Chat, diameter: Dp, tint: Color) {
             }
     )
 }
+
+/**
+ * How full the circle gets for a given number of unread messages.
+ *
+ * Roughly: 1 is a sixth, 3 is a third, 10 is two thirds, and fifty-odd
+ * approaches but never reaches the ceiling. Saturating rather than linear,
+ * so the first few messages are the ones that move it most - which is also
+ * the order in which they stop being interesting.
+ */
+internal fun levelFor(unread: Int): Float {
+    if (unread <= 0) return 0f
+    return (CEILING * (1f - exp(-unread / 7.2f))).coerceAtLeast(0.15f)
+}
+
+/** Never quite full: the gap at the top is what makes it a liquid. */
+private const val CEILING = 0.88f
 
 private const val TWO_PI = 6.2831855f

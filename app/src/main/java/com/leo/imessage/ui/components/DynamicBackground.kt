@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -122,3 +123,57 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDrift(
         )
     }
 }
+
+
+/**
+ * A background by id, worked out if it is one of the adaptive ones.
+ *
+ * The clock is re-read every few minutes so dusk arrives without relaunching
+ * the app, and the weather is asked for on the same schedule the source
+ * caches on. Anything that cannot be answered - no permission, no signal, no
+ * last known location - falls back to the time of day, which needs nothing
+ * and is never wrong.
+ */
+@Composable
+fun rememberBackground(id: String): com.leo.imessage.ui.theme.ChatBackground {
+    if (!com.leo.imessage.ui.theme.AdaptiveBackgrounds.isAdaptive(id)) {
+        return androidx.compose.runtime.remember(id) {
+            com.leo.imessage.ui.theme.backgroundById(id)
+        }
+    }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val hour by androidx.compose.runtime.produceState(nowHour()) {
+        while (true) {
+            kotlinx.coroutines.delay(120_000)
+            value = nowHour()
+        }
+    }
+
+    val conditions by androidx.compose.runtime.produceState(
+        com.leo.imessage.data.WeatherSource.lastKnown(),
+        id,
+    ) {
+        if (id == com.leo.imessage.ui.theme.AdaptiveBackgrounds.TIME) return@produceState
+        while (true) {
+            // Keeps the previous answer on a failure rather than flickering
+            // back to the fallback every time the network is briefly away.
+            value = com.leo.imessage.data.WeatherSource.current(context) ?: value
+            kotlinx.coroutines.delay(1_800_000)
+        }
+    }
+
+    return androidx.compose.runtime.remember(id, hour, conditions) {
+        val sky = conditions
+        when {
+            id == com.leo.imessage.ui.theme.AdaptiveBackgrounds.TIME || sky == null ->
+                com.leo.imessage.ui.theme.timeBackground(hour)
+            id == com.leo.imessage.ui.theme.AdaptiveBackgrounds.WEATHER ->
+                com.leo.imessage.ui.theme.weatherBackground(sky)
+            else -> com.leo.imessage.ui.theme.timeAndWeatherBackground(sky, hour)
+        }
+    }
+}
+
+private fun nowHour(): Int =
+    java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)

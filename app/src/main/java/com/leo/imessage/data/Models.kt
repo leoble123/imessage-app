@@ -7,13 +7,25 @@ data class Contact(
     val id: String,
     val displayName: String,
     val handle: String,
-    val initials: String = displayName
-        .split(" ")
-        .filter { it.isNotBlank() }
-        .take(2)
-        .joinToString("") { it.first().uppercase() }
-        .ifEmpty { "?" },
+    val initials: String = initialsFor(displayName),
 )
+
+/**
+ * The one or two letters that stand in for a face.
+ *
+ * Only ever letters. This used to take the first character of the first two
+ * words whatever they were, and a conversation with somebody who is not in
+ * your address book is titled with their phone number - so "+1 555-000-0002"
+ * came out as an avatar reading "+5", which is what every unnamed circle in
+ * the app was showing. A number has no initials; the honest answer is a
+ * person glyph, which is what iOS uses and what the empty string here
+ * renders as.
+ */
+internal fun initialsFor(displayName: String): String = displayName
+    .split(' ', '-', '.', '_')
+    .mapNotNull { word -> word.firstOrNull { it.isLetter() }?.uppercaseChar() }
+    .take(2)
+    .joinToString("")
 
 enum class Service { IMESSAGE, SMS }
 
