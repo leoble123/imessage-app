@@ -36,6 +36,40 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 47,
+            versionName = "0.47.0",
+            date = "12 September 2026",
+            headline = "The floating controls are glass again, and the liquid has depth.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "The pinned dock and the other floating controls were solid slabs. " +
+                        "They had been taken to ninety-four percent opaque to stop them " +
+                        "vanishing against a white screen, which worked and cost the " +
+                        "whole effect - nothing passed through, so nothing smeared. They " +
+                        "are translucent again, with a tint dark enough to still be a " +
+                        "shape on their own.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "The unread level looks like liquid instead of a coloured wash. One " +
+                        "sine wave at that size is a straight line, so there are two at " +
+                        "different speeds; the body is graded from nearly clear at the " +
+                        "surface to full colour at depth, because that is what a tinted " +
+                        "volume does; and there is a bright meniscus riding the surface, " +
+                        "which is the detail that says \"boundary between two materials\" " +
+                        "rather than \"shape that got cropped\".",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "The ring around a pinned circle now means one thing only - they are " +
+                        "typing. It used to also draw an arc for unread, which was right " +
+                        "when unread was a dot and is two signals too many now that it " +
+                        "fills the circle.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 46,
             versionName = "0.46.0",
             date = "12 September 2026",

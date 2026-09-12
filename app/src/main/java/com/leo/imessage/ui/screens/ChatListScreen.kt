@@ -334,7 +334,8 @@ fun ChatListScreen(
                 com.leo.imessage.ui.components.GlassPill(
                     modifier = Modifier.clip(RoundedCornerShape(50)),
                     hazeState = hazeState,
-                    fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
+                    fill = com.leo.imessage.ui.theme.Materials.floating(palette.isDark),
+                    hairline = true,
                 ) {
                     Row(
                         Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
@@ -386,7 +387,8 @@ fun ChatListScreen(
                 com.leo.imessage.ui.components.GlassPill(
                     modifier = Modifier.clip(RoundedCornerShape(50)),
                     hazeState = hazeState,
-                    fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
+                    fill = com.leo.imessage.ui.theme.Materials.floating(palette.isDark),
+                    hairline = true,
                 ) {
                     Row(
                         Modifier.padding(start = 13.dp, end = 15.dp, top = 9.dp, bottom = 9.dp),
@@ -422,7 +424,8 @@ fun ChatListScreen(
                             .clip(RoundedCornerShape(50))
                             .graphicsLayer { alpha = collapseProgress },
                         hazeState = hazeState,
-                        fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
+                        fill = com.leo.imessage.ui.theme.Materials.floating(palette.isDark),
+                        hairline = true,
                     ) {
                         Text(
                             text = if (showArchived) "Archived" else "Messages",
@@ -439,7 +442,8 @@ fun ChatListScreen(
                         com.leo.imessage.ui.components.GlassPill(
                             modifier = Modifier.clip(RoundedCornerShape(50)),
                             hazeState = hazeState,
-                            fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
+                            fill = com.leo.imessage.ui.theme.Materials.floating(palette.isDark),
+                            hairline = true,
                         ) {
                             Text(
                                 text = "Delete (${selected.size})",
@@ -460,7 +464,8 @@ fun ChatListScreen(
                         com.leo.imessage.ui.components.GlassPill(
                             modifier = Modifier.clip(RoundedCornerShape(50)),
                             hazeState = hazeState,
-                            fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
+                            fill = com.leo.imessage.ui.theme.Materials.floating(palette.isDark),
+                            hairline = true,
                         ) {
                             Text(
                                 text = if (selected.size == visibleChats.size) "None" else "All",
@@ -481,7 +486,8 @@ fun ChatListScreen(
                         com.leo.imessage.ui.components.GlassPill(
                             modifier = Modifier.clip(CircleShape),
                             hazeState = hazeState,
-                            fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
+                            fill = com.leo.imessage.ui.theme.Materials.floating(palette.isDark),
+                            hairline = true,
                         ) {
                             Icon(
                                 Icons.Filled.FilterList,
@@ -514,7 +520,8 @@ fun ChatListScreen(
                     com.leo.imessage.ui.components.GlassPill(
                         modifier = Modifier.clip(RoundedCornerShape(50)),
                         hazeState = hazeState,
-                        fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
+                        fill = com.leo.imessage.ui.theme.Materials.floating(palette.isDark),
+                        hairline = true,
                     ) {
                         com.leo.imessage.ui.components.PinnedDock(
                             pinned = allPinned,
@@ -539,7 +546,8 @@ fun ChatListScreen(
                     .weight(1f)
                     .clip(RoundedCornerShape(50)),
                 hazeState = hazeState,
-                fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
+                fill = com.leo.imessage.ui.theme.Materials.floating(palette.isDark),
+                hairline = true,
             ) {
                 SearchField(query = query, onQueryChange = { query = it })
             }
@@ -548,7 +556,8 @@ fun ChatListScreen(
                 com.leo.imessage.ui.components.GlassPill(
                     modifier = Modifier.clip(CircleShape),
                     hazeState = hazeState,
-                    fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
+                    fill = com.leo.imessage.ui.theme.Materials.floating(palette.isDark),
+                    hairline = true,
                 ) {
                     Icon(
                         Icons.Filled.Videocam,
@@ -565,7 +574,8 @@ fun ChatListScreen(
             com.leo.imessage.ui.components.GlassPill(
                 modifier = Modifier.clip(CircleShape),
                 hazeState = hazeState,
-                fill = com.leo.imessage.ui.theme.Materials.control(palette.isDark),
+                fill = com.leo.imessage.ui.theme.Materials.floating(palette.isDark),
+                hairline = true,
             ) {
                 Icon(
                     Icons.Outlined.Edit,

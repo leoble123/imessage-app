@@ -28,18 +28,23 @@ object Materials {
         if (dark) Color(0xF01C1C1E) else Color(0xF0F9F9F9)
 
     /**
-     * The fill under a control - a search field, a round bar button.
+     * A control that floats over content - a search field, a round bar
+     * button, the pinned dock.
      *
-     * Not a material, and the distinction matters. A material is for a
-     * surface content passes *behind*; at the top of a list there is nothing
-     * behind it, so an eighty-percent white over white is white, and the
-     * control disappears exactly where it most needs to be found. iOS gives
-     * controls an opaque grey fill for that reason, and a search field on a
-     * white screen is about fifteen levels down from it - which is quiet, and
-     * is still a shape.
+     * The two things it has to do pull against each other, and the first
+     * attempt at this only did one of them. A floating control needs a
+     * defined tint, because at the top of a list there is nothing behind it
+     * and a plain material over a plain background is that background. But
+     * take that far enough to be safe - the ninety-four percent this was -
+     * and it stops being glass: nothing passes through it, so nothing smears,
+     * and what you get is a solid slab sitting on the screen.
+     *
+     * So: a tint dark or light enough to be a shape on its own, at an opacity
+     * that still lets a row travelling underneath show through it. Both, at
+     * once, rather than either at full strength.
      */
-    fun control(dark: Boolean): Color =
-        if (dark) Color(0xF02C2C2E) else Color(0xF0EFEFF0)
+    fun floating(dark: Boolean): Color =
+        if (dark) Color(0xD41E1E22) else Color(0xD4E7E7EC)
 
     /** What a full-screen panel dims the app behind it with. */
     fun scrim(dark: Boolean): Color =
