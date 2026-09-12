@@ -251,12 +251,14 @@ fun AppRoot(
                         chat = chat,
                         messages = messages,
                         onBack = { openChatId = null },
-                        onSend = { text, effect, replyToId, attachments ->
+                        onSend = { text, effect, replyToId, attachments, mentions ->
                             // The draft is gone the moment this fires, so the
                             // typing bubble has to go with it.
                             typing.stop()
                             scope.launch {
-                                backend.send(chat.id, text, effect, replyToId, attachments)
+                                backend.send(
+                                    chat.id, text, effect, replyToId, attachments, mentions,
+                                )
                             }
                         },
                         onTapback = { messageId, kind ->

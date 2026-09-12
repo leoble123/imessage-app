@@ -186,7 +186,7 @@ fun ReplyThreadView(
             }
 
             MessageInputBar(
-                onSend = { text, effect, attachments ->
+                onSend = { text, effect, attachments, _ ->
                     onSendReply(text, effect, attachments)
                     staged = emptyList()
                     stagedEffect = MessageEffect.NONE

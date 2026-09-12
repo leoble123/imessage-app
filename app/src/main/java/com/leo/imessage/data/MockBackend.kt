@@ -228,6 +228,7 @@ class MockBackend : MessagingBackend {
         effect: MessageEffect,
         replyToId: String?,
         attachments: List<Attachment>,
+        mentions: List<String>,
     ) {
         val msg = Message(
             id = UUID.randomUUID().toString(),

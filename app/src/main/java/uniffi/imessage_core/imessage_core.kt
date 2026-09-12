@@ -851,6 +851,8 @@ internal open class UniffiVTableCallbackInterfaceEventListener(
 
 
 
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -936,6 +938,8 @@ internal interface UniffiLib : Library {
     fun uniffi_imessage_core_fn_method_imessagecore_send_mark_unread(`ptr`: Pointer,`participants`: RustBuffer.ByValue,`groupName`: RustBuffer.ByValue,`senderGuid`: RustBuffer.ByValue,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_send_read(`ptr`: Pointer,`participants`: RustBuffer.ByValue,`groupName`: RustBuffer.ByValue,`senderGuid`: RustBuffer.ByValue,
+    ): Long
+    fun uniffi_imessage_core_fn_method_imessagecore_send_rich_text(`ptr`: Pointer,`participants`: RustBuffer.ByValue,`groupName`: RustBuffer.ByValue,`senderGuid`: RustBuffer.ByValue,`runs`: RustBuffer.ByValue,`replyToId`: RustBuffer.ByValue,`replyToPart`: RustBuffer.ByValue,`effect`: RustBuffer.ByValue,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_send_tapback(`ptr`: Pointer,`participants`: RustBuffer.ByValue,`groupName`: RustBuffer.ByValue,`senderGuid`: RustBuffer.ByValue,`targetId`: RustBuffer.ByValue,`targetPart`: Long,`targetText`: RustBuffer.ByValue,`reaction`: RustBuffer.ByValue,`added`: Byte,
     ): Long
@@ -1127,6 +1131,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_send_read(
     ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_send_rich_text(
+    ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_send_tapback(
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_send_text(
@@ -1250,10 +1256,13 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_send_read() != 41179.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_send_rich_text() != 27856.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_send_tapback() != 49285.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_imessage_core_checksum_method_imessagecore_send_text() != 41694.toShort()) {
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_send_text() != 39761.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_send_typing() != 39023.toShort()) {
@@ -2340,15 +2349,24 @@ public interface ImessageCoreInterface {
     suspend fun `sendRead`(`participants`: List<kotlin.String>, `groupName`: kotlin.String?, `senderGuid`: kotlin.String?): kotlin.String
     
     /**
+     * Sends a text message. Returns the GUID it was sent under, which is what
+     * later tapbacks, edits and unsends have to target.
+     * Sends a message built out of runs, so some of them can be mentions.
+     *
+     * iMessage has no "notify everybody" of its own - a mention names one
+     * handle. What it does have is a rule on the receiving side: a mention of
+     * you cuts through a thread you have muted. So @everyone is not a thing
+     * to send, it is a thing to expand, and the expansion is what makes the
+     * phones light up.
+     */
+    suspend fun `sendRichText`(`participants`: List<kotlin.String>, `groupName`: kotlin.String?, `senderGuid`: kotlin.String?, `runs`: List<TextRun>, `replyToId`: kotlin.String?, `replyToPart`: kotlin.String?, `effect`: kotlin.String?): kotlin.String
+    
+    /**
      * Adds or removes a tapback. `reaction` takes the six built-in names or
      * any emoji; anything else is rejected rather than silently sent wrong.
      */
     suspend fun `sendTapback`(`participants`: List<kotlin.String>, `groupName`: kotlin.String?, `senderGuid`: kotlin.String?, `targetId`: kotlin.String, `targetPart`: kotlin.ULong, `targetText`: kotlin.String, `reaction`: kotlin.String, `added`: kotlin.Boolean): kotlin.String
     
-    /**
-     * Sends a text message. Returns the GUID it was sent under, which is what
-     * later tapbacks, edits and unsends have to target.
-     */
     suspend fun `sendText`(`participants`: List<kotlin.String>, `groupName`: kotlin.String?, `senderGuid`: kotlin.String?, `text`: kotlin.String, `replyToId`: kotlin.String?, `replyToPart`: kotlin.String?, `effect`: kotlin.String?): kotlin.String
     
     suspend fun `sendTyping`(`participants`: List<kotlin.String>, `groupName`: kotlin.String?, `senderGuid`: kotlin.String?, `typing`: kotlin.Boolean): kotlin.String
@@ -3043,6 +3061,38 @@ open class ImessageCore: Disposable, AutoCloseable, ImessageCoreInterface {
 
     
     /**
+     * Sends a text message. Returns the GUID it was sent under, which is what
+     * later tapbacks, edits and unsends have to target.
+     * Sends a message built out of runs, so some of them can be mentions.
+     *
+     * iMessage has no "notify everybody" of its own - a mention names one
+     * handle. What it does have is a rule on the receiving side: a mention of
+     * you cuts through a thread you have muted. So @everyone is not a thing
+     * to send, it is a thing to expand, and the expansion is what makes the
+     * phones light up.
+     */
+    @Throws(CoreException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `sendRichText`(`participants`: List<kotlin.String>, `groupName`: kotlin.String?, `senderGuid`: kotlin.String?, `runs`: List<TextRun>, `replyToId`: kotlin.String?, `replyToPart`: kotlin.String?, `effect`: kotlin.String?) : kotlin.String {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_send_rich_text(
+                thisPtr,
+                FfiConverterSequenceString.lower(`participants`),FfiConverterOptionalString.lower(`groupName`),FfiConverterOptionalString.lower(`senderGuid`),FfiConverterSequenceTypeTextRun.lower(`runs`),FfiConverterOptionalString.lower(`replyToId`),FfiConverterOptionalString.lower(`replyToPart`),FfiConverterOptionalString.lower(`effect`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterString.lift(it) },
+        // Error FFI converter
+        CoreException.ErrorHandler,
+    )
+    }
+
+    
+    /**
      * Adds or removes a tapback. `reaction` takes the six built-in names or
      * any emoji; anything else is rejected rather than silently sent wrong.
      */
@@ -3067,10 +3117,6 @@ open class ImessageCore: Disposable, AutoCloseable, ImessageCoreInterface {
     }
 
     
-    /**
-     * Sends a text message. Returns the GUID it was sent under, which is what
-     * later tapbacks, edits and unsends have to target.
-     */
     @Throws(CoreException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `sendText`(`participants`: List<kotlin.String>, `groupName`: kotlin.String?, `senderGuid`: kotlin.String?, `text`: kotlin.String, `replyToId`: kotlin.String?, `replyToPart`: kotlin.String?, `effect`: kotlin.String?) : kotlin.String {
@@ -3642,6 +3688,45 @@ public object FfiConverterTypePhoneNumber: FfiConverterRustBuffer<PhoneNumber> {
     override fun write(value: PhoneNumber, buf: ByteBuffer) {
             FfiConverterUInt.write(value.`id`, buf)
             FfiConverterString.write(value.`number`, buf)
+    }
+}
+
+
+
+/**
+ * One run of a message body: ordinary text, or somebody's name as a mention.
+ */
+data class TextRun (
+    var `text`: kotlin.String, 
+    /**
+     * The handle this run mentions - "tel:+1..." or "mailto:...". None for
+     * plain text.
+     */
+    var `mentions`: kotlin.String?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTextRun: FfiConverterRustBuffer<TextRun> {
+    override fun read(buf: ByteBuffer): TextRun {
+        return TextRun(
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TextRun) = (
+            FfiConverterString.allocationSize(value.`text`) +
+            FfiConverterOptionalString.allocationSize(value.`mentions`)
+    )
+
+    override fun write(value: TextRun, buf: ByteBuffer) {
+            FfiConverterString.write(value.`text`, buf)
+            FfiConverterOptionalString.write(value.`mentions`, buf)
     }
 }
 
@@ -4609,6 +4694,34 @@ public object FfiConverterSequenceTypePhoneNumber: FfiConverterRustBuffer<List<P
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypePhoneNumber.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeTextRun: FfiConverterRustBuffer<List<TextRun>> {
+    override fun read(buf: ByteBuffer): List<TextRun> {
+        val len = buf.getInt()
+        return List<TextRun>(len) {
+            FfiConverterTypeTextRun.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<TextRun>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeTextRun.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<TextRun>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeTextRun.write(it, buf)
         }
     }
 }

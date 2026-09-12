@@ -257,6 +257,7 @@ class RustBackend(
         effect: MessageEffect,
         replyToId: String?,
         attachments: List<Attachment>,
+        mentions: List<String>,
     ) {
         val chat = store.chat(chatId) ?: return
         // A conversation with nobody in it can't be sent to. This used to be
@@ -307,7 +308,18 @@ class RustBackend(
             // them through sendText was the bug: the files stayed local and
             // the recipient got the text alone, with nothing to show it went
             // wrong.
-            val guid = if (attachments.isEmpty()) {
+            val runs = if (mentions.isEmpty()) emptyList() else mentionRuns(text, chat, mentions)
+            val guid = if (attachments.isEmpty() && runs.isNotEmpty()) {
+                core.sendRichText(
+                    participants = chat.sendTargets(),
+                    groupName = chat.groupName(),
+                    senderGuid = chat.groupGuid(),
+                    runs = runs,
+                    replyToId = replyToId,
+                    replyToPart = null,
+                    effect = effect.wireName(),
+                )
+            } else if (attachments.isEmpty()) {
                 core.sendText(
                     participants = chat.sendTargets(),
                     groupName = chat.groupName(),
@@ -1080,4 +1092,53 @@ internal fun humaniseFailure(e: Throwable): String {
         append(e::class.java.simpleName.removeSuffix("Exception"))
         if (detail.isNotBlank()) append(": ").append(detail)
     }
+}
+
+/**
+ * Splits a composed message into runs, so the names in it travel as mentions.
+ *
+ * The composer inserted each "@Name" itself and remembers whose handle it was,
+ * so this looks for exactly those tokens rather than guessing at names - a
+ * message that happens to contain a participant's name in ordinary prose is
+ * not a mention of them, and should not ping them.
+ *
+ * Anything that no longer matches - a token the user has since edited - just
+ * stays text. Degrading to a plain message is the right failure here; sending
+ * a mention of somebody the writer did not mean to summon is not.
+ */
+internal fun mentionRuns(
+    text: String,
+    chat: Chat,
+    mentions: List<String>,
+): List<uniffi.imessage_core.TextRun> {
+    val tokens = mentions.mapNotNull { handle ->
+        val person = chat.participants.firstOrNull { it.handle == handle } ?: return@mapNotNull null
+        // Longest first, so "@Ava Chen" wins over "@Ava".
+        Triple("@" + person.displayName, person.displayName, handle)
+    }.sortedByDescending { it.first.length }
+    if (tokens.isEmpty()) return emptyList()
+
+    val runs = ArrayList<uniffi.imessage_core.TextRun>()
+    val plain = StringBuilder()
+    var i = 0
+    var found = false
+    while (i < text.length) {
+        val hit = tokens.firstOrNull { text.startsWith(it.first, i) }
+        if (hit == null) {
+            plain.append(text[i])
+            i++
+            continue
+        }
+        if (plain.isNotEmpty()) {
+            runs += uniffi.imessage_core.TextRun(plain.toString(), null)
+            plain.setLength(0)
+        }
+        // The name alone, without the "@" - which is how Messages renders a
+        // mention, and the sigil is composer syntax rather than message text.
+        runs += uniffi.imessage_core.TextRun(hit.second, hit.third)
+        i += hit.first.length
+        found = true
+    }
+    if (plain.isNotEmpty()) runs += uniffi.imessage_core.TextRun(plain.toString(), null)
+    return if (found) runs else emptyList()
 }

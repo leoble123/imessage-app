@@ -41,6 +41,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,7 +72,7 @@ import dev.chrisbanes.haze.HazeState
  */
 @Composable
 fun MessageInputBar(
-    onSend: (String, MessageEffect, List<com.leo.imessage.data.Attachment>) -> Unit,
+    onSend: (String, MessageEffect, List<com.leo.imessage.data.Attachment>, List<String>) -> Unit,
     hazeState: HazeState,
     modifier: Modifier = Modifier,
     darkBase: Boolean? = null,
@@ -101,6 +103,8 @@ fun MessageInputBar(
     onRemoveStaged: (com.leo.imessage.data.Attachment) -> Unit = {},
     stagedEffect: MessageEffect = MessageEffect.NONE,
     onClearStagedEffect: () -> Unit = {},
+    /** Who can be mentioned here. Empty in a one-to-one, where @ means nothing. */
+    participants: List<com.leo.imessage.data.Contact> = emptyList(),
 ) {
     val palette = LocalPalette.current
     val settings = com.leo.imessage.ui.theme.LocalSettings.current
@@ -129,6 +133,18 @@ fun MessageInputBar(
         if (editing != null) text = editing.text
     }
     var showEffects by remember { mutableStateOf(false) }
+
+    // Handles this draft mentions, remembered as they are inserted rather than
+    // recovered from the text later. A name that merely appears in a sentence
+    // is not a mention of that person and must not ping them.
+    val mentioned = remember(draftKey) { mutableStateListOf<String>() }
+    // The "@..." being typed at the end of the draft, if there is one. Only at
+    // the end: that is where a composer without a cursor position can be sure
+    // the token belongs, and guessing mid-sentence gets it wrong.
+    val mentionQuery = remember(text) {
+        if (participants.size < 2) null
+        else Regex("@([\\p{L}' -]{0,24})$").find(text)?.groupValues?.get(1)
+    }
     // Staged attachments and effect, so you can line up a photo, type a
     // caption and pick an effect before anything is sent - rather than each
     // choice firing off a message of its own.
@@ -138,8 +154,9 @@ fun MessageInputBar(
 
     fun commit(effect: MessageEffect) {
         if (!canSend) return
-        onSend(text.trim(), effect, pending)
+        onSend(text.trim(), effect, pending, mentioned.toList())
         text = ""
+        mentioned.clear()
         onDraftChange("")
     }
 
@@ -184,6 +201,50 @@ fun MessageInputBar(
             ),
     ) {
         run {
+        if (mentionQuery != null) {
+            val prefix = mentionQuery
+            val matches = participants.filter {
+                prefix.isBlank() || it.displayName.startsWith(prefix, ignoreCase = true)
+            }
+
+            fun insert(names: List<com.leo.imessage.data.Contact>) {
+                if (names.isEmpty()) return
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                // Replace the "@partial" that is being typed, rather than
+                // appending beside it.
+                val head = text.dropLast(prefix.length + 1)
+                text = head + names.joinToString(" ") { "@" + it.displayName } + " "
+                names.forEach { if (it.handle !in mentioned) mentioned.add(it.handle) }
+                onDraftChange(text)
+            }
+
+            if (matches.isNotEmpty() || "everyone".startsWith(prefix, ignoreCase = true)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
+                    // Everyone first, and only worth offering in a group.
+                    //
+                    // iMessage has no "notify all" of its own - a mention names
+                    // one person. What it has is the rule that a mention of you
+                    // reaches you through a muted thread, so this expands into
+                    // a real mention of each person rather than pretending to
+                    // be a broadcast. Every phone in the group lights up, which
+                    // is the point, and each name is visible before it sends.
+                    if (participants.size > 1 && "everyone".startsWith(prefix, ignoreCase = true)) {
+                        MentionRow(
+                            label = "Everyone",
+                            detail = "${participants.size} people",
+                            accent = true,
+                        ) { insert(participants) }
+                    }
+                    matches.take(6).forEach { person ->
+                        MentionRow(
+                            label = person.displayName,
+                            detail = com.leo.imessage.data.Handles.display(person.handle),
+                            accent = false,
+                        ) { insert(listOf(person)) }
+                    }
+                }
+            }
+        }
         if (editing != null) {
             Row(
                 Modifier
@@ -725,5 +786,42 @@ private fun StagedRow(
                 }
             }
         }
+    }
+}
+
+/** One line of the mention picker. */
+@Composable
+private fun MentionRow(
+    label: String,
+    detail: String,
+    accent: Boolean,
+    onClick: () -> Unit,
+) {
+    val palette = LocalPalette.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (accent) palette.accent else palette.label,
+            fontWeight = if (accent) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            detail,
+            style = MaterialTheme.typography.labelSmall,
+            color = palette.secondaryLabel,
+            maxLines = 1,
+        )
     }
 }

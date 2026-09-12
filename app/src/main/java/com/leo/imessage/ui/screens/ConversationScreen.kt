@@ -147,6 +147,8 @@ fun ConversationScreen(
         com.leo.imessage.data.MessageEffect,
         String?,
         List<com.leo.imessage.data.Attachment>,
+        /** Handles the composer mentioned, so they travel as real mentions. */
+        List<String>,
     ) -> Unit,
     onTapback: (String, com.leo.imessage.data.TapbackKind) -> Unit = { _, _ -> },
     onEmojiTapback: (String, String) -> Unit = { _, _ -> },
@@ -505,13 +507,14 @@ fun ConversationScreen(
         }
 
         MessageInputBar(
-                onSend = { text, effect, attachments ->
-                    onSend(text, effect, replyingTo?.id, attachments)
+                onSend = { text, effect, attachments, mentions ->
+                    onSend(text, effect, replyingTo?.id, attachments, mentions)
                     replyingTo = null
                     staged = emptyList()
                     stagedEffect = com.leo.imessage.data.MessageEffect.NONE
                     showTray = false
                 },
+                participants = chat.participants,
                 hazeState = hazeState,
                 darkBase = if (background.brush != null) background.isDark else null,
                 editing = editingMessage,
@@ -792,7 +795,9 @@ fun ConversationScreen(
                 darkBase = if (background.brush != null) background.isDark else null,
                 onDismiss = { threadRoot = null },
                 onSendReply = { text, effect, attachments ->
-                    onSend(text, effect, root.id, attachments)
+                    // No mentions from a reply thread - it has no picker, so
+                    // there is nothing the composer could have collected.
+                    onSend(text, effect, root.id, attachments, emptyList())
                 },
             )
         }

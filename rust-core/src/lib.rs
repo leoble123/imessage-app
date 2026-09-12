@@ -730,6 +730,47 @@ impl ImessageCore {
 
     /// Sends a text message. Returns the GUID it was sent under, which is what
     /// later tapbacks, edits and unsends have to target.
+    /// Sends a message built out of runs, so some of them can be mentions.
+    ///
+    /// iMessage has no "notify everybody" of its own - a mention names one
+    /// handle. What it does have is a rule on the receiving side: a mention of
+    /// you cuts through a thread you have muted. So @everyone is not a thing
+    /// to send, it is a thing to expand, and the expansion is what makes the
+    /// phones light up.
+    pub async fn send_rich_text(
+        &self,
+        participants: Vec<String>,
+        group_name: Option<String>,
+        sender_guid: Option<String>,
+        runs: Vec<TextRun>,
+        reply_to_id: Option<String>,
+        reply_to_part: Option<String>,
+        effect: Option<String>,
+    ) -> Result<String, CoreError> {
+        if runs.is_empty() {
+            return Err(CoreError::new("nothing to send"));
+        }
+        let parts = MessageParts(
+            runs.into_iter()
+                .map(|run| IndexedMessagePart {
+                    part: match run.mentions {
+                        Some(handle) => MessagePart::Mention(handle, run.text),
+                        None => MessagePart::Text(run.text, Default::default()),
+                    },
+                    idx: None,
+                    ext: None,
+                })
+                .collect(),
+        );
+        let mut normal = NormalMessage::new(String::new(), MessageType::IMessage);
+        normal.parts = parts;
+        normal.effect = effect;
+        normal.reply_guid = reply_to_id;
+        normal.reply_part = reply_to_part;
+        self.dispatch(participants, group_name, sender_guid, Message::Message(normal))
+            .await
+    }
+
     pub async fn send_text(
         &self,
         participants: Vec<String>,
@@ -1605,4 +1646,13 @@ fn parse_hardware(encoded: &[u8], udid: String) -> Result<MacOSConfig, CoreError
         aoskit_version: pb_string(&top, 6, "AOSKit version")?,
         udid: Some(udid),
     })
+}
+
+/// One run of a message body: ordinary text, or somebody's name as a mention.
+#[derive(uniffi::Record)]
+pub struct TextRun {
+    pub text: String,
+    /// The handle this run mentions - "tel:+1..." or "mailto:...". None for
+    /// plain text.
+    pub mentions: Option<String>,
 }

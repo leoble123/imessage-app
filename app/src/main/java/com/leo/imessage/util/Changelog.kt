@@ -36,6 +36,35 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 63,
+            versionName = "0.63.0",
+            date = "12 September 2026",
+            headline = "@everyone, and mentions generally.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "Typing @ in a group brings up who is in it, with Everyone at the " +
+                        "top. iMessage has no notify-all of its own - a mention names one " +
+                        "person - but a mention of you reaches you through a thread you " +
+                        "have muted. So Everyone expands into a real mention of each " +
+                        "person rather than pretending to be a broadcast, and every phone " +
+                        "in the group lights up.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Mentions are real mentions, not text with an @ in front. They go out " +
+                        "as the same thing an iPhone sends, so they arrive highlighted and " +
+                        "they notify.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "A name that merely appears in a sentence does not ping anybody. Only " +
+                        "the names picked from the list travel as mentions, and a token " +
+                        "edited afterwards quietly goes back to being text.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 62,
             versionName = "0.62.0",
             date = "12 September 2026",

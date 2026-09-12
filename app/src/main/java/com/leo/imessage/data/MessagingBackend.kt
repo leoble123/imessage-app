@@ -44,6 +44,11 @@ interface MessagingBackend {
         effect: MessageEffect = MessageEffect.NONE,
         replyToId: String? = null,
         attachments: List<Attachment> = emptyList(),
+        /**
+         * Handles this message mentions, which the composer collected as they
+         * were inserted. Empty is the ordinary case and sends plain text.
+         */
+        mentions: List<String> = emptyList(),
     )
 
     /** Removes a message locally, the way Messages' Delete action does. */
