@@ -85,7 +85,7 @@ fun Modifier.liquidGlass(
             width = 0.7.dp,
             brush = SolidColor(
                 if (dark) Color.White.copy(alpha = 0.14f)
-                else Color.Black.copy(alpha = 0.07f)
+                else Color.Black.copy(alpha = 0.11f)
             ),
         ),
         shape = shape,
@@ -128,7 +128,23 @@ object GlassAlpha {
      * and not a demonstration of optics.
      */
     const val INCOMING_ON_DARK = 0.52f
-    const val INCOMING_ON_LIGHT = 0.60f
+
+    /**
+     * Incoming, over a *light* wallpaper - and much more opaque than its dark
+     * counterpart, for a reason that is not symmetric.
+     *
+     * A dark bubble on a dark wallpaper separates by being a different dark:
+     * the blur softens the wallpaper behind it and the edge falls out of that
+     * on its own. A light bubble on a light wallpaper has no such room. At
+     * sixty percent white it simply dissolved - the wallpaper it was
+     * transmitting was already near-white, so the bubble was transmitting
+     * itself and the text appeared to float on the wallpaper directly.
+     *
+     * The surface has to commit here. It is still glass - it still blurs and
+     * still moves with what is behind it - but it holds enough of its own
+     * grey that the shape survives on white.
+     */
+    const val INCOMING_ON_LIGHT = 0.84f
 }
 
 /** Rebuilds a bubble gradient at a given transmission, keeping its shape. */
@@ -161,5 +177,9 @@ fun incomingGlassTint(
 ): Color = when {
     !overBackground -> grey.copy(alpha = grey.alpha * GlassAlpha.INCOMING)
     backgroundIsDark -> Color(0xFF1A1A1C).copy(alpha = GlassAlpha.INCOMING_ON_DARK)
-    else -> Color.White.copy(alpha = GlassAlpha.INCOMING_ON_LIGHT)
+    // Grey, not white. White was the obvious choice and the wrong one: a
+    // white pane over a pale wallpaper is the wallpaper. This is close to the
+    // grey iOS uses for an incoming bubble on a light ground, which reads as
+    // a surface against anything short of pure black.
+    else -> Color(0xFFDCDCE2).copy(alpha = GlassAlpha.INCOMING_ON_LIGHT)
 }

@@ -36,6 +36,30 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 50,
+            versionName = "0.50.0",
+            date = "12 September 2026",
+            headline = "The swipe actions can be pressed, and the light-wallpaper bubbles can be seen.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "Swipe actions are buttons now. The rail slid open and showed Unread, " +
+                        "Mute and Delete, and none of the three had a tap handler on it - " +
+                        "the only one you could actually reach was whichever fired from a " +
+                        "full swipe. They press, dim under the finger, tick, and close " +
+                        "the row behind them.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Incoming bubbles were close to invisible on a light wallpaper. They " +
+                        "were a white pane, and a white pane over a pale background is the " +
+                        "background. They hold a grey of their own now, and the edge that " +
+                        "was a barely-there hairline on light material got enough weight " +
+                        "to draw the shape.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 49,
             versionName = "0.49.0",
             date = "12 September 2026",

@@ -3,6 +3,7 @@ package com.leo.imessage.ui.components
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -10,7 +11,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import com.leo.imessage.ui.theme.Motion
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -88,6 +93,20 @@ fun SwipeableRow(
     // drawBehind and graphicsLayer both run in the draw phase. Reading it
     // during composition instead would recompose this row on every frame of
     // the one gesture in the app that most has to stay smooth.
+    // Tapping a revealed action runs it, which sounds too obvious to write
+    // down until you notice the rail had no click handler at all: the cells
+    // existed to be looked at, and the only reachable action in the app was
+    // whichever one a full swipe happened to fire. The tap closes the rail
+    // first so a row that survives its own action (Unread, Mute) doesn't sit
+    // there still open, pointing at a button that has already been pressed.
+    val invoke: (SwipeAction) -> Unit = { action ->
+        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        scope.launch {
+            offset.animateTo(0f, Motion.snappy())
+            action.onClick()
+        }
+    }
+
     val slideUnit = with(density) { 16.dp.toPx() }
     val opacity: () -> Float = { (abs(offset.value) / slideUnit).coerceIn(0f, 1f) }
     val rowBackground = com.leo.imessage.ui.theme.LocalPalette.current.background
@@ -111,7 +130,7 @@ fun SwipeableRow(
                 .wrapContentWidth(Alignment.Start),
         ) {
             leadingActions.forEach { action ->
-                SwipeActionCell(action, actionWidth)
+                SwipeActionCell(action, actionWidth) { invoke(action) }
             }
         }
 
@@ -122,7 +141,7 @@ fun SwipeableRow(
                 .wrapContentWidth(Alignment.End),
         ) {
             trailingActions.forEach { action ->
-                SwipeActionCell(action, actionWidth)
+                SwipeActionCell(action, actionWidth) { invoke(action) }
             }
         }
 
@@ -200,16 +219,43 @@ fun SwipeableRow(
  * what stops a row of them reading as a stripe of raw paint.
  */
 @Composable
-private fun SwipeActionCell(action: SwipeAction, width: androidx.compose.ui.unit.Dp) {
+private fun SwipeActionCell(
+    action: SwipeAction,
+    width: androidx.compose.ui.unit.Dp,
+    onInvoke: () -> Unit,
+) {
+    var pressed by remember { mutableStateOf(false) }
     Box(
         Modifier
             .width(width)
             .fillMaxHeight()
             .padding(vertical = 4.dp, horizontal = 3.dp)
             .clip(RoundedCornerShape(16.dp))
+            // Dims under the finger, the way a table-view action does. Read
+            // in the draw phase so pressing a cell repaints it rather than
+            // recomposing the row mid-swipe.
+            .graphicsLayer { alpha = if (pressed) 0.72f else 1f }
             .background(action.color)
+            // One pointerInput running both detectors in parallel, not two
+            // chained modifiers: a second pointerInput would race the first
+            // for the same events and whichever consumed first would win.
+            // The drag detector is still here to swallow horizontal drags
+            // that start on a cell, so dragging across the rail doesn't pull
+            // the row along underneath it.
             .pointerInput(action) {
-                detectHorizontalDragGestures { _, _ -> }
+                coroutineScope {
+                    launch {
+                        detectTapGestures(
+                            onPress = {
+                                pressed = true
+                                tryAwaitRelease()
+                                pressed = false
+                            },
+                            onTap = { onInvoke() },
+                        )
+                    }
+                    launch { detectHorizontalDragGestures { _, _ -> } }
+                }
             },
         contentAlignment = Alignment.Center,
     ) {
