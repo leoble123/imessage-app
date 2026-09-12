@@ -36,6 +36,38 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 55,
+            versionName = "0.55.0",
+            date = "12 September 2026",
+            headline = "Read Apple's actual answer instead of guessing at it.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "The protocol core logged the full decoded lookup response at debug " +
+                        "level and the app ran at info, so every failed send has been " +
+                        "receiving Apple's real answer and throwing it away unread. " +
+                        "That is why the reason for a failure has had to be inferred " +
+                        "from an error string that cannot tell the cases apart.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "Export Diagnostics now carries the protocol log. It used to carry " +
+                        "the app version, the theme and the phone model, none of which " +
+                        "has ever been why a message did not send. Note that at this " +
+                        "level the log contains push tokens and public keys - not " +
+                        "passwords or private keys, but identifiers, so share it with " +
+                        "someone helping you and nowhere else.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "Group avatars are a disc. The cluster hung off two corners while " +
+                        "the ring around it and the unread liquid rising inside it were " +
+                        "circles of the full frame, so they could not line up - the ring " +
+                        "was true to the frame and the thing inside it was not.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 54,
             versionName = "0.54.0",
             date = "12 September 2026",

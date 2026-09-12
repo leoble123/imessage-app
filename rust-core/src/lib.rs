@@ -118,9 +118,19 @@ impl ImessageCore {
     pub fn new(state_dir: String) -> Arc<Self> {
         // Route Rust's `log` output to logcat so failures inside rustpush are
         // visible with `adb logcat` instead of vanishing.
+        // Debug, not Info, and that is the whole point of this level.
+        //
+        // rustpush logs the full decoded IDS lookup response - the thing that
+        // says whether Apple returned an entry for a handle and how many
+        // identities were on it - through debug!. At Info that line was
+        // dropped, so every failed send and every availability check has been
+        // receiving Apple's actual answer and discarding it unread, leaving
+        // the app to infer from an error string that cannot tell the cases
+        // apart. Verbose is a small price for reading the reply instead of
+        // guessing at it.
         android_logger::init_once(
             android_logger::Config::default()
-                .with_max_level(log::LevelFilter::Info)
+                .with_max_level(log::LevelFilter::Debug)
                 .with_tag("imessage-core"),
         );
 

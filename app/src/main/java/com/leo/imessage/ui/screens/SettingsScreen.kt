@@ -674,6 +674,9 @@ private fun shareDiagnostics(
         appendLine("Bubble style: ${settings.bubbleStyle}")
         appendLine("Reduce motion: ${settings.lowPowerAnimations}")
         appendLine("Server: ${settings.relayServer.ifBlank { "not set" }}")
+        appendLine()
+        appendLine("--- protocol log ---")
+        append(recentCoreLog())
     }
     runCatching {
         val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
@@ -688,3 +691,30 @@ private fun shareDiagnostics(
         )
     }
 }
+
+/**
+ * The Rust core's own logcat output.
+ *
+ * Export Diagnostics used to carry the version, the theme and the device
+ * model - none of which has ever been the reason a message failed to send.
+ * The answers are in the protocol log, and an app is allowed to read back its
+ * own logcat buffer, so there is no reason to need a cable and adb to see it.
+ *
+ * Bounded, and from the tail: the buffer holds far more than is useful and a
+ * share sheet is not the place to discover that.
+ *
+ * A warning worth repeating wherever this ends up: at debug level these lines
+ * carry push tokens and public keys for you and for whoever you looked up.
+ * They are not passwords and they are not private keys, but they are
+ * identifiers, so this belongs with someone helping you fix it and nowhere
+ * else.
+ */
+private fun recentCoreLog(): String = runCatching {
+    val process = ProcessBuilder(
+        listOf("logcat", "-d", "-v", "time", "-t", "1200", "imessage-core:D", "*:S")
+    ).redirectErrorStream(true).start()
+    val text = process.inputStream.bufferedReader().use { it.readText() }
+    process.waitFor()
+    if (text.isBlank()) "(nothing logged yet - try the action that fails, then export again)"
+    else text.takeLast(200_000)
+}.getOrElse { "(couldn't read the log: ${it.message})" }
