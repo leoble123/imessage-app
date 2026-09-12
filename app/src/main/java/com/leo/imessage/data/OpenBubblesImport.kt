@@ -62,12 +62,34 @@ object OpenBubblesImport {
         myHandles: List<String>,
     ): Result = withContext(Dispatchers.IO) {
         val attachmentDir = File(context.filesDir, "imported").apply { mkdirs() }
-
         context.contentResolver.openInputStream(uri).use { raw ->
-            val input = BufferedInputStream(
+            importStream(
                 raw ?: throw IllegalArgumentException("Couldn't open that file."),
-                64 * 1024,
+                attachmentDir,
+                store,
+                contacts,
+                myHandles,
             )
+        }
+    }
+
+    /**
+     * The import itself, separated from where the bytes came from.
+     *
+     * Split out so the format can actually be tested. Everything hard about
+     * this lives in the parser - a length prefix, a streamed document, rows
+     * that point at other rows - and none of it was reachable without a
+     * content resolver and a device to run one on.
+     */
+    internal suspend fun importStream(
+        source: InputStream,
+        attachmentDir: File,
+        store: MessageStore,
+        contacts: Contacts?,
+        myHandles: List<String>,
+    ): Result = withContext(Dispatchers.IO) {
+        run {
+            val input = BufferedInputStream(source, 64 * 1024)
 
             val jsonLength = input.readBigEndianInt()
                 ?: throw IllegalArgumentException("That file is empty.")
