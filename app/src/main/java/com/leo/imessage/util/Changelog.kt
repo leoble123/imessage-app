@@ -36,6 +36,40 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 45,
+            versionName = "0.45.0",
+            date = "12 September 2026",
+            headline = "Small things that move.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "The What's New card no longer interrupts you on launch. It said on " +
+                        "its own schedule what this screen says on request, and the one " +
+                        "moment it fired was the moment you had just installed a build in " +
+                        "order to look at something else.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Messages flinch when they are said emphatically. \"WHAT?!\" rattles, " +
+                        "\"STOP!\" lands. Read off the punctuation, because that is how " +
+                        "people actually mark emphasis - send effects need remembering, " +
+                        "and nobody remembers them twice.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "A pinned circle fills with colour to the level of what is waiting in " +
+                        "it, with a slow swell across the surface. One message and eleven " +
+                        "used to look identical.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Long-pressing a conversation now shows the last three messages in " +
+                        "it, so the menu answers the question you pressed to ask instead " +
+                        "of making you open the thread anyway.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 44,
             versionName = "0.44.0",
             date = "11 September 2026",

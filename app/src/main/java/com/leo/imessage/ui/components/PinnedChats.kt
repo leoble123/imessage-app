@@ -1,5 +1,7 @@
 package com.leo.imessage.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -22,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -150,6 +153,7 @@ private fun PinnedChat(
             } else {
                 Avatar(chat.participants.first(), avatarSize)
             }
+            UnreadLevel(chat = chat, diameter = avatarSize, tint = tint)
             if (chat.unreadCount > 0) {
                 // The count itself once there is more than one. A dot says
                 // "something"; a number says whether it can wait.
@@ -356,3 +360,72 @@ fun PinnedDock(
 }
 
 private val DOCK_AVATAR = 34.dp
+
+/**
+ * Unread, as a level the circle fills to rather than a badge stuck on it.
+ *
+ * A dot answers "is there something". This answers "how much", which is the
+ * question you actually have when you glance at a row of faces - one message
+ * waiting and eleven waiting should not look the same, and on iOS they do.
+ *
+ * The surface is drawn with a shallow wave so it reads as liquid sitting at
+ * rest rather than as a bar chart cropped to a circle, and it is clipped to
+ * the avatar so the avatar is still what you recognise. Ten messages fills
+ * it; past that the wave is the whole circle and the count on the badge is
+ * doing the talking.
+ */
+@Composable
+private fun UnreadLevel(chat: Chat, diameter: Dp, tint: Color) {
+    if (chat.unreadCount <= 0) return
+    val settings = LocalSettings.current
+    val level = (chat.unreadCount / 10f).coerceIn(0.18f, 1f)
+
+    // Settles into place rather than appearing at it, which is most of why it
+    // reads as something poured in.
+    val filled = remember { Animatable(0f) }
+    LaunchedEffect(level) { filled.animateTo(level, com.leo.imessage.ui.theme.Motion.gentle()) }
+
+    // A slow swell, so the surface is never quite flat. Frozen under Reduce
+    // Motion, where a level is still a level.
+    val sway = if (settings.lowPowerAnimations) {
+        null
+    } else {
+        rememberInfiniteTransition(label = "unreadLevel").animateFloat(
+            initialValue = 0f,
+            targetValue = (2f * Math.PI).toFloat(),
+            animationSpec = infiniteRepeatable(tween(3800, easing = LinearEasing)),
+            label = "unreadSway",
+        )
+    }
+
+    Box(
+        Modifier
+            .size(diameter)
+            .clip(CircleShape)
+            .drawBehind {
+                val height = size.height
+                val surface = height * (1f - filled.value)
+                val amplitude = size.width * 0.035f
+                val phase = sway?.value ?: 0f
+
+                val path = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(0f, surface)
+                    // Enough segments that the crest is smooth at this size;
+                    // this runs in the draw phase, so it is a path rebuild per
+                    // frame and not a recomposition.
+                    val steps = 18
+                    for (i in 0..steps) {
+                        val x = size.width * i / steps
+                        val y = surface + kotlin.math.sin(
+                            phase + i / steps.toFloat() * 2f * Math.PI.toFloat() * 1.5f
+                        ) * amplitude
+                        lineTo(x, y)
+                    }
+                    lineTo(size.width, height)
+                    lineTo(0f, height)
+                    close()
+                }
+                drawPath(path, color = tint.copy(alpha = 0.62f))
+            }
+    )
+}

@@ -83,16 +83,6 @@ fun AppRoot(
     val backgrounds = remember {
         mutableStateMapOf<String, String>().apply { putAll(store.backgrounds()) }
     }
-    // What changed in the build that just replaced the one you had, if this
-    // is the first launch of it. Read once, so acknowledging it can't make
-    // the card come back on the next recomposition.
-    var whatsNew by remember {
-        mutableStateOf(
-            com.leo.imessage.util.Changelog
-                .current(com.leo.imessage.BuildConfig.VERSION_CODE)
-                ?.takeIf { store.lastSeenVersion() != it.versionCode }
-        )
-    }
     // Unsent text per conversation, so leaving a thread mid-sentence and
     // coming back finds the sentence still there.
     val drafts = remember { mutableStateMapOf<String, String>() }
@@ -188,6 +178,7 @@ fun AppRoot(
                     }
                 },
                 onSetMuted = { id, muted -> scope.launch { backend.setMuted(id, muted) } },
+                recentMessages = { id -> backend.messagesNow(id).takeLast(3) },
                 onMarkAllRead = {
                     scope.launch {
                         // Sequential, not a parallel fan-out: each of these
@@ -552,20 +543,13 @@ fun AppRoot(
             )
         }
 
-        // Above everything, including the conversation and Settings: this is
-        // the first thing the build has to say, and it says it once.
-        whatsNew?.let { release ->
-            com.leo.imessage.ui.components.WhatsNewSheet(
-                release = release,
-                onSeeAll = {
-                    showSettings = true
-                    showReleaseNotes = true
-                },
-                onDismiss = {
-                    store.markVersionSeen(release.versionCode)
-                    whatsNew = null
-                },
-            )
+        // No What's New card. It interrupted the app to say something the
+        // Release Notes screen says on request, and the one moment it fired
+        // was the moment you had just installed a build in order to look at
+        // something else. The version is still recorded, so nothing has to be
+        // undone if it ever earns its way back.
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            store.markVersionSeen(com.leo.imessage.BuildConfig.VERSION_CODE)
         }
     }
 }

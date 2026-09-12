@@ -87,6 +87,8 @@ fun ChatListScreen(
     onSetArchived: (String, Boolean) -> Unit = { _, _ -> },
     /** Clears every unread badge at once, from the pull-down summary. */
     onMarkAllRead: () -> Unit = {},
+    /** The tail of a conversation, for the long-press peek. */
+    recentMessages: ((String) -> List<com.leo.imessage.data.Message>)? = null,
     drafts: Map<String, String> = emptyMap(),
 ) {
     val palette = LocalPalette.current
@@ -618,8 +620,26 @@ fun ChatListScreen(
                 ),
                 hazeState = hazeState,
                 preview = {
-                    Box(Modifier.width(320.dp)) {
-                        ChatRow(chat = chat, onOpen = {}, swipeEnabled = false)
+                    // The conversation, and enough of it to answer the
+                    // question you long-pressed to ask. A menu that shows the
+                    // row you were already looking at is a menu that made you
+                    // open the thread anyway.
+                    Box(Modifier.width(330.dp)) {
+                        Column {
+                            ChatRow(chat = chat, onOpen = {}, swipeEnabled = false)
+                            val peek = remember(chat.id) {
+                                recentMessages?.invoke(chat.id).orEmpty().takeLast(3)
+                            }
+                            if (peek.isNotEmpty()) {
+                                RowSeparator()
+                                Column(Modifier.padding(16.dp)) {
+                                    peek.forEachIndexed { index, message ->
+                                        if (index > 0) Spacer(Modifier.height(10.dp))
+                                        PeekLine(chat = chat, message = message)
+                                    }
+                                }
+                            }
+                        }
                     }
                 },
             )
@@ -1108,6 +1128,46 @@ private fun InboxStatusLine(chats: List<Chat>, showArchived: Boolean) {
             style = MaterialTheme.typography.bodySmall,
             color = palette.secondaryLabel,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * One message in the long-press peek.
+ *
+ * Named rather than aligned left and right like a transcript: three bubbles
+ * in a 330dp card is a diagram of a conversation, not a conversation, and at
+ * this size who said it is the only thing worth the width.
+ */
+@Composable
+private fun PeekLine(chat: Chat, message: com.leo.imessage.data.Message) {
+    val palette = LocalPalette.current
+    val who = when {
+        message.isFromMe -> "You"
+        else -> chat.participants
+            .firstOrNull { it.id == message.senderId }
+            ?.displayName
+            ?.substringBefore(' ')
+            ?: chat.displayName.substringBefore(' ')
+    }
+    Row(verticalAlignment = Alignment.Top) {
+        Text(
+            text = who,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = if (message.isFromMe) palette.secondaryLabel
+                else com.leo.imessage.ui.theme.chatTintFor(chat.avatarSeed),
+            modifier = Modifier.width(56.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = message.previewText().ifBlank { "Attachment" },
+            style = MaterialTheme.typography.bodySmall,
+            color = palette.label,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
     }

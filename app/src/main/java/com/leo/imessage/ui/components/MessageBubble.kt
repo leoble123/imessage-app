@@ -339,6 +339,7 @@ fun MessageBubble(
                                     scaleY = sc
                                 }
                                 .bubbleEffect(playedEffect, msg.id)
+                                .kineticEmphasis(msg.text, msg.timestamp)
                                 .pointerInput(msg.id) {
                                     detectTapGestures(
                                         onPress = {
@@ -359,6 +360,7 @@ fun MessageBubble(
                         Box(
                             modifier = Modifier
                                 .bubbleEffect(playedEffect, msg.id)
+                                .kineticEmphasis(msg.text, msg.timestamp)
                                 .graphicsLayer {
                                     val s = pressScale.value
                                     scaleX = s
