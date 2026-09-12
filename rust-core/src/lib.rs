@@ -35,6 +35,7 @@ use rustpush::{
     MessagePart, IndexedMessagePart, VerifyBody, Attachment, MMCSFile, MADRID_SERVICE,
 };
 use rustpush::facetime::{FTClient, FACETIME_SERVICE, VIDEO_SERVICE};
+use rustpush::findmy::MULTIPLEX_SERVICE;
 use rustpush::avconference::{AudioSender, ChannelFrame, ChannelType, DecoderConfiguration};
 use tokio::sync::Mutex;
 
@@ -53,15 +54,24 @@ pub use types::*;
 /// the `IDSService` type - only the constants - so the type can't be written
 /// down. Returning a reference to a const expression promotes it to 'static,
 /// which is the lifetime `register` and `IMClient::new` require.
+/// The services to register for - the same four, in the same order, as the
+/// client that is known to work against this relay.
+///
+/// MULTIPLEX_SERVICE is the one that was missing. It is FindMy's, so it looks
+/// unrelated to sending a message, but the set registered here is also the set
+/// the identity manager is built with, and matching a working client exactly
+/// beats reasoning about which parts of a registration Apple treats as
+/// optional.
 macro_rules! services {
     () => {
-        &[&MADRID_SERVICE, &FACETIME_SERVICE, &VIDEO_SERVICE][..]
+        &[&MADRID_SERVICE, &MULTIPLEX_SERVICE, &FACETIME_SERVICE, &VIDEO_SERVICE][..]
     };
 }
 
 /// The service names above, for checking an existing registration covers them.
 const SERVICE_NAMES: &[&str] = &[
     MADRID_SERVICE.name,
+    MULTIPLEX_SERVICE.name,
     FACETIME_SERVICE.name,
     VIDEO_SERVICE.name,
 ];
@@ -213,11 +223,29 @@ impl ImessageCore {
             // time looks to Apple like a new device registering, which is what
             // gets an Apple ID rate-limited.
             dev_uuid: self.device_uuid(),
-            protocol_version: 1640,
+            // 1660, not 1640.
+            //
+            // This is sent as x-protocol-version on every IDS request,
+            // the id-query lookup included. 1640 came from a commented-out
+            // block in rustpush's test harness - the live config a line below
+            // it says 1660, and so does OpenBubbles, which works against this
+            // exact account and this exact relay.
+            //
+            // A stale protocol version is not refused. The registration is
+            // accepted, the push connection comes up, and the lookup is
+            // answered with status 0 and no identities in it - which is
+            // precisely what this account has been doing: everybody
+            // unreachable, nothing arriving, and no error anywhere to say so.
+            protocol_version: 1660,
             host,
             code,
             beeper_token: token,
-            udid: None,
+            // Required, despite being an Option: RelayConfig::get_udid
+            // unwraps it with an expect, so None is a panic waiting for
+            // whichever service asks first. Persisted rather than generated
+            // per launch, for the same reason dev_uuid is - a new device
+            // identifier every time is what gets an Apple ID limited.
+            udid: Some(self.device_udid()),
         });
 
         let os_config: Arc<dyn OSConfig> = config.clone();
@@ -1181,6 +1209,28 @@ impl ImessageCore {
     }
 
     /// One stable device UUID per install, generated on first use.
+    /// A stable 32-byte device identifier, hex, uppercase - the shape Apple
+    /// expects and the shape OpenBubbles generates.
+    fn device_udid(&self) -> String {
+        let path = self.paths.root.join("device_udid");
+        if let Ok(existing) = std::fs::read_to_string(&path) {
+            let trimmed = existing.trim();
+            if trimmed.len() == 64 {
+                return trimmed.to_string();
+            }
+        }
+        // Two v4 UUIDs rather than a new dependency: each contributes 16
+        // random bytes as 32 hex characters, which is exactly the 64-character
+        // identifier wanted here.
+        let fresh = format!(
+            "{}{}",
+            uuid::Uuid::new_v4().simple().to_string().to_uppercase(),
+            uuid::Uuid::new_v4().simple().to_string().to_uppercase(),
+        );
+        let _ = std::fs::write(&path, &fresh);
+        fresh
+    }
+
     fn device_uuid(&self) -> String {
         let path = self.paths.root.join("device_uuid");
         if let Ok(existing) = std::fs::read_to_string(&path) {

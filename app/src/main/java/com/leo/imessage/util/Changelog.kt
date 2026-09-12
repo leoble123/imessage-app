@@ -36,6 +36,37 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 57,
+            versionName = "0.57.0",
+            date = "12 September 2026",
+            headline = "The protocol version was two revisions stale, copied from a commented-out example.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "Every request to Apple carried protocol version 1640. The working " +
+                        "client on this same account and relay sends 1660, and so does " +
+                        "the live config in the protocol library - 1640 came from a " +
+                        "commented-out block one line below it. A stale version is not " +
+                        "refused: the registration is accepted, the connection comes up, " +
+                        "and every lookup is answered with nobody in it. Which is exactly " +
+                        "what has been happening.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "The device UDID was never set. It is an Option that the library " +
+                        "unwraps with an expect, so it was a crash waiting for whichever " +
+                        "service asked first, and it is one of the identifiers Apple ties " +
+                        "a registration to. It is generated once and kept.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "One of the four services the working client registers was missing. " +
+                        "It belongs to FindMy and looks unrelated to messaging, but the " +
+                        "set registered is also the set the identity is built with.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 56,
             versionName = "0.56.0",
             date = "12 September 2026",
