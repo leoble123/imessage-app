@@ -522,11 +522,38 @@ class AccountManager(context: Context) {
         when (step) {
             is LoginStep.Complete -> {
                 _state.value = AccountState.Registering
+                // Registering and starting up are separate failures, and
+                // conflating them is what filled this account with devices.
+                //
+                // completeRegistration is the step that puts this device on
+                // the Apple ID. Once it returns, the account is registered and
+                // the state is on disk. Starting up afterwards - reading
+                // contacts, opening the message client - can still fail, and
+                // that used to land in the same catch and send you back to the
+                // sign-in screen. Signing in again registers *another* device
+                // to fix a problem that was never about registration, and the
+                // only visible symptom is a device list that keeps growing.
+                //
+                // Throwable rather than CoreException, too: the old catch only
+                // covered errors from the core, so anything thrown by the
+                // Android side - a contacts permission, an audio device -
+                // escaped it entirely and failed the sign-in from outside.
                 try {
                     core.completeRegistration()
+                } catch (e: Throwable) {
+                    _state.value = AccountState.Failed(e.readable(), previous)
+                    return
+                }
+                try {
                     becomeReady()
-                } catch (e: CoreException) {
-                    _state.value = AccountState.Failed(e.friendlyMessage(), previous)
+                } catch (e: Throwable) {
+                    Log.e(TAG, "registered, but couldn't start up", e)
+                    _state.value = AccountState.Failed(
+                        "Signed in, but the app couldn't finish starting: " +
+                            "${e.readable()}\n\nYour account is registered - " +
+                            "try again rather than signing in a second time.",
+                        AccountState.Restoring,
+                    )
                 }
             }
             is LoginStep.NeedsDeviceCode -> _state.value = AccountState.NeedsDeviceCode
@@ -541,7 +568,13 @@ class AccountManager(context: Context) {
         // Contacts are read before the backend starts so the first render
         // already has names - loading them afterwards makes every thread title
         // visibly change from a number to a name a moment after it appears.
-        contacts.load()
+        //
+        // Not fatal, though. Names are a courtesy; messaging works without
+        // them, and reloadContacts picks them up later once the permission is
+        // granted. Letting this throw took the whole sign-in down with it, at
+        // the point where the account had already been registered.
+        runCatching { contacts.load() }
+            .onFailure { Log.w(TAG, "couldn't read contacts; carrying on without names", it) }
         val backend = RustBackend(core, store, contacts, CallAudio(appContext, core), appContext)
         backend.start()
         _state.value = AccountState.Ready(backend)

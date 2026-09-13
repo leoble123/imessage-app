@@ -36,6 +36,34 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 66,
+            versionName = "0.66.0",
+            date = "13 September 2026",
+            headline = "A sign-in that worked was being reported as a failure.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "Registering and starting up were one step, so a failure in either " +
+                        "sent you back to sign in. Registration is what puts this device " +
+                        "on your Apple ID - once it succeeds the account is registered and " +
+                        "saved, and signing in again adds a second device to fix a problem " +
+                        "that was never about registration. That is where the pile of " +
+                        "duplicate devices came from.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Only errors from the protocol core were being caught. Anything the " +
+                        "Android side threw - a contacts permission, an audio device - " +
+                        "went straight past and failed the sign-in from outside it.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Reading contacts can no longer take a sign-in down. Names are a " +
+                        "courtesy and arrive later anyway; messaging does not wait on them.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 65,
             versionName = "0.65.0",
             date = "13 September 2026",
