@@ -976,7 +976,13 @@ class RustBackend(
     private fun scheduleSampleReply(chat: Chat, toWhat: String) {
         val other = chat.participants.firstOrNull() ?: return
         scope.launch {
+            // Let them appear to think about it first. This is the one correct
+            // use of the flag - somebody other than you is composing - and
+            // without it a sample reply materialises out of nothing.
+            delay(500)
+            updateChat(chat.id) { it.copy(isTyping = true) }
             delay(1_400)
+            updateChat(chat.id) { it.copy(isTyping = false) }
             val watching = appVisible && chat.id == openChatId
             append(
                 Message(

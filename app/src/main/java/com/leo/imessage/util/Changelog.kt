@@ -36,6 +36,43 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 64,
+            versionName = "0.64.0",
+            date = "13 September 2026",
+            headline = "Get the code by text, and two things that only pretended to work.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "\"Text me the code instead\", on the two-factor screen. Apple offers " +
+                        "device codes whenever an account has any trusted device, and that " +
+                        "screen had no exit - so an account whose devices have been removed " +
+                        "sat waiting for a code with nowhere to land. A trusted phone " +
+                        "number survives that.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "The resend link on the text screen is visible. It only appeared when " +
+                        "Apple had listed your numbers, which it never does on the way " +
+                        "through, so the one screen where a text can go missing had no way " +
+                        "to ask for another.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Quick Replies insert. The composer read the saved draft once when the " +
+                        "conversation opened and ignored it afterwards, so anything setting " +
+                        "the draft from outside was dropped on the floor - which is every " +
+                        "Quick Reply, silently.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "The demo no longer shows the other person typing while you type. It " +
+                        "was writing your own outbound typing notice into the flag that " +
+                        "means somebody else is composing. Sample replies now show that " +
+                        "flag properly - they think for a moment first.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 63,
             versionName = "0.63.0",
             date = "12 September 2026",

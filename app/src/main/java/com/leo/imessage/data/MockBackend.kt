@@ -327,9 +327,14 @@ class MockBackend : MessagingBackend {
     }
 
     override suspend fun setTyping(chatId: String, typing: Boolean) {
-        _chats.value = _chats.value.map {
-            if (it.id == chatId) it.copy(isTyping = typing) else it
-        }
+        // Deliberately nothing.
+        //
+        // This is outbound - it tells the far end that *you* are typing. It
+        // was writing straight into Chat.isTyping, which everywhere else in
+        // the app means "the other person is typing", so the demo showed you
+        // their typing bubble while you typed your own message. The real
+        // backend has never done this: it only raises the flag on an inbound
+        // typing event.
     }
 
     private fun updateMessage(id: String, transform: (Message) -> Message) {

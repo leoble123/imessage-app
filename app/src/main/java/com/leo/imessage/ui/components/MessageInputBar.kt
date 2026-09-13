@@ -112,6 +112,31 @@ fun MessageInputBar(
     // Keyed on the conversation, so switching threads loads that thread's
     // draft rather than carrying the last one across.
     var text by remember(draftKey) { mutableStateOf(draft) }
+    // The last draft this bar told the caller about.
+    //
+    // The field owns its own text and only seeded it from `draft` once, keyed
+    // on the conversation - so anything that set the draft from outside was
+    // silently dropped, and the composer just sat there. That is why tapping a
+    // Quick Reply did nothing at all: it wrote to the draft the bar had
+    // stopped listening to.
+    //
+    // Comparing against what was last reported is what makes adopting safe. A
+    // draft that differs came from somewhere else and should be taken; one
+    // that matches is this bar's own echo arriving back, and adopting that on
+    // every keystroke would fight the person typing.
+    var lastReported by remember(draftKey) { mutableStateOf(draft) }
+
+    fun report(value: String) {
+        lastReported = value
+        onDraftChange(value)
+    }
+
+    LaunchedEffect(draft, draftKey) {
+        if (draft != lastReported) {
+            text = draft
+            lastReported = draft
+        }
+    }
     val ownFocus = remember { androidx.compose.ui.focus.FocusRequester() }
     val focus = focusRequester ?: ownFocus
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
@@ -157,7 +182,7 @@ fun MessageInputBar(
         onSend(text.trim(), effect, pending, mentioned.toList())
         text = ""
         mentioned.clear()
-        onDraftChange("")
+        report("")
     }
 
     if (showEffects) {
@@ -215,7 +240,7 @@ fun MessageInputBar(
                 val head = text.dropLast(prefix.length + 1)
                 text = head + names.joinToString(" ") { "@" + it.displayName } + " "
                 names.forEach { if (it.handle !in mentioned) mentioned.add(it.handle) }
-                onDraftChange(text)
+                report(text)
             }
 
             if (matches.isNotEmpty() || "everyone".startsWith(prefix, ignoreCase = true)) {
@@ -385,7 +410,7 @@ fun MessageInputBar(
                         value = text,
                         onValueChange = {
                             text = it
-                            onDraftChange(it)
+                            report(it)
                         },
                         modifier = Modifier.fillMaxWidth().focusRequester(focus),
                         textStyle = MaterialTheme.typography.bodyLarge.copy(color = palette.label),
@@ -458,7 +483,7 @@ fun MessageInputBar(
                                         text.isNotBlank() -> {
                                             onSendLater(text.trim())
                                             text = ""
-                                            onDraftChange("")
+                                            report("")
                                         }
                                         canSend -> showEffects = true
                                         else -> onRecordAudio()
