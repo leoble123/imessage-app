@@ -36,6 +36,29 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 65,
+            versionName = "0.65.0",
+            date = "13 September 2026",
+            headline = "Ask Apple which number to text, rather than guessing at one.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "Asking for a text sent it nowhere. A phone id is an index into " +
+                        "whatever list Apple returns for your account, not a fixed " +
+                        "address, so the first one was a guess - and a wrong guess is " +
+                        "accepted and then never delivered, which looks exactly like a " +
+                        "slow text.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "The numbers Apple will text are fetched and shown. One number goes " +
+                        "straight out without making you tap twice; several are listed so " +
+                        "you can pick. If Apple names none, it says so instead of " +
+                        "appearing to send.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 64,
             versionName = "0.64.0",
             date = "13 September 2026",

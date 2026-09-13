@@ -277,6 +277,25 @@ class AccountManager(context: Context) {
         }
     }
 
+    /**
+     * The numbers Apple is willing to text a code to.
+     *
+     * Asked rather than assumed. A phone id is an index into whatever Apple
+     * returns for this account, not a stable address, so sending to id 1 was a
+     * guess - and when the guess is wrong Apple accepts the request and simply
+     * never sends anything, which is indistinguishable from the text being
+     * slow. Empty means Apple named none, and the reason is on screen.
+     */
+    suspend fun trustedNumbers(): List<Pair<UInt, String>> = withContext(Dispatchers.IO) {
+        val previous = _state.value
+        try {
+            core.trustedPhoneNumbers().map { it.id to it.number }
+        } catch (e: Throwable) {
+            _state.value = AccountState.Failed(e.readable(), previous)
+            emptyList()
+        }
+    }
+
     suspend fun requestSmsCode(phoneId: UInt) = withContext(Dispatchers.IO) {
         val previous = _state.value
         try {

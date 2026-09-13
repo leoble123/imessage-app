@@ -853,6 +853,8 @@ internal open class UniffiVTableCallbackInterfaceEventListener(
 
 
 
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -958,6 +960,8 @@ internal interface UniffiLib : Library {
     fun uniffi_imessage_core_fn_method_imessagecore_stop_call_audio(`ptr`: Pointer,`callId`: RustBuffer.ByValue,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_submit_device_code(`ptr`: Pointer,`code`: RustBuffer.ByValue,
+    ): Long
+    fun uniffi_imessage_core_fn_method_imessagecore_trusted_phone_numbers(`ptr`: Pointer,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_validate_targets(`ptr`: Pointer,`handles`: RustBuffer.ByValue,`sender`: RustBuffer.ByValue,
     ): Long
@@ -1151,6 +1155,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_submit_device_code(
     ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_trusted_phone_numbers(
+    ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_validate_targets(
     ): Short
     fun uniffi_imessage_core_checksum_constructor_imessagecore_new(
@@ -1238,7 +1244,7 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_place_call() != 40301.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_imessage_core_checksum_method_imessagecore_request_sms_code() != 10899.toShort()) {
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_request_sms_code() != 15114.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_send_attachments() != 22037.toShort()) {
@@ -1284,6 +1290,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_submit_device_code() != 11405.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_trusted_phone_numbers() != 3765.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_validate_targets() != 46342.toShort()) {
@@ -2315,9 +2324,6 @@ public interface ImessageCoreInterface {
      */
     suspend fun `placeCall`(`participants`: List<kotlin.String>, `video`: kotlin.Boolean): kotlin.String
     
-    /**
-     * Asks Apple to text a code to one of the account's trusted numbers.
-     */
     suspend fun `requestSmsCode`(`phoneId`: kotlin.UInt): LoginStep
     
     /**
@@ -2401,6 +2407,18 @@ public interface ImessageCoreInterface {
      * Submits a six-digit code from a trusted device.
      */
     suspend fun `submitDeviceCode`(`code`: kotlin.String): LoginStep
+    
+    /**
+     * Asks Apple to text a code to one of the account's trusted numbers.
+     * The numbers Apple will text a code to, as it lists them.
+     *
+     * Worth asking rather than assuming. The core had been sending to phone
+     * id 1 on the grounds that it is the first trusted number, which is true
+     * of the list and not necessarily true of anyone's account - an id is an
+     * index into whatever Apple returns, and texting the wrong one fails by
+     * doing nothing at all, which is the least debuggable way to fail.
+     */
+    suspend fun `trustedPhoneNumbers`(): List<PhoneNumber>
     
     /**
      * Which of `handles` are reachable over iMessage rather than SMS - what
@@ -2912,9 +2930,6 @@ open class ImessageCore: Disposable, AutoCloseable, ImessageCoreInterface {
     }
 
     
-    /**
-     * Asks Apple to text a code to one of the account's trusted numbers.
-     */
     @Throws(CoreException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `requestSmsCode`(`phoneId`: kotlin.UInt) : LoginStep {
@@ -3301,6 +3316,37 @@ open class ImessageCore: Disposable, AutoCloseable, ImessageCoreInterface {
         { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterTypeLoginStep.lift(it) },
+        // Error FFI converter
+        CoreException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Asks Apple to text a code to one of the account's trusted numbers.
+     * The numbers Apple will text a code to, as it lists them.
+     *
+     * Worth asking rather than assuming. The core had been sending to phone
+     * id 1 on the grounds that it is the first trusted number, which is true
+     * of the list and not necessarily true of anyone's account - an id is an
+     * index into whatever Apple returns, and texting the wrong one fails by
+     * doing nothing at all, which is the least debuggable way to fail.
+     */
+    @Throws(CoreException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `trustedPhoneNumbers`() : List<PhoneNumber> {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_trusted_phone_numbers(
+                thisPtr,
+                
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterSequenceTypePhoneNumber.lift(it) },
         // Error FFI converter
         CoreException.ErrorHandler,
     )

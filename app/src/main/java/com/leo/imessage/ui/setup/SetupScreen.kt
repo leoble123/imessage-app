@@ -84,6 +84,9 @@ fun SetupScreen(
     // both: a relay that emulates one, or the exported identity of a real Mac.
     var useMac by remember { mutableStateOf(account.hardwareBlob != null) }
     var hardware by remember { mutableStateOf(account.hardwareBlob.orEmpty()) }
+    // Numbers Apple says it can text, once asked. Empty until then - there is
+    // nothing to show before the question has been put to it.
+    var smsNumbers by remember { mutableStateOf<List<Pair<UInt, String>>>(emptyList()) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var factor by remember { mutableStateOf("") }
@@ -258,20 +261,52 @@ fun SetupScreen(
                         // The way out when there are no other devices.
                         //
                         // Apple offers device codes whenever the account has
-                        // any trusted device, and this screen had no exit -
-                        // so an account whose devices have all been removed
-                        // sat here waiting for a code that had nowhere to be
-                        // delivered. A trusted phone number survives that,
-                        // and asking for a text moves the sign-in onto it.
-                        Text(
-                            "Text me the code instead",
-                            color = palette.accent,
-                            fontSize = 15.sp,
-                            modifier = Modifier.clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) { run { account.requestSmsCode(FIRST_TRUSTED_NUMBER) } },
-                        )
+                        // any trusted device, and this screen had no exit - so
+                        // an account whose devices have all been removed sat
+                        // here waiting for a code that had nowhere to land.
+                        //
+                        // Which number, though, is Apple's to say. A phone id
+                        // is an index into its list, so sending to id 1 was a
+                        // guess, and a wrong guess is accepted and then simply
+                        // never delivered. So ask first, and show what came
+                        // back rather than picking on the account's behalf.
+                        if (smsNumbers.isEmpty()) {
+                            Text(
+                                "Text me the code instead",
+                                color = palette.accent,
+                                fontSize = 15.sp,
+                                modifier = Modifier.clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                ) {
+                                    run {
+                                        val found = account.trustedNumbers()
+                                        // One number is not a choice worth
+                                        // making somebody tap through.
+                                        if (found.size == 1) account.requestSmsCode(found[0].first)
+                                        else smsNumbers = found
+                                    }
+                                },
+                            )
+                        } else {
+                            Text(
+                                "Send the code to",
+                                color = palette.secondaryLabel,
+                                fontSize = 13.sp,
+                            )
+                            smsNumbers.forEach { (id, number) ->
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    number,
+                                    color = palette.accent,
+                                    fontSize = 15.sp,
+                                    modifier = Modifier.clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) { run { account.requestSmsCode(id) } },
+                                )
+                            }
+                        }
                     }
 
                     is AccountState.NeedsSmsCode -> Step(
@@ -293,13 +328,14 @@ fun SetupScreen(
                             keyboard = KeyboardType.NumberPassword,
                             centered = true,
                         )
-                        // Falls back to the first trusted number rather than
-                        // hiding itself. Apple never populates this list on
-                        // the way through, so keying the control on it meant
-                        // the resend was permanently invisible on the one
-                        // screen where waiting for a text that never arrives
-                        // is the likeliest way to get stuck.
-                        val resendTo = state.numbers.firstOrNull()?.first ?: FIRST_TRUSTED_NUMBER
+                        // Always offered, and it asks Apple which number to
+                        // use rather than assuming one. This control used to
+                        // render only when Apple had listed the account's
+                        // numbers on the way through, which it does not do -
+                        // so on the one screen where a text failing to arrive
+                        // is the likeliest way to get stuck, there was no way
+                        // to ask again.
+                        val known = state.numbers
                         Spacer(Modifier.height(12.dp))
                         Text(
                             "Send me a code",
@@ -308,8 +344,31 @@ fun SetupScreen(
                             modifier = Modifier.clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
-                            ) { run { account.requestSmsCode(resendTo) } },
+                            ) {
+                                run {
+                                    val to = known.ifEmpty { account.trustedNumbers() }
+                                    when (to.size) {
+                                        0 -> Unit // The failure is already on screen.
+                                        1 -> account.requestSmsCode(to[0].first)
+                                        else -> smsNumbers = to
+                                    }
+                                }
+                            },
                         )
+                        // More than one number on the account, so it is a
+                        // choice rather than a default.
+                        smsNumbers.forEach { (id, number) ->
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                number,
+                                color = palette.accent,
+                                fontSize = 15.sp,
+                                modifier = Modifier.clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                ) { run { account.requestSmsCode(id) } },
+                            )
+                        }
                     }
 
                     is AccountState.NeedsWebStep -> Step(
@@ -487,13 +546,3 @@ private fun Field(
         )
     }
 }
-
-/**
- * Apple's first trusted phone number.
- *
- * The numbers are identified by a small index rather than by the number
- * itself, and one is where the list starts. The core already assumes this
- * where Apple routes an account to SMS on its own; asking for a text is the
- * same request made deliberately.
- */
-private val FIRST_TRUSTED_NUMBER: UInt = 1u

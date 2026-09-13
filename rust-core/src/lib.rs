@@ -381,6 +381,37 @@ impl ImessageCore {
     }
 
     /// Asks Apple to text a code to one of the account's trusted numbers.
+    /// The numbers Apple will text a code to, as it lists them.
+    ///
+    /// Worth asking rather than assuming. The core had been sending to phone
+    /// id 1 on the grounds that it is the first trusted number, which is true
+    /// of the list and not necessarily true of anyone's account - an id is an
+    /// index into whatever Apple returns, and texting the wrong one fails by
+    /// doing nothing at all, which is the least debuggable way to fail.
+    pub async fn trusted_phone_numbers(&self) -> Result<Vec<PhoneNumber>, CoreError> {
+        let inner = self.inner.lock().await;
+        let account = inner
+            .account
+            .as_ref()
+            .ok_or_else(|| CoreError::new("no sign-in is in progress"))?;
+        let extras = account.get_auth_extras().await.map_err(|e| {
+            CoreError::new(format!(
+                "Apple wouldn't say which numbers it can text: {e}. \
+                 An account with no trusted phone number reports this too."
+            ))
+        })?;
+        Ok(extras
+            .trusted_phone_numbers
+            .into_iter()
+            .map(|n| PhoneNumber {
+                id: n.id,
+                // Apple masks these itself - the digits it returns are already
+                // the only ones it is willing to show.
+                number: n.number_with_dial_code,
+            })
+            .collect())
+    }
+
     pub async fn request_sms_code(&self, phone_id: u32) -> Result<LoginStep, CoreError> {
         let mut inner = self.inner.lock().await;
         let result = {
