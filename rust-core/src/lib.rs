@@ -310,6 +310,30 @@ impl ImessageCore {
     /// connection comes up - and the difference only shows in whether Apple
     /// will resolve anybody for the identity afterwards.
     pub async fn configure_hardware(&self, encoded: Vec<u8>) -> Result<(), CoreError> {
+        // Refused, and this is the honest place to refuse it.
+        //
+        // A MacOSConfig has to produce validation data, and that work lives in
+        // open-absinthe's ValidationCtx - whose new, key_establishment and
+        // sign are all todo!(), with HardwareConfig::from_validation_data
+        // panicking outright with "Not supported with binary!". That is not a
+        // gap in this vendored copy: the same file, to the line, is what the
+        // working client ships. Nobody computes NAC on the phone. The binary
+        // the message refers to is Apple's own, and running it is exactly what
+        // a registration relay exists to do.
+        //
+        // So this path compiled, looked plausible, and panicked the moment
+        // sign-in first needed validation data - which is immediately after
+        // the Apple ID. Returning the reason beats a panic surfacing as
+        // "InternalException: not yet implemented", and beats leaving an
+        // option on the setup screen that cannot work.
+        let _ = parse_hardware(&encoded, self.device_udid())?;
+        return Err(CoreError::new(
+            "Signing in as a Mac isn't possible from the phone. Generating \
+             validation data needs Apple's own code, which is what a \
+             registration relay runs - so the relay is the way in, even when \
+             the hardware details come from a real Mac.",
+        ));
+        #[allow(unreachable_code)]
         let config = Arc::new(parse_hardware(&encoded, self.device_udid())?);
         info!(
             "signing in as {} on {}",

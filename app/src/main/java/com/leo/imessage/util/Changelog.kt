@@ -36,6 +36,29 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 67,
+            versionName = "0.67.0",
+            date = "14 September 2026",
+            headline = "Signing in as a Mac was never going to work. Removed, and the relay is back.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "\"I have a Mac\" is gone. It crashed with \"not yet implemented\" " +
+                        "right after the Apple ID, because the code that would turn a " +
+                        "Mac's details into validation data is a stub that panics. That " +
+                        "work is done by Apple's own binary, which is what a registration " +
+                        "relay runs - so the relay is the way in, and was all along.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "A hardware identity saved by an earlier build is discarded rather " +
+                        "than preferred. It would otherwise have taken precedence on every " +
+                        "launch and failed, with no route back to the relay short of " +
+                        "clearing the app's data.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 66,
             versionName = "0.66.0",
             date = "13 September 2026",

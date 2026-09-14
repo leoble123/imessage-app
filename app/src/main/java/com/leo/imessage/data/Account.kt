@@ -156,19 +156,25 @@ class AccountManager(context: Context) {
         // Both are written together, so one without the other means the
         // saved setup is incomplete. Returning early without saying so would
         // leave the app sitting on the silent Restoring screen forever.
-        val saved = hardwareBlob
+        // A saved hardware blob is thrown away rather than used.
+        //
+        // Signing in as a Mac cannot work from the phone - the validation data
+        // it would have to produce is computed by Apple's own code, which is
+        // what a relay runs - so a blob saved by an earlier version would
+        // otherwise take precedence forever and fail every launch, with no way
+        // back to the relay short of clearing app data.
+        if (!hardwareBlob.isNullOrBlank()) {
+            Log.w(TAG, "discarding saved Mac hardware: that route cannot work from here")
+            hardwareBlob = null
+        }
         val host = relayHost
         val code = relayCode
-        if (saved.isNullOrBlank() && (host.isNullOrBlank() || code.isNullOrBlank())) {
+        if (host.isNullOrBlank() || code.isNullOrBlank()) {
             _state.value = AccountState.NeedsRelay
             return@withContext false
         }
         try {
-            if (!saved.isNullOrBlank()) {
-                core.configureHardware(android.util.Base64.decode(saved, android.util.Base64.DEFAULT))
-            } else {
-                core.configureRelay(host!!, code!!, null)
-            }
+            core.configureRelay(host, code, null)
             if (!core.isRegistered()) {
                 _state.value = AccountState.NeedsSignIn
                 return@withContext false
