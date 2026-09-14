@@ -63,6 +63,8 @@ fun SettingsScreen(
     onCheckHandle: (suspend (String) -> String)? = null,
     /** Registers this device with Apple again. */
     onReRegister: (suspend () -> String)? = null,
+    /** Asks Apple which devices it has registered on this account. */
+    onRegistrationStatus: (suspend () -> String)? = null,
     /** Adds or removes the conversations that aren't real. */
     onSampleConversations: (suspend (Boolean) -> String)? = null,
 ) {
@@ -556,6 +558,36 @@ fun SettingsScreen(
                     }
                     SettingsDivider()
                 }
+                if (onRegistrationStatus != null) {
+                    // Deliberately above "Re-register": this is the check that
+                    // says whether re-registering is the right move at all, and
+                    // re-registering on a guess is what gets an account limited.
+                    SettingsRow(
+                        "Check Registration With Apple",
+                        onClick = {
+                            checkResult = "Asking Apple\u2026"
+                            checkScope.launch {
+                                checkResult = try {
+                                    onRegistrationStatus()
+                                } catch (cancel: kotlinx.coroutines.CancellationException) {
+                                    throw cancel
+                                } catch (e: Throwable) {
+                                    e.message ?: "That didn't run."
+                                }
+                            }
+                        },
+                    )
+                    Text(
+                        "Apple's own list of the devices on this account. If this " +
+                            "phone is missing from it, nothing will send or arrive " +
+                            "and re-registering is the fix. If it is there, " +
+                            "re-registering will not help.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = palette.secondaryLabel,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                    )
+                    SettingsDivider()
+                }
                 if (onReRegister != null) {
                     SettingsRow(
                         "Re-register with Apple",
@@ -586,7 +618,25 @@ fun SettingsScreen(
                 }
                 SettingsRow(
                     "Export Diagnostics",
-                    onClick = { shareDiagnostics(context, settings) },
+                    onClick = {
+                        // Apple's device list goes in the report itself. The
+                        // protocol log shows a lookup coming back empty but
+                        // not why, and "why" is the whole question - so the
+                        // export asks before it writes rather than leaving it
+                        // to be run separately and pasted in by hand.
+                        checkScope.launch {
+                            val registration = onRegistrationStatus?.let {
+                                try {
+                                    it()
+                                } catch (cancel: kotlinx.coroutines.CancellationException) {
+                                    throw cancel
+                                } catch (e: Throwable) {
+                                    "Couldn't ask Apple: ${e.message ?: e::class.java.simpleName}"
+                                }
+                            }
+                            shareDiagnostics(context, settings, account, registration)
+                        }
+                    },
                 )
             }
         }
@@ -690,6 +740,8 @@ private fun openNotificationSettings(context: android.content.Context) {
 private fun shareDiagnostics(
     context: android.content.Context,
     settings: com.leo.imessage.ui.theme.AppSettings,
+    account: AccountSummary?,
+    registration: String?,
 ) {
     val report = buildString {
         appendLine("Relay diagnostics")
@@ -703,8 +755,18 @@ private fun shareDiagnostics(
         appendLine("Theme: ${settings.themeMode}")
         appendLine("Bubble style: ${settings.bubbleStyle}")
         appendLine("Reduce motion: ${settings.lowPowerAnimations}")
-        appendLine("Server: ${settings.relayServer.ifBlank { "not set" }}")
+        // The account's own relay, not settings.relayServer - that field is
+        // the text box on the sign-in screen and is empty on a session
+        // restored from disk, which made every exported report claim there
+        // was no server configured while the app was plainly talking to one.
+        appendLine("Server: ${account?.relay ?: settings.relayServer.ifBlank { "not set" }}")
+        appendLine("Signed in as: ${account?.primaryHandle ?: "nobody"}")
         appendLine()
+        registration?.let {
+            appendLine("--- registration (Apple's answer) ---")
+            appendLine(it)
+            appendLine()
+        }
         appendLine("--- protocol log ---")
         append(recentCoreLog())
     }

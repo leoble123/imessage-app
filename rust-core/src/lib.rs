@@ -51,6 +51,26 @@ pub use types::*;
 /// them - an account that advertises FaceTime and never answers rings a
 /// caller's phone for nothing.
 ///
+/// Base64, standard alphabet with padding.
+///
+/// Hand-rolled rather than pulled in as a dependency: the only thing this
+/// crate needs it for is printing a 32-byte push token so it can be compared
+/// by eye against the one Apple reports.
+fn base64_encode(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity((bytes.len() + 2) / 3 * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
+        out.push(ALPHABET[(n >> 18 & 63) as usize] as char);
+        out.push(ALPHABET[(n >> 12 & 63) as usize] as char);
+        out.push(if chunk.len() > 1 { ALPHABET[(n >> 6 & 63) as usize] as char } else { '=' });
+        out.push(if chunk.len() > 2 { ALPHABET[(n & 63) as usize] as char } else { '=' });
+    }
+    out
+}
+
 /// This is a function rather than a `static` because rustpush doesn't export
 /// the `IDSService` type - only the constants - so the type can't be written
 /// down. Returning a reference to a const expression promotes it to 'static,
@@ -780,6 +800,73 @@ impl ImessageCore {
         Ok(Handles {
             preferred: all.first().cloned(),
             all,
+        })
+    }
+
+    /// Asks Apple which registrations it currently holds for this account,
+    /// and says whether ours is one of them.
+    ///
+    /// This exists because of a failure mode that is otherwise invisible.
+    /// IDS keeps one registration per device identity. When another client
+    /// registers the same Apple ID with the same device details, it takes
+    /// that registration over, and the loser is left looking entirely
+    /// healthy from the inside: the push connection stays up, `id-query` is
+    /// answered rather than refused, and the answer is `status 0` with an
+    /// empty `identities` array for every handle asked about - including
+    /// handles that unquestionably have devices on them. Nothing arrives
+    /// either, for the same reason. There is no error anywhere to read.
+    ///
+    /// `id-get-dependent-registrations` is Apple's own list, so it settles
+    /// it. If our push token is in it, the registration is live and an empty
+    /// lookup means something else. If it is absent, the registration has
+    /// been superseded and re-registering is the only way back.
+    ///
+    /// It is a plain read - no registration, nothing rate-limited - so it is
+    /// safe to run whenever sending looks wrong.
+    pub async fn registration_status(&self) -> Result<RegistrationStatus, CoreError> {
+        let inner = self.inner.lock().await;
+        let connection = inner
+            .connection
+            .clone()
+            .ok_or_else(|| CoreError::new("not connected"))?;
+        let user = inner
+            .users
+            .first()
+            .ok_or_else(|| CoreError::new("not registered yet"))?
+            .clone();
+        drop(inner);
+
+        let aps_state = connection.state.read().await.clone();
+        let our_token = connection.get_token().await.to_vec();
+
+        let devices = user
+            .get_dependent_registrations(&aps_state)
+            .await
+            .map_err(|e| CoreError::new(format!("Apple wouldn't list this account's devices: {e}")))?;
+
+        let our_handles = user
+            .registration
+            .get(MADRID_SERVICE.name)
+            .map(|r| r.handles.clone())
+            .unwrap_or_default();
+
+        let devices: Vec<RegisteredDevice> = devices
+            .into_iter()
+            .map(|d| RegisteredDevice {
+                name: d.device_name.unwrap_or_else(|| "(unnamed)".to_string()),
+                push_token: base64_encode(&d.token),
+                is_this_device: d.token == our_token,
+                handles: d.identites,
+                sub_services: d.sub_services,
+                is_hsa_trusted: d.is_hsa_trusted,
+            })
+            .collect();
+
+        Ok(RegistrationStatus {
+            we_are_registered: devices.iter().any(|d| d.is_this_device),
+            our_push_token: base64_encode(&our_token),
+            our_handles,
+            devices,
         })
     }
 

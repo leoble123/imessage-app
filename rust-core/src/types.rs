@@ -235,3 +235,39 @@ pub trait EventListener: Send + Sync {
     /// the UI can show it.
     fn on_connection_lost(&self, reason: String);
 }
+
+/// One registration Apple currently holds for this Apple ID, as reported by
+/// `id-get-dependent-registrations`.
+///
+/// This is Apple's own view of the account, not ours - which is the whole
+/// point of asking. A registration that looks perfectly healthy from inside
+/// this process can be absent from this list, and when it is, every lookup it
+/// makes is answered with nobody and nothing addressed to it is delivered.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RegisteredDevice {
+    pub name: String,
+    /// Base64, so it can be compared against the token this app is using.
+    pub push_token: String,
+    /// The handles this registration can send from.
+    pub handles: Vec<String>,
+    pub sub_services: Vec<String>,
+    pub is_hsa_trusted: bool,
+    /// True when this is the registration this app is currently using.
+    pub is_this_device: bool,
+}
+
+/// What Apple says about this account's registrations, and how that compares
+/// to what this app believes.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct RegistrationStatus {
+    /// The push token this app is sending on every IDS request.
+    pub our_push_token: String,
+    /// The handles on our own registration certificate.
+    pub our_handles: Vec<String>,
+    /// Every registration Apple currently holds, ours included if it is there.
+    pub devices: Vec<RegisteredDevice>,
+    /// False when Apple's list does not contain our push token - the
+    /// registration has been superseded, and re-registering is the only way
+    /// back.
+    pub we_are_registered: bool,
+}

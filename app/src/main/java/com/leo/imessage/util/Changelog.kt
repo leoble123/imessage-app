@@ -36,6 +36,36 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 68,
+            versionName = "0.68.0",
+            date = "15 September 2026",
+            headline = "Apple answers every lookup with nobody. Now you can ask Apple why.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "Settings now has Check Registration With Apple. It asks Apple for " +
+                        "its own list of the devices on your account and says whether " +
+                        "this phone is on it. That is the difference between a " +
+                        "registration that has been taken over - where registering " +
+                        "again fixes it - and one Apple has live and is simply not " +
+                        "answering, where registering again only burns attempts.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Export Diagnostics now includes Apple's device list and the " +
+                        "addresses this registration can send from, so a report says " +
+                        "why a send failed instead of only that it did.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Exported diagnostics said \"Server: not set\" whenever the app had " +
+                        "been reopened rather than freshly signed in. It was reading the " +
+                        "sign-in screen's text box, which is empty on a restored " +
+                        "session, instead of the relay the account is actually using.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 67,
             versionName = "0.67.0",
             date = "14 September 2026",

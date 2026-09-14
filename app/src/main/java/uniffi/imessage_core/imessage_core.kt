@@ -855,6 +855,8 @@ internal open class UniffiVTableCallbackInterfaceEventListener(
 
 
 
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -928,6 +930,8 @@ internal interface UniffiLib : Library {
     fun uniffi_imessage_core_fn_method_imessagecore_needs_service_refresh(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     fun uniffi_imessage_core_fn_method_imessagecore_place_call(`ptr`: Pointer,`participants`: RustBuffer.ByValue,`video`: Byte,
+    ): Long
+    fun uniffi_imessage_core_fn_method_imessagecore_registration_status(`ptr`: Pointer,
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_request_sms_code(`ptr`: Pointer,`phoneId`: Int,
     ): Long
@@ -1123,6 +1127,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_place_call(
     ): Short
+    fun uniffi_imessage_core_checksum_method_imessagecore_registration_status(
+    ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_request_sms_code(
     ): Short
     fun uniffi_imessage_core_checksum_method_imessagecore_send_attachments(
@@ -1242,6 +1248,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_place_call() != 40301.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_imessage_core_checksum_method_imessagecore_registration_status() != 1309.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_imessage_core_checksum_method_imessagecore_request_sms_code() != 15114.toShort()) {
@@ -2324,6 +2333,30 @@ public interface ImessageCoreInterface {
      */
     suspend fun `placeCall`(`participants`: List<kotlin.String>, `video`: kotlin.Boolean): kotlin.String
     
+    /**
+     * Asks Apple which registrations it currently holds for this account,
+     * and says whether ours is one of them.
+     *
+     * This exists because of a failure mode that is otherwise invisible.
+     * IDS keeps one registration per device identity. When another client
+     * registers the same Apple ID with the same device details, it takes
+     * that registration over, and the loser is left looking entirely
+     * healthy from the inside: the push connection stays up, `id-query` is
+     * answered rather than refused, and the answer is `status 0` with an
+     * empty `identities` array for every handle asked about - including
+     * handles that unquestionably have devices on them. Nothing arrives
+     * either, for the same reason. There is no error anywhere to read.
+     *
+     * `id-get-dependent-registrations` is Apple's own list, so it settles
+     * it. If our push token is in it, the registration is live and an empty
+     * lookup means something else. If it is absent, the registration has
+     * been superseded and re-registering is the only way back.
+     *
+     * It is a plain read - no registration, nothing rate-limited - so it is
+     * safe to run whenever sending looks wrong.
+     */
+    suspend fun `registrationStatus`(): RegistrationStatus
+    
     suspend fun `requestSmsCode`(`phoneId`: kotlin.UInt): LoginStep
     
     /**
@@ -2924,6 +2957,49 @@ open class ImessageCore: Disposable, AutoCloseable, ImessageCoreInterface {
         { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterString.lift(it) },
+        // Error FFI converter
+        CoreException.ErrorHandler,
+    )
+    }
+
+    
+    /**
+     * Asks Apple which registrations it currently holds for this account,
+     * and says whether ours is one of them.
+     *
+     * This exists because of a failure mode that is otherwise invisible.
+     * IDS keeps one registration per device identity. When another client
+     * registers the same Apple ID with the same device details, it takes
+     * that registration over, and the loser is left looking entirely
+     * healthy from the inside: the push connection stays up, `id-query` is
+     * answered rather than refused, and the answer is `status 0` with an
+     * empty `identities` array for every handle asked about - including
+     * handles that unquestionably have devices on them. Nothing arrives
+     * either, for the same reason. There is no error anywhere to read.
+     *
+     * `id-get-dependent-registrations` is Apple's own list, so it settles
+     * it. If our push token is in it, the registration is live and an empty
+     * lookup means something else. If it is absent, the registration has
+     * been superseded and re-registering is the only way back.
+     *
+     * It is a plain read - no registration, nothing rate-limited - so it is
+     * safe to run whenever sending looks wrong.
+     */
+    @Throws(CoreException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `registrationStatus`() : RegistrationStatus {
+        return uniffiRustCallAsync(
+        callWithPointer { thisPtr ->
+            UniffiLib.INSTANCE.uniffi_imessage_core_fn_method_imessagecore_registration_status(
+                thisPtr,
+                
+            )
+        },
+        { future, callback, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.INSTANCE.ffi_imessage_core_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeRegistrationStatus.lift(it) },
         // Error FFI converter
         CoreException.ErrorHandler,
     )
@@ -3734,6 +3810,130 @@ public object FfiConverterTypePhoneNumber: FfiConverterRustBuffer<PhoneNumber> {
     override fun write(value: PhoneNumber, buf: ByteBuffer) {
             FfiConverterUInt.write(value.`id`, buf)
             FfiConverterString.write(value.`number`, buf)
+    }
+}
+
+
+
+/**
+ * One registration Apple currently holds for this Apple ID, as reported by
+ * `id-get-dependent-registrations`.
+ *
+ * This is Apple's own view of the account, not ours - which is the whole
+ * point of asking. A registration that looks perfectly healthy from inside
+ * this process can be absent from this list, and when it is, every lookup it
+ * makes is answered with nobody and nothing addressed to it is delivered.
+ */
+data class RegisteredDevice (
+    var `name`: kotlin.String, 
+    /**
+     * Base64, so it can be compared against the token this app is using.
+     */
+    var `pushToken`: kotlin.String, 
+    /**
+     * The handles this registration can send from.
+     */
+    var `handles`: List<kotlin.String>, 
+    var `subServices`: List<kotlin.String>, 
+    var `isHsaTrusted`: kotlin.Boolean, 
+    /**
+     * True when this is the registration this app is currently using.
+     */
+    var `isThisDevice`: kotlin.Boolean
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRegisteredDevice: FfiConverterRustBuffer<RegisteredDevice> {
+    override fun read(buf: ByteBuffer): RegisteredDevice {
+        return RegisteredDevice(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RegisteredDevice) = (
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterString.allocationSize(value.`pushToken`) +
+            FfiConverterSequenceString.allocationSize(value.`handles`) +
+            FfiConverterSequenceString.allocationSize(value.`subServices`) +
+            FfiConverterBoolean.allocationSize(value.`isHsaTrusted`) +
+            FfiConverterBoolean.allocationSize(value.`isThisDevice`)
+    )
+
+    override fun write(value: RegisteredDevice, buf: ByteBuffer) {
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterString.write(value.`pushToken`, buf)
+            FfiConverterSequenceString.write(value.`handles`, buf)
+            FfiConverterSequenceString.write(value.`subServices`, buf)
+            FfiConverterBoolean.write(value.`isHsaTrusted`, buf)
+            FfiConverterBoolean.write(value.`isThisDevice`, buf)
+    }
+}
+
+
+
+/**
+ * What Apple says about this account's registrations, and how that compares
+ * to what this app believes.
+ */
+data class RegistrationStatus (
+    /**
+     * The push token this app is sending on every IDS request.
+     */
+    var `ourPushToken`: kotlin.String, 
+    /**
+     * The handles on our own registration certificate.
+     */
+    var `ourHandles`: List<kotlin.String>, 
+    /**
+     * Every registration Apple currently holds, ours included if it is there.
+     */
+    var `devices`: List<RegisteredDevice>, 
+    /**
+     * False when Apple's list does not contain our push token - the
+     * registration has been superseded, and re-registering is the only way
+     * back.
+     */
+    var `weAreRegistered`: kotlin.Boolean
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRegistrationStatus: FfiConverterRustBuffer<RegistrationStatus> {
+    override fun read(buf: ByteBuffer): RegistrationStatus {
+        return RegistrationStatus(
+            FfiConverterString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceTypeRegisteredDevice.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RegistrationStatus) = (
+            FfiConverterString.allocationSize(value.`ourPushToken`) +
+            FfiConverterSequenceString.allocationSize(value.`ourHandles`) +
+            FfiConverterSequenceTypeRegisteredDevice.allocationSize(value.`devices`) +
+            FfiConverterBoolean.allocationSize(value.`weAreRegistered`)
+    )
+
+    override fun write(value: RegistrationStatus, buf: ByteBuffer) {
+            FfiConverterString.write(value.`ourPushToken`, buf)
+            FfiConverterSequenceString.write(value.`ourHandles`, buf)
+            FfiConverterSequenceTypeRegisteredDevice.write(value.`devices`, buf)
+            FfiConverterBoolean.write(value.`weAreRegistered`, buf)
     }
 }
 
@@ -4740,6 +4940,34 @@ public object FfiConverterSequenceTypePhoneNumber: FfiConverterRustBuffer<List<P
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypePhoneNumber.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeRegisteredDevice: FfiConverterRustBuffer<List<RegisteredDevice>> {
+    override fun read(buf: ByteBuffer): List<RegisteredDevice> {
+        val len = buf.getInt()
+        return List<RegisteredDevice>(len) {
+            FfiConverterTypeRegisteredDevice.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<RegisteredDevice>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeRegisteredDevice.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<RegisteredDevice>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeRegisteredDevice.write(it, buf)
         }
     }
 }

@@ -423,6 +423,70 @@ class AccountManager(context: Context) {
         }
     }
 
+    /**
+     * Asks Apple which devices it currently has registered on this account,
+     * and says whether this phone is one of them.
+     *
+     * This answers the one question a failing send cannot. When IDS hands
+     * back `status 0` and an empty identity list for every address asked
+     * about - including addresses that certainly have devices on them - the
+     * protocol gives no reason, because from Apple's side nothing went
+     * wrong. Two very different things look identical from in here:
+     *
+     *  - this registration has been superseded (another client signed the
+     *    same Apple ID in with the same device details and took it over), in
+     *    which case re-registering fixes it, or
+     *  - the registration is live and Apple is declining to answer it, in
+     *    which case re-registering does nothing and will only burn attempts.
+     *
+     * Apple's own device list separates them, and it is a plain read - no
+     * registration, nothing rate limited - so it is safe to run whenever
+     * sending looks wrong.
+     */
+    suspend fun registrationStatus(): String = withContext(Dispatchers.IO) {
+        val status = try {
+            core.registrationStatus()
+        } catch (cancel: kotlinx.coroutines.CancellationException) {
+            throw cancel
+        } catch (e: Throwable) {
+            return@withContext "Couldn't ask Apple: ${e.message ?: e::class.java.simpleName}"
+        }
+
+        buildString {
+            if (status.weAreRegistered) {
+                appendLine("This phone IS registered with Apple.")
+                appendLine(
+                    "So an empty lookup is not a stale registration - Apple is " +
+                        "answering this device and returning nobody. Re-registering " +
+                        "will not change that; do not keep doing it.",
+                )
+            } else {
+                appendLine("This phone is NOT in Apple's device list.")
+                appendLine(
+                    "The registration was taken over - that is exactly why every " +
+                        "lookup comes back empty and nothing arrives. Re-register " +
+                        "once, then check here again.",
+                )
+            }
+            appendLine()
+            appendLine("Sending from: ${status.ourHandles.joinToString().ifBlank { "(none)" }}")
+            if (status.ourHandles.none { it.startsWith("tel:") }) {
+                appendLine(
+                    "No phone number on this registration, so anyone texting your " +
+                        "number reaches your other devices, not this one.",
+                )
+            }
+            appendLine("Our push token: ${status.ourPushToken}")
+            appendLine()
+            appendLine("Apple has ${status.devices.size} device(s) on this account:")
+            status.devices.forEach { d ->
+                appendLine("  ${if (d.isThisDevice) "> " else "  "}${d.name}")
+                appendLine("      token ${d.pushToken}")
+                appendLine("      ${d.handles.joinToString().ifBlank { "no handles" }}")
+            }
+        }
+    }
+
     suspend fun checkHandle(raw: String): String = withContext(Dispatchers.IO) {
         val backend = backend ?: return@withContext "Not signed in."
         val normalized = runCatching { Handles.normalize(raw) }.getOrNull()

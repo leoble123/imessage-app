@@ -120,6 +120,7 @@ class MainActivity : ComponentActivity() {
                             },
                             onCheckHandle = { raw -> account.checkHandle(raw) },
                             onReRegister = { account.reRegister() },
+                            onRegistrationStatus = { account.registrationStatus() },
                             onSampleConversations = { add ->
                                 if (add) account.addSampleConversations()
                                 else account.removeSampleConversations()
