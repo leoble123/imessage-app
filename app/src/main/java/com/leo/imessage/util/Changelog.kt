@@ -36,6 +36,29 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 69,
+            versionName = "0.69.0",
+            date = "15 September 2026",
+            headline = "The registration check now shows the two fields that matter.",
+            changes = listOf(
+                Change(
+                    ChangeKind.BETTER,
+                    "Check Registration With Apple now shows, for every registration, " +
+                        "whether Apple marks it as a trusted device and which services " +
+                        "it covers. Being registered and being answered are different " +
+                        "questions, and the trust flag is the one the protocol never " +
+                        "volunteers.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "Duplicate registrations are called out. Apple keeps one per " +
+                        "device, so the same device listed several times is earlier " +
+                        "attempts that were never replaced - leftovers worth removing " +
+                        "at account.apple.com, not devices you own.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 68,
             versionName = "0.68.0",
             date = "15 September 2026",

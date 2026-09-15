@@ -478,11 +478,49 @@ class AccountManager(context: Context) {
             }
             appendLine("Our push token: ${status.ourPushToken}")
             appendLine()
-            appendLine("Apple has ${status.devices.size} device(s) on this account:")
+
+            // Same device name, different push token, more than once.
+            //
+            // Apple keeps one registration per device identity, so duplicates
+            // are not extra devices - they are earlier attempts that were
+            // never replaced, because the identity they registered under was
+            // regenerated instead of reused. They sit in Apple's list
+            // indefinitely and are worth clearing out by hand at
+            // account.apple.com; a lookup has no way to tell which of them is
+            // the endpoint that should be answered.
+            val ghosts = status.devices
+                .groupBy { it.name }
+                .filterValues { it.size > 1 }
+            if (ghosts.isNotEmpty()) {
+                val extra = ghosts.values.sumOf { it.size - 1 }
+                appendLine(
+                    "$extra duplicate registration(s) - same device, registered more " +
+                        "than once. These are leftovers from earlier attempts, not " +
+                        "real devices. Remove them at account.apple.com.",
+                )
+                appendLine()
+            }
+
+            appendLine("Apple has ${status.devices.size} registration(s) on this account:")
             status.devices.forEach { d ->
                 appendLine("  ${if (d.isThisDevice) "> " else "  "}${d.name}")
                 appendLine("      token ${d.pushToken}")
+                appendLine("      trusted: ${d.isHsaTrusted}")
                 appendLine("      ${d.handles.joinToString().ifBlank { "no handles" }}")
+                appendLine("      services: ${d.subServices.joinToString().ifBlank { "none" }}")
+            }
+
+            // Whether Apple counts this registration as a trusted device for
+            // the account, which is a different question from whether it is
+            // registered at all - and one the protocol never volunteers.
+            val us = status.devices.firstOrNull { it.isThisDevice }
+            if (us != null && !us.isHsaTrusted) {
+                appendLine()
+                appendLine(
+                    "This registration is not marked trusted, while others on the " +
+                        "account are. An untrusted registration is exactly one that " +
+                        "Apple answers and does not serve identities to.",
+                )
             }
         }
     }
