@@ -892,7 +892,9 @@ impl ImessageCore {
             .await
             .map_err(|e| CoreError::new(format!("Apple wouldn't list this account's devices: {e}")))?;
 
-        let our_handles = user
+        // What this app believes, which is only what the certificate said
+        // when it was issued.
+        let cached_handles = user
             .registration
             .get(MADRID_SERVICE.name)
             .map(|r| r.handles.clone())
@@ -910,10 +912,27 @@ impl ImessageCore {
             })
             .collect();
 
+        // What Apple believes, which is the one that decides delivery.
+        //
+        // These disagree more often than it looks like they should. Apple
+        // adds a handle to an existing registration when the account gains
+        // one - registering a phone number from another client does it - and
+        // the registration keeps working, so nothing forces a refresh and
+        // nothing says the client's copy is behind. Reporting the
+        // certificate's copy as though it were the truth is how this app came
+        // to tell its user it had no phone number on the same screen as
+        // Apple's list showing that it did.
+        let our_handles = devices
+            .iter()
+            .find(|d| d.is_this_device)
+            .map(|d| d.handles.clone())
+            .unwrap_or_else(|| cached_handles.clone());
+
         Ok(RegistrationStatus {
             we_are_registered: devices.iter().any(|d| d.is_this_device),
             our_push_token: base64_encode(&our_token),
             our_handles,
+            cached_handles,
             devices,
         })
     }

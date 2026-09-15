@@ -3970,9 +3970,18 @@ data class RegistrationStatus (
      */
     var `ourPushToken`: kotlin.String, 
     /**
-     * The handles on our own registration certificate.
+     * The handles Apple lists against our registration - what this device
+     * can actually be reached at, according to Apple.
      */
     var `ourHandles`: List<kotlin.String>, 
+    /**
+     * The handles this app believes it has, taken from the registration
+     * certificate at the time it was issued. Apple can add a handle to a
+     * registration afterwards - registering a phone number elsewhere on the
+     * account does exactly that - and nothing tells the client, so this goes
+     * stale without any sign.
+     */
+    var `cachedHandles`: List<kotlin.String>, 
     /**
      * Every registration Apple currently holds, ours included if it is there.
      */
@@ -3996,6 +4005,7 @@ public object FfiConverterTypeRegistrationStatus: FfiConverterRustBuffer<Registr
         return RegistrationStatus(
             FfiConverterString.read(buf),
             FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceString.read(buf),
             FfiConverterSequenceTypeRegisteredDevice.read(buf),
             FfiConverterBoolean.read(buf),
         )
@@ -4004,6 +4014,7 @@ public object FfiConverterTypeRegistrationStatus: FfiConverterRustBuffer<Registr
     override fun allocationSize(value: RegistrationStatus) = (
             FfiConverterString.allocationSize(value.`ourPushToken`) +
             FfiConverterSequenceString.allocationSize(value.`ourHandles`) +
+            FfiConverterSequenceString.allocationSize(value.`cachedHandles`) +
             FfiConverterSequenceTypeRegisteredDevice.allocationSize(value.`devices`) +
             FfiConverterBoolean.allocationSize(value.`weAreRegistered`)
     )
@@ -4011,6 +4022,7 @@ public object FfiConverterTypeRegistrationStatus: FfiConverterRustBuffer<Registr
     override fun write(value: RegistrationStatus, buf: ByteBuffer) {
             FfiConverterString.write(value.`ourPushToken`, buf)
             FfiConverterSequenceString.write(value.`ourHandles`, buf)
+            FfiConverterSequenceString.write(value.`cachedHandles`, buf)
             FfiConverterSequenceTypeRegisteredDevice.write(value.`devices`, buf)
             FfiConverterBoolean.write(value.`weAreRegistered`, buf)
     }

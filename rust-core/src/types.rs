@@ -262,8 +262,15 @@ pub struct RegisteredDevice {
 pub struct RegistrationStatus {
     /// The push token this app is sending on every IDS request.
     pub our_push_token: String,
-    /// The handles on our own registration certificate.
+    /// The handles Apple lists against our registration - what this device
+    /// can actually be reached at, according to Apple.
     pub our_handles: Vec<String>,
+    /// The handles this app believes it has, taken from the registration
+    /// certificate at the time it was issued. Apple can add a handle to a
+    /// registration afterwards - registering a phone number elsewhere on the
+    /// account does exactly that - and nothing tells the client, so this goes
+    /// stale without any sign.
+    pub cached_handles: Vec<String>,
     /// Every registration Apple currently holds, ours included if it is there.
     pub devices: Vec<RegisteredDevice>,
     /// False when Apple's list does not contain our push token - the

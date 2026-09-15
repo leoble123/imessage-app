@@ -523,12 +523,24 @@ class AccountManager(context: Context) {
                 )
             }
             appendLine()
-            appendLine("Sending from: ${status.ourHandles.joinToString().ifBlank { "(none)" }}")
+            appendLine("Apple lists this device at: ${status.ourHandles.joinToString().ifBlank { "(none)" }}")
             if (status.ourHandles.none { it.startsWith("tel:") }) {
                 appendLine(
                     "No phone number on this registration, so anyone texting your " +
                         "number reaches your other devices, not this one.",
                 )
+            }
+            // The certificate's copy, which only says what was true when it
+            // was issued. Apple adds handles to a live registration - a phone
+            // number registered from another client lands on every
+            // registration the account has - and never tells the client, so
+            // this drifts silently and the app goes on believing the old set.
+            if (status.cachedHandles.toSet() != status.ourHandles.toSet()) {
+                appendLine(
+                    "This app still thinks it is: " +
+                        status.cachedHandles.joinToString().ifBlank { "(none)" },
+                )
+                appendLine("Re-register once to pick up the difference.")
             }
             appendLine("Our push token: ${status.ourPushToken}")
             appendLine()

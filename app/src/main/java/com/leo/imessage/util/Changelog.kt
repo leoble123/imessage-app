@@ -36,6 +36,41 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 72,
+            versionName = "0.72.0",
+            date = "15 September 2026",
+            headline = "Messages that arrived were being reported as failures. Not anymore.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "A sent message was only treated as sent once every device it " +
+                        "went to confirmed receipt - and that list includes your own " +
+                        "registrations, so the message syncs to your other screens. " +
+                        "Apple keeps one registration per device identity and never " +
+                        "removes the stale ones, so an account that has registered a " +
+                        "few times collects endpoints that still get sent to and never " +
+                        "answer again. Waiting on those looked identical to waiting on " +
+                        "a real phone: the message reached everyone, the dead " +
+                        "registrations stayed quiet, and after five retries over about " +
+                        "fifteen minutes it was reported as timed out - long after it " +
+                        "had been delivered and read. Silence from your own devices is " +
+                        "now treated the way an error from them already was, and " +
+                        "ignored.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "Check Registration With Apple now reports the addresses Apple " +
+                        "lists for this device, not the ones its certificate carried " +
+                        "when it was issued. Apple adds a handle to a live " +
+                        "registration when the account gains one - registering your " +
+                        "phone number from another app does it - and tells the client " +
+                        "nothing, which is how this screen came to say there was no " +
+                        "phone number directly above Apple's own list showing one. " +
+                        "When the two disagree it now says so, and says to re-register.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 71,
             versionName = "0.71.0",
             date = "15 September 2026",
