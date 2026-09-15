@@ -36,6 +36,38 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 71,
+            versionName = "0.71.0",
+            date = "15 September 2026",
+            headline = "Relay was registering your Mac to Apple as an iPhone. That is why nothing sent.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "Every registration this app made described itself as an iPhone, " +
+                        "whatever machine was actually behind the relay. Nothing else " +
+                        "was guessed - the hardware model, the OS version, the build " +
+                        "and the validation data all came from the relay and all said " +
+                        "macOS. So Apple was handed a device calling itself " +
+                        "iPhone-<serial> that reported macOS in every other field. It " +
+                        "issued the certificates, listed the device, and then answered " +
+                        "every address lookup with nobody - which is exactly what " +
+                        "sending has been doing.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "The same registration claimed this device could route SMS and MMS. " +
+                        "Those are phone capabilities, over a cellular radio, and a Mac " +
+                        "has neither. Now reported honestly, which is also what a phone " +
+                        "number has to be attached to.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "Relays that really are iPhones are unaffected - that path is " +
+                        "unchanged, and it is the one this was originally written for.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 70,
             versionName = "0.70.0",
             date = "15 September 2026",
