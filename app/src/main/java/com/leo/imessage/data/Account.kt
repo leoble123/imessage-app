@@ -424,6 +424,60 @@ class AccountManager(context: Context) {
     }
 
     /**
+     * Moves to a different registration relay without signing out.
+     *
+     * The relay is what supplies validation data, and validation data is what
+     * Apple uses to decide whether this endpoint is a real machine. Everything
+     * else in the registration has been checked and matches a client known to
+     * work; the relay is the one thing that has never been varied.
+     *
+     * Deliberately not a sign-out. The Apple ID session and the device
+     * identity survive in the saved registration, so nothing here goes near
+     * the password or a verification code - which matters, because being sent
+     * back through two-factor is its own way to lose a day.
+     */
+    suspend fun switchRelay(host: String, code: String): String = withContext(Dispatchers.IO) {
+        val normalized = host.trim().let {
+            if (it.startsWith("http://") || it.startsWith("https://")) it else "http://$it"
+        }.trimEnd('/')
+        val trimmedCode = code.trim()
+        if (normalized.isBlank() || trimmedCode.isBlank()) {
+            return@withContext "Both the server and the code are needed."
+        }
+
+        try {
+            core.switchRelay(normalized, trimmedCode, null)
+        } catch (cancel: kotlinx.coroutines.CancellationException) {
+            throw cancel
+        } catch (e: Throwable) {
+            return@withContext "Couldn't switch: ${e.readable()}"
+        }
+
+        relayHost = normalized
+        relayCode = trimmedCode
+
+        try {
+            becomeReady()
+        } catch (cancel: kotlinx.coroutines.CancellationException) {
+            throw cancel
+        } catch (e: Throwable) {
+            return@withContext "Registered against the new server, but starting up " +
+                "failed: ${e.readable()}. Reopen the app."
+        }
+
+        val handles = backend?.handles().orEmpty()
+        buildString {
+            appendLine("Now registered through $normalized.")
+            if (handles.isEmpty()) {
+                append("Apple returned no addresses, so it did not take.")
+            } else {
+                appendLine("Sending from: ${handles.joinToString()}")
+                append("Try a message, then run Check Registration With Apple.")
+            }
+        }
+    }
+
+    /**
      * Asks Apple which devices it currently has registered on this account,
      * and says whether this phone is one of them.
      *

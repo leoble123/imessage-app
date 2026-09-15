@@ -64,6 +64,8 @@ fun AppRoot(
     onReRegister: (suspend () -> String)? = null,
     /** Asks Apple which devices it has registered on this account. */
     onRegistrationStatus: (suspend () -> String)? = null,
+    /** Moves to a different registration relay, keeping the Apple ID session. */
+    onSwitchRelay: (suspend (String, String) -> String)? = null,
     /** Adds or removes the conversations that aren't real. */
     onSampleConversations: (suspend (Boolean) -> String)? = null,
     /** Places a FaceTime call. Null when there's no live account behind it. */
@@ -429,6 +431,7 @@ fun AppRoot(
                     onCheckHandle = onCheckHandle,
                     onReRegister = onReRegister,
                     onRegistrationStatus = onRegistrationStatus,
+                    onSwitchRelay = onSwitchRelay,
                     onSampleConversations = onSampleConversations,
                     onOpenReleaseNotes = { showReleaseNotes = true },
                 )

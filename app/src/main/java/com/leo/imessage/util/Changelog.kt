@@ -36,6 +36,30 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 70,
+            versionName = "0.70.0",
+            date = "15 September 2026",
+            headline = "Change the registration server without signing out.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "Settings > Change Registration Server. The server that supplies " +
+                        "validation data is what Apple uses to decide whether this is a " +
+                        "real machine, and it is the one part of the setup that has " +
+                        "never been varied while everything else was ruled out. One " +
+                        "running on genuine Apple hardware is not treated the same as " +
+                        "one running on an emulated Mac.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "Switching servers keeps you signed in. The Apple ID session and " +
+                        "the device identity live in the saved registration, so changing " +
+                        "servers no longer means a password, a verification code, or " +
+                        "another trip through two-factor.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 69,
             versionName = "0.69.0",
             date = "15 September 2026",

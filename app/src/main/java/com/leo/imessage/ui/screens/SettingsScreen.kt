@@ -65,6 +65,8 @@ fun SettingsScreen(
     onReRegister: (suspend () -> String)? = null,
     /** Asks Apple which devices it has registered on this account. */
     onRegistrationStatus: (suspend () -> String)? = null,
+    /** Moves to a different registration relay, keeping the Apple ID session. */
+    onSwitchRelay: (suspend (String, String) -> String)? = null,
     /** Adds or removes the conversations that aren't real. */
     onSampleConversations: (suspend (Boolean) -> String)? = null,
 ) {
@@ -74,6 +76,11 @@ fun SettingsScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     var editingTemplates by remember { mutableStateOf(false) }
     var checkingHandle by remember { mutableStateOf(false) }
+    // Two prompts rather than one form: the host is asked for, then the code,
+    // reusing the prompt that already exists instead of introducing a second
+    // kind of dialog for one screen.
+    var relayStep by remember { mutableStateOf(0) }
+    var pendingRelayHost by remember { mutableStateOf("") }
     var checkResult by remember { mutableStateOf<String?>(null) }
 
     // Screen-scoped, and it has to be.
@@ -558,6 +565,23 @@ fun SettingsScreen(
                     }
                     SettingsDivider()
                 }
+                if (onSwitchRelay != null) {
+                    SettingsRow(
+                        "Change Registration Server",
+                        onClick = { relayStep = 1 },
+                    )
+                    Text(
+                        "The server that supplies validation data, which is what Apple " +
+                            "uses to decide whether this is a real machine. One running " +
+                            "on genuine Apple hardware is treated differently from one " +
+                            "running on an emulated Mac. This keeps you signed in - no " +
+                            "password, no verification code.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = palette.secondaryLabel,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                    )
+                    SettingsDivider()
+                }
                 if (onRegistrationStatus != null) {
                     // Deliberately above "Re-register": this is the check that
                     // says whether re-registering is the right move at all, and
@@ -680,6 +704,43 @@ fun SettingsScreen(
             }
         }
 
+        if (relayStep == 1 && onSwitchRelay != null) {
+            com.leo.imessage.ui.components.GlassPrompt(
+                title = "Registration Server",
+                initial = account?.relay ?: settings.relayServer,
+                placeholder = "https://registration-relay.beeper.com",
+                confirmLabel = "Next",
+                onConfirm = { entered ->
+                    pendingRelayHost = entered
+                    relayStep = if (entered.isNotBlank()) 2 else 0
+                },
+                onDismiss = { if (relayStep == 1) relayStep = 0 },
+            )
+        }
+        if (relayStep == 2 && onSwitchRelay != null) {
+            com.leo.imessage.ui.components.GlassPrompt(
+                title = "Pairing Code",
+                initial = "",
+                placeholder = "The code the Mac prints",
+                confirmLabel = "Switch",
+                onConfirm = { entered ->
+                    if (entered.isNotBlank()) {
+                        checkResult = "Switching\u2026 this re-registers, give it a moment."
+                        val host = pendingRelayHost
+                        checkScope.launch {
+                            checkResult = try {
+                                onSwitchRelay(host, entered)
+                            } catch (cancel: kotlinx.coroutines.CancellationException) {
+                                throw cancel
+                            } catch (e: Throwable) {
+                                e.message ?: "That didn't run."
+                            }
+                        }
+                    }
+                },
+                onDismiss = { if (relayStep == 2) relayStep = 0 },
+            )
+        }
         if (checkingHandle && onCheckHandle != null) {
             com.leo.imessage.ui.components.GlassPrompt(
                 title = "Check iMessage Availability",
