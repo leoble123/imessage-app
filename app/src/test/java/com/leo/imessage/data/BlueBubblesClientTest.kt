@@ -73,9 +73,38 @@ class BlueBubblesClientTest {
                 }
                 val lines = head.toString().split("\r\n")
                 val (method, target) = lines[0].split(" ").let { p -> p[0] to p[1] }
+                val chunked = lines.any { l ->
+                    l.startsWith("Transfer-Encoding:", true) && l.contains("chunked", true)
+                }
                 val length = lines.firstOrNull { l -> l.startsWith("Content-Length:", true) }
                     ?.substringAfter(":")?.trim()?.toIntOrNull() ?: 0
-                val body = if (length > 0) {
+                val body = if (chunked) {
+                    // Multipart uploads are streamed, so they arrive as chunks
+                    // with no declared length - read until the terminating
+                    // zero-length chunk, as a real server does.
+                    val sb = StringBuilder()
+                    while (true) {
+                        val sizeLine = StringBuilder()
+                        while (!sizeLine.endsWith("\r\n")) {
+                            val b = input.read()
+                            if (b == -1) break
+                            sizeLine.append(b.toChar())
+                        }
+                        val size = sizeLine.toString().trim().substringBefore(';')
+                            .toIntOrNull(16) ?: 0
+                        if (size == 0) break
+                        val buf = ByteArray(size)
+                        var read = 0
+                        while (read < size) {
+                            val n = input.read(buf, read, size - read)
+                            if (n <= 0) break
+                            read += n
+                        }
+                        sb.append(String(buf, 0, read))
+                        input.read(); input.read() // trailing CRLF
+                    }
+                    sb.toString()
+                } else if (length > 0) {
                     val buf = ByteArray(length)
                     var read = 0
                     while (read < length) {
@@ -219,6 +248,29 @@ class BlueBubblesClientTest {
         } catch (e: BlueBubblesClient.ApiException) {
             assertTrue(e.message!!.contains("trycloudflare"))
         }
+    }
+
+    @Test
+    fun `an attachment is uploaded as multipart with the file's bytes`() {
+        routes["/message/attachment"] = """{"guid":"g"}"""
+        val file = java.io.File.createTempFile("relay", ".png").apply {
+            writeBytes(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47))
+            deleteOnExit()
+        }
+
+        client.sendAttachment("chat-1", "relay-1", file, "photo.png", "image/png")
+
+        val req = only()
+        assertEquals("POST", req.method)
+        assertEquals("/message/attachment", req.path)
+        // The fields the server needs, and the file part itself.
+        assertTrue(req.body.contains("name=\"chatGuid\""))
+        assertTrue(req.body.contains("chat-1"))
+        assertTrue(req.body.contains("filename=\"photo.png\""))
+        assertTrue(req.body.contains("Content-Type: image/png"))
+        // PNG's magic number, proving the bytes went with it rather than
+        // just the metadata.
+        assertTrue(req.body.contains("PNG"))
     }
 
     @Test

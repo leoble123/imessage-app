@@ -36,8 +36,8 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
-            versionCode = 74,
-            versionName = "0.74.0",
+            versionCode = 75,
+            versionName = "0.74.1",
             date = "16 September 2026",
             headline = "Relay can now run off a Mac, and never talk to Apple at all.",
             changes = listOf(
@@ -60,6 +60,13 @@ object Changelog {
                     "Bookmarks, notes, reminders, pins, polls and scheduled sends keep " +
                         "working exactly as before. They were never network features, " +
                         "so they stay local whichever way the app is connected.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Photos and videos send over a Mac connection as well as arrive. " +
+                        "The file is streamed to the server rather than read into " +
+                        "memory first, so a long video from the camera roll uploads " +
+                        "instead of running the app out of heap.",
                 ),
                 Change(
                     ChangeKind.BETTER,

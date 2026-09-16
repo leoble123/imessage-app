@@ -101,19 +101,21 @@ class BlueBubblesClient(
                 )
             }
 
-            val status = json.optInt("status", code)
-            if (code !in 200..299 || status !in 200..299) {
-                val message = json.optString("message").ifBlank { "HTTP $code" }
-                val detail = json.optJSONObject("error")?.optString("message").orEmpty()
-                throw ApiException(
-                    if (detail.isBlank()) message else "$message: $detail",
-                    status,
-                )
-            }
-            return if (json.isNull("data")) null else json.get("data")
+            return unwrap(json, code)
         } finally {
             conn.disconnect()
         }
+    }
+
+    /** The `{status, message, data}` envelope, checked and unwrapped. */
+    private fun unwrap(json: JSONObject, httpCode: Int): Any? {
+        val status = json.optInt("status", httpCode)
+        if (httpCode !in 200..299 || status !in 200..299) {
+            val message = json.optString("message").ifBlank { "HTTP $httpCode" }
+            val detail = json.optJSONObject("error")?.optString("message").orEmpty()
+            throw ApiException(if (detail.isBlank()) message else "$message: $detail", status)
+        }
+        return if (json.isNull("data")) null else json.get("data")
     }
 
     private fun getObj(path: String, query: Map<String, Any?> = emptyMap()) =
@@ -244,6 +246,79 @@ class BlueBubblesClient(
         val path = "/chat/${URLEncoder.encode(chatGuid, "UTF-8")}/typing"
         runCatching { request(if (typing) "POST" else "DELETE", path, body = JSONObject()) }
             .onFailure { Log.d(TAG, "typing indicator unavailable: ${it.message}") }
+    }
+
+    /**
+     * Sends a file.
+     *
+     * Multipart by hand, because this is the one request that isn't JSON and
+     * adding a client library for a single endpoint would cost more than the
+     * forty lines it saves. The file is streamed rather than read into memory:
+     * a video picked from the camera roll is routinely larger than the heap a
+     * phone will hand a single app.
+     */
+    fun sendAttachment(
+        chatGuid: String,
+        tempGuid: String,
+        file: java.io.File,
+        fileName: String,
+        mimeType: String,
+        timeoutMs: Int = 120_000,
+    ): JSONObject? {
+        val boundary = "----relay${System.nanoTime()}"
+        val url = URL(
+            "$apiRoot/message/attachment?password=" + URLEncoder.encode(password, "UTF-8"),
+        )
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            connectTimeout = 20_000
+            readTimeout = timeoutMs
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+            // Without this the whole file is buffered in memory before a byte
+            // is sent, which is how a large video becomes an OutOfMemoryError
+            // instead of a message.
+            setChunkedStreamingMode(64 * 1024)
+        }
+
+        try {
+            conn.outputStream.buffered().use { out ->
+                fun field(name: String, value: String) {
+                    out.write(
+                        ("--$boundary\r\n" +
+                            "Content-Disposition: form-data; name=\"$name\"\r\n\r\n" +
+                            "$value\r\n").toByteArray(),
+                    )
+                }
+                field("chatGuid", chatGuid)
+                field("tempGuid", tempGuid)
+                field("name", fileName)
+                field("method", "private-api")
+
+                out.write(
+                    ("--$boundary\r\n" +
+                        "Content-Disposition: form-data; name=\"attachment\"; " +
+                        "filename=\"$fileName\"\r\n" +
+                        "Content-Type: $mimeType\r\n\r\n").toByteArray(),
+                )
+                file.inputStream().use { it.copyTo(out) }
+                out.write("\r\n--$boundary--\r\n".toByteArray())
+            }
+
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val text = stream?.bufferedReader()?.use(BufferedReader::readText).orEmpty()
+            if (text.isBlank()) throw ApiException("The server returned nothing (HTTP $code).", code)
+            val json = try {
+                JSONObject(text)
+            } catch (e: Exception) {
+                throw ApiException("The server sent something that isn't JSON (HTTP $code).", code)
+            }
+            return unwrap(json, code) as? JSONObject
+        } finally {
+            conn.disconnect()
+        }
     }
 
     fun newChat(addresses: List<String>, message: String?): JSONObject? =

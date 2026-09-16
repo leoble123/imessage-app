@@ -38,6 +38,8 @@ class BlueBubblesBackend(
     private val client: BlueBubblesClient,
     private val store: MessageStore,
     private val contacts: Contacts? = null,
+    /** Needed to read a picked file out of its content:// URI before upload. */
+    private val context: android.content.Context? = null,
     /** How often to ask the server what's new. */
     private val pollIntervalMs: Long = 3_000L,
 ) : MessagingBackend {
@@ -246,19 +248,53 @@ class BlueBubblesBackend(
 
         try {
             withContext(Dispatchers.IO) {
-                client.sendText(
-                    chatGuid = chatId,
-                    tempGuid = tempGuid,
-                    text = text,
-                    effectId = effectId(effect),
-                    replyToGuid = replyToId,
-                )
+                // Files first, one request each - the server takes a single
+                // attachment per call - then the text, so a caption lands
+                // under its picture rather than above it.
+                uploadAll(chatId, attachments)
+                if (text.isNotBlank() || attachments.isEmpty()) {
+                    client.sendText(
+                        chatGuid = chatId,
+                        tempGuid = tempGuid,
+                        text = text,
+                        effectId = effectId(effect),
+                        replyToGuid = replyToId,
+                    )
+                }
             }
             store.updateMessage(localId) { it.copy(deliveryState = DeliveryState.SENT) }
         } catch (e: Throwable) {
             pending.remove(tempGuid)
             note("Couldn't send", e)
             store.updateMessage(localId) { it.copy(deliveryState = DeliveryState.FAILED) }
+        }
+    }
+
+    /**
+     * Uploads each picked file.
+     *
+     * Staged to a file this app owns first, the same way the other backend
+     * does it: a content:// URI from the picker is a permission grant that can
+     * be revoked the moment the picker closes, and reading it lazily during an
+     * upload that may take a minute is how a large video fails halfway.
+     */
+    private fun uploadAll(chatId: String, attachments: List<Attachment>) {
+        if (attachments.isEmpty()) return
+        val ctx = context ?: run {
+            Log.w(TAG, "no context: cannot upload ${attachments.size} attachment(s)")
+            return
+        }
+        for (attachment in attachments) {
+            val uri = attachment.uri ?: continue
+            val staged = AttachmentFiles.stage(ctx, android.net.Uri.parse(uri), attachment.id)
+                ?: continue
+            client.sendAttachment(
+                chatGuid = chatId,
+                tempGuid = "relay-${UUID.randomUUID()}",
+                file = java.io.File(staged.path),
+                fileName = staged.name,
+                mimeType = staged.mimeType,
+            )
         }
     }
 

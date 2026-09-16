@@ -274,7 +274,7 @@ class AccountManager(context: Context) {
             macServer = client.origin
             macPassword = password
 
-            val backend = BlueBubblesBackend(client, store, contacts)
+            val backend = BlueBubblesBackend(client, store, contacts, appContext)
             backend.start()
             _state.value = AccountState.Ready(backend)
 
@@ -290,7 +290,7 @@ class AccountManager(context: Context) {
         val url = macServer ?: return@withContext false
         val password = macPassword ?: return@withContext false
         val client = BlueBubblesClient(url, password)
-        val backend = BlueBubblesBackend(client, store, contacts)
+        val backend = BlueBubblesBackend(client, store, contacts, appContext)
         // Started before the ping so a Mac that is briefly asleep shows the
         // stored conversations and reconnects on its own, rather than dropping
         // the user back to a setup screen they already completed.
