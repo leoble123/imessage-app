@@ -80,6 +80,15 @@ fun SetupScreen(
     // Kept across steps so going back doesn't wipe what was already typed.
     var host by remember { mutableStateOf(account.relayHost.orEmpty()) }
     var code by remember { mutableStateOf(account.relayCode.orEmpty()) }
+
+    // The other way in: a Mac running BlueBubbles, which needs no Apple
+    // sign-in at all. Kept on the same screen rather than behind its own flow,
+    // because the choice is "how does this phone reach iMessage" and that is
+    // one decision, not two.
+    var macMode by remember { mutableStateOf(account.usingMacServer) }
+    var macUrl by remember { mutableStateOf(account.macServer.orEmpty()) }
+    var macPassword by remember { mutableStateOf(account.macPassword.orEmpty()) }
+    var macResult by remember { mutableStateOf<String?>(null) }
     // There is only one way in, and it is the relay.
     //
     // A "use my Mac's hardware instead" option lived here and could never have
@@ -151,7 +160,50 @@ fun SetupScreen(
                 label = "setup-step",
             ) { _ ->
                 when (state) {
-                    AccountState.NeedsRelay -> Step(
+                    AccountState.NeedsRelay -> if (macMode) Step(
+                        title = "Connect to your Mac",
+                        detail = "Enter the address and password from BlueBubbles Server " +
+                            "on your Mac. The Mac does the talking to Apple, so there's " +
+                            "no sign-in, no registration, and nothing for Apple to refuse.",
+                        action = "Connect",
+                        busy = busy,
+                        enabled = macUrl.isNotBlank() && macPassword.isNotBlank(),
+                        onAction = {
+                            run { macResult = account.connectToMacServer(macUrl, macPassword) }
+                        },
+                    ) {
+                        Field(
+                            value = macUrl,
+                            onValueChange = { macUrl = it },
+                            placeholder = "https://your-server.trycloudflare.com",
+                            keyboard = KeyboardType.Uri,
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Field(
+                            value = macPassword,
+                            onValueChange = { macPassword = it },
+                            placeholder = "Server password",
+                        )
+                        macResult?.let {
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                it,
+                                color = palette.secondaryLabel,
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            "Use a registration server instead",
+                            color = palette.secondaryLabel,
+                            fontSize = 14.sp,
+                            modifier = Modifier.clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { macMode = false; macResult = null },
+                        )
+                    } else Step(
                         title = "Connect your server",
                         detail = "Enter the address of your registration server and the " +
                             "pairing code it printed. This is what lets the app " +
@@ -174,6 +226,16 @@ fun SetupScreen(
                             placeholder = "Pairing code",
                         )
                         Spacer(Modifier.height(16.dp))
+                        Text(
+                            "I have a Mac running BlueBubbles",
+                            color = palette.accent,
+                            fontSize = 14.sp,
+                            modifier = Modifier.clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { macMode = true },
+                        )
+                        Spacer(Modifier.height(12.dp))
                         Text(
                             "Look around with sample data",
                             color = palette.secondaryLabel,

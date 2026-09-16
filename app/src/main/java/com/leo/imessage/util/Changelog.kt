@@ -36,6 +36,41 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 74,
+            versionName = "0.74.0",
+            date = "16 September 2026",
+            headline = "Relay can now run off a Mac, and never talk to Apple at all.",
+            changes = listOf(
+                Change(
+                    ChangeKind.NEW,
+                    "Connect to a Mac running BlueBubbles Server. On the sign-in " +
+                        "screen, \"I have a Mac running BlueBubbles\" takes an address " +
+                        "and a password instead of a registration server.",
+                ),
+                Change(
+                    ChangeKind.NEW,
+                    "Nothing on this route registers with Apple. The Mac is already a " +
+                        "real iMessage client and this drives it, so there is no " +
+                        "sign-in, no validation data, no device identity, and nothing " +
+                        "that can be rate limited, refused, or de-registered. Every " +
+                        "wall the last week ran into simply isn't on this path.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "Bookmarks, notes, reminders, pins, polls and scheduled sends keep " +
+                        "working exactly as before. They were never network features, " +
+                        "so they stay local whichever way the app is connected.",
+                ),
+                Change(
+                    ChangeKind.BETTER,
+                    "A server address that has stopped working says so in words. The " +
+                        "temporary trycloudflare.com addresses expire every time the " +
+                        "Mac restarts, and an expired one used to surface as an " +
+                        "unreadable parser error.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 73,
             versionName = "0.73.0",
             date = "16 September 2026",

@@ -120,7 +120,11 @@ class AccountManager(context: Context) {
     private val _state = MutableStateFlow<AccountState>(
         // Anything saved means resume() is about to run, so start quiet rather
         // than showing a sign-in form that is about to disappear.
-        if (relayHost.isNullOrBlank()) AccountState.NeedsRelay else AccountState.Restoring
+        if (relayHost.isNullOrBlank() && prefs.getString(KEY_MAC_URL, null).isNullOrBlank()) {
+            AccountState.NeedsRelay
+        } else {
+            AccountState.Restoring
+        }
     )
     val state: StateFlow<AccountState> = _state.asStateFlow()
 
@@ -167,6 +171,13 @@ class AccountManager(context: Context) {
             Log.w(TAG, "discarding saved Mac hardware: that route cannot work from here")
             hardwareBlob = null
         }
+
+        // A Mac server wins when one is configured. It needs no sign-in and no
+        // registration, so there is nothing to restore and nothing to fail -
+        // which is also why it is checked before the Apple path rather than
+        // after it.
+        if (usingMacServer && resumeMacServer()) return@withContext true
+
         val host = relayHost
         val code = relayCode
         if (host.isNullOrBlank() || code.isNullOrBlank()) {
@@ -217,6 +228,85 @@ class AccountManager(context: Context) {
     }
 
     /** Step one: point at the relay. */
+    // --- Mac server (BlueBubbles) ---------------------------------------
+
+    var macServer: String?
+        get() = prefs.getString(KEY_MAC_URL, null)
+        private set(value) = prefs.edit().putString(KEY_MAC_URL, value).apply()
+
+    /**
+     * The server password.
+     *
+     * Kept beside the address in the same preferences, for the same reason the
+     * relay code is: it is the credential for a machine the user owns, the app
+     * has to reconnect with it unattended after a restart, and it grants
+     * nothing on the Apple ID itself.
+     */
+    var macPassword: String?
+        get() = prefs.getString(KEY_MAC_PASSWORD, null)
+        private set(value) = prefs.edit().putString(KEY_MAC_PASSWORD, value).apply()
+
+    /** True when this install is pointed at a Mac rather than at Apple. */
+    val usingMacServer: Boolean get() = !macServer.isNullOrBlank()
+
+    /**
+     * Connects to a BlueBubbles server instead of registering with Apple.
+     *
+     * A completely different route to the same screen. The rustpush path makes
+     * this phone an iMessage device, which needs Apple's blessing and the
+     * validation data that proves the hardware is real. This one points at a
+     * Mac that is already a legitimate client and drives it - so there is
+     * nothing here for Apple to accept, refuse, rate limit, or de-register.
+     */
+    suspend fun connectToMacServer(url: String, password: String): String =
+        withContext(Dispatchers.IO) {
+            if (url.isBlank() || password.isBlank()) {
+                return@withContext "Both the address and the password are needed."
+            }
+
+            val client = BlueBubblesClient(url, password)
+            if (!client.ping()) {
+                return@withContext "Couldn't reach ${client.origin}. Check the Mac is awake, " +
+                    "the server is running, and the address is current - if it ends in " +
+                    "trycloudflare.com it changes every time the server restarts."
+            }
+
+            macServer = client.origin
+            macPassword = password
+
+            val backend = BlueBubblesBackend(client, store, contacts)
+            backend.start()
+            _state.value = AccountState.Ready(backend)
+
+            val name = runCatching { client.serverInfo()?.optString("os_version") }.getOrNull()
+            buildString {
+                append("Connected to ${client.origin}.")
+                if (!name.isNullOrBlank()) append(" Running macOS $name.")
+            }
+        }
+
+    /** Reconnects to a saved Mac server on launch. Returns true if it took. */
+    private suspend fun resumeMacServer(): Boolean = withContext(Dispatchers.IO) {
+        val url = macServer ?: return@withContext false
+        val password = macPassword ?: return@withContext false
+        val client = BlueBubblesClient(url, password)
+        val backend = BlueBubblesBackend(client, store, contacts)
+        // Started before the ping so a Mac that is briefly asleep shows the
+        // stored conversations and reconnects on its own, rather than dropping
+        // the user back to a setup screen they already completed.
+        backend.start()
+        _state.value = AccountState.Ready(backend)
+        true
+    }
+
+    /** Forgets the Mac server, without touching any Apple sign-in. */
+    fun disconnectMacServer() {
+        (_state.value as? AccountState.Ready)?.backend
+            ?.let { it as? BlueBubblesBackend }?.stop()
+        prefs.edit().remove(KEY_MAC_URL).remove(KEY_MAC_PASSWORD).apply()
+        _state.value = AccountState.NeedsRelay
+    }
+
     suspend fun configureRelay(host: String, code: String) = withContext(Dispatchers.IO) {
         val normalized = host.trim().let {
             // A bare host is the common thing to type; without a scheme the
@@ -773,6 +863,8 @@ class AccountManager(context: Context) {
     private companion object {
         const val TAG = "AccountManager"
         const val KEY_HOST = "relay_host"
+        const val KEY_MAC_URL = "mac_server_url"
+        const val KEY_MAC_PASSWORD = "mac_server_password"
         const val KEY_LAST_REREGISTER = "last_reregister"
         /** Apple's rate limits are measured in hours, so this is generous. */
         const val REREGISTER_INTERVAL_MS = 24 * 60 * 60 * 1000L
