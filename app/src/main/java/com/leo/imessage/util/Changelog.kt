@@ -36,6 +36,31 @@ object Changelog {
 
     val releases: List<Release> = listOf(
         Release(
+            versionCode = 73,
+            versionName = "0.73.0",
+            date = "16 September 2026",
+            headline = "Export Diagnostics was burying the thing it was exported to show.",
+            changes = listOf(
+                Change(
+                    ChangeKind.FIXED,
+                    "The export asked Apple for the device list and then read the " +
+                        "log, so the log it captured was that question being asked and " +
+                        "answered - every registration on the account with its full " +
+                        "contents - and the failed send it was meant to explain had " +
+                        "already scrolled out of the window. The log is now read first.",
+                ),
+                Change(
+                    ChangeKind.FIXED,
+                    "One very long line can no longer eat the whole report. Some of " +
+                        "these run to tens of thousands of characters on a single line, " +
+                        "and the export keeps the last so many characters, so a few of " +
+                        "them crowded out the hundreds of short lines that say what " +
+                        "actually happened. Each line is now capped, keeping every " +
+                        "header of a request and discarding the payload.",
+                ),
+            ),
+        ),
+        Release(
             versionCode = 72,
             versionName = "0.72.0",
             date = "15 September 2026",

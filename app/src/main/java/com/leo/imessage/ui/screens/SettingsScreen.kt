@@ -649,6 +649,18 @@ fun SettingsScreen(
                         // export asks before it writes rather than leaving it
                         // to be run separately and pasted in by hand.
                         checkScope.launch {
+                            // The log is read first, and that ordering is the
+                            // whole point.
+                            //
+                            // Asking Apple for the device list logs the reply,
+                            // and the reply is every registration on the
+                            // account with its full client-data - tens of
+                            // kilobytes on a single line, several times over.
+                            // Reading the log afterwards meant the export was
+                            // nothing but that dump: the one send it was
+                            // captured to explain had been pushed out of the
+                            // window by the diagnostic asking about it.
+                            val log = recentCoreLog()
                             val registration = onRegistrationStatus?.let {
                                 try {
                                     it()
@@ -658,7 +670,7 @@ fun SettingsScreen(
                                     "Couldn't ask Apple: ${e.message ?: e::class.java.simpleName}"
                                 }
                             }
-                            shareDiagnostics(context, settings, account, registration)
+                            shareDiagnostics(context, settings, account, registration, log)
                         }
                     },
                 )
@@ -803,6 +815,7 @@ private fun shareDiagnostics(
     settings: com.leo.imessage.ui.theme.AppSettings,
     account: AccountSummary?,
     registration: String?,
+    log: String,
 ) {
     val report = buildString {
         appendLine("Relay diagnostics")
@@ -829,7 +842,7 @@ private fun shareDiagnostics(
             appendLine()
         }
         appendLine("--- protocol log ---")
-        append(recentCoreLog())
+        append(log)
     }
     // As a file, not as an intent extra.
     //
@@ -891,6 +904,20 @@ private fun recentCoreLog(): String = runCatching {
     ).redirectErrorStream(true).start()
     val text = process.inputStream.bufferedReader().use { it.readText() }
     process.waitFor()
-    if (text.isBlank()) "(nothing logged yet - try the action that fails, then export again)"
-    else text.takeLast(200_000)
+    // Truncate per line before truncating the whole thing.
+    //
+    // A few of these lines are enormous - a registration dump or a key
+    // blob runs to tens of kilobytes on one line - and the tail is taken in
+    // characters, so a handful of them can be the entire export while the
+    // hundreds of short lines that actually say what happened fall off the
+    // front. 1500 characters keeps every header of a signed request,
+    // x-id-self-uri included, and throws away the payload nobody reads.
+    if (text.isBlank()) {
+        "(nothing logged yet - try the action that fails, then export again)"
+    } else {
+        text.lineSequence()
+            .map { if (it.length > 1500) it.take(1500) + " …[truncated]" else it }
+            .joinToString("\n")
+            .takeLast(200_000)
+    }
 }.getOrElse { "(couldn't read the log: ${it.message})" }
