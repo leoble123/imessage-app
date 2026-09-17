@@ -1,7 +1,9 @@
 package com.leo.imessage.data
 
+import android.util.Base64
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -80,5 +82,73 @@ class QrSetupCodeTest {
     fun `pipe with nothing after it is rejected`() {
         assertNull(QrSetupCode.parse("host|"))
         assertNull(QrSetupCode.parse("|code"))
+    }
+
+    // --- relay tokens ---------------------------------------------------
+
+    @Test
+    fun `relay object carries a token when there is one`() {
+        val payload = QrSetupCode.parse("""{"host":"h.example","code":"abc","token":"tok"}""")
+        assertEquals(QrSetupPayload.Relay("h.example", "abc", "tok"), payload)
+    }
+
+    @Test
+    fun `host pipe code pipe token is read as a relay with a token`() {
+        val payload = QrSetupCode.parse("h.example|abc|tok")
+        assertEquals(QrSetupPayload.Relay("h.example", "abc", "tok"), payload)
+    }
+
+    @Test
+    fun `a relay without a token has none`() {
+        assertEquals(QrSetupPayload.Relay("h.example", "abc", null), QrSetupCode.parse("h.example|abc"))
+    }
+
+    // --- OpenAbsinthe hardware exports ----------------------------------
+
+    /** The header a real export carries: the tag, then the shared flag. */
+    private fun oabsBlob(): ByteArray =
+        "OABS".toByteArray() + byteArrayOf(0) + ByteArray(40) { it.toByte() }
+
+    @Test
+    fun `a pasted base64 hardware export is recognised`() {
+        val base64 = Base64.encodeToString(oabsBlob(), Base64.NO_WRAP)
+        assertEquals(QrSetupPayload.MacHardware(base64), QrSetupCode.parse(base64))
+    }
+
+    @Test
+    fun `a pasted export survives the line breaks a copy leaves in`() {
+        val base64 = Base64.encodeToString(oabsBlob(), Base64.NO_WRAP)
+        val wrapped = base64.chunked(20).joinToString("\n  ")
+        assertEquals(QrSetupPayload.MacHardware(base64), QrSetupCode.parse(wrapped))
+    }
+
+    /**
+     * The case that made the scanner look broken: an export's QR carries raw
+     * bytes, so ML Kit hands back a null text value and only the bytes.
+     */
+    @Test
+    fun `a scanned hardware export is read from the bytes alone`() {
+        val payload = QrSetupCode.parseScan(text = null, bytes = oabsBlob())
+        assertTrue(payload is QrSetupPayload.MacHardware)
+        val decoded = Base64.decode((payload as QrSetupPayload.MacHardware).base64, Base64.DEFAULT)
+        assertTrue(decoded.contentEquals(oabsBlob()))
+    }
+
+    @Test
+    fun `a scanned text code still parses as text`() {
+        val payload = QrSetupCode.parseScan(text = "h.example|abc", bytes = "h.example|abc".toByteArray())
+        assertEquals(QrSetupPayload.Relay("h.example", "abc", null), payload)
+    }
+
+    @Test
+    fun `a scan with nothing in it is rejected`() {
+        assertNull(QrSetupCode.parseScan(text = null, bytes = null))
+        assertNull(QrSetupCode.parseScan(text = "", bytes = null))
+    }
+
+    @Test
+    fun `base64 that isn't an export is rejected`() {
+        val notOabs = Base64.encodeToString("hello there, world".toByteArray(), Base64.NO_WRAP)
+        assertNull(QrSetupCode.parse(notOabs))
     }
 }

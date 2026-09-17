@@ -2,9 +2,12 @@ package com.leo.imessage.ui.setup
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
@@ -62,10 +65,14 @@ import java.util.concurrent.atomic.AtomicBoolean
  * of them. [onResult] fires at most once - a scan is a single decision, and
  * the caller (not this screen) owns what happens with it, including undoing
  * that decision by reopening the scanner on failure.
+ *
+ * It reports the text and the bytes separately because a QR code carrying
+ * binary - an OpenAbsinthe hardware export is one - has no text form at all,
+ * and ML Kit hands back a null value for it rather than an error.
  */
 @Composable
 fun QrScannerScreen(
-    onResult: (String) -> Unit,
+    onResult: (text: String?, bytes: ByteArray?) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -203,7 +210,7 @@ private fun ScanTargetCorners() {
  * the callback twice from two frames decoded microseconds apart.
  */
 @Composable
-private fun CameraPreview(onResult: (String) -> Unit) {
+private fun CameraPreview(onResult: (String?, ByteArray?) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val currentOnResult = rememberUpdatedState(onResult)
@@ -241,6 +248,22 @@ private fun CameraPreview(onResult: (String) -> Unit) {
                     // use for a backlog, and processing stale frames is what
                     // makes a scanner feel laggy under a slow decode.
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    // Analysis defaults to 640x480, which is fine for a URL
+                    // and not fine for a hardware export: several hundred
+                    // bytes puts the QR up around version 30, and at 480 lines
+                    // its modules are under a pixel each. The camera simply
+                    // never resolves it, which reads as a scanner that ignores
+                    // the code rather than one that can't see it.
+                    .setResolutionSelector(
+                        ResolutionSelector.Builder()
+                            .setResolutionStrategy(
+                                ResolutionStrategy(
+                                    Size(1280, 720),
+                                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
+                                )
+                            )
+                            .build()
+                    )
                     .build()
 
                 analysis.setAnalyzer(analysisExecutor) { imageProxy ->
@@ -255,10 +278,18 @@ private fun CameraPreview(onResult: (String) -> Unit) {
                     )
                     scanner.process(input)
                         .addOnSuccessListener { barcodes ->
-                            val value = barcodes.firstOrNull()?.rawValue
-                            if (value != null && !handled.getAndSet(true)) {
+                            val found = barcodes.firstOrNull()
+                            // Both forms, because a binary payload has only
+                            // the second one: rawValue is null whenever the
+                            // code isn't valid UTF-8, which is every hardware
+                            // export, and reading only it is a scanner that
+                            // stares straight through the code it was opened
+                            // for.
+                            val text = found?.rawValue
+                            val bytes = found?.rawBytes
+                            if ((text != null || bytes != null) && !handled.getAndSet(true)) {
                                 provider.unbindAll()
-                                currentOnResult.value(value)
+                                currentOnResult.value(text, bytes)
                             }
                         }
                         .addOnCompleteListener { imageProxy.close() }

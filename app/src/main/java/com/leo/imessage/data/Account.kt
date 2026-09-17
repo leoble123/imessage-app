@@ -137,6 +137,18 @@ class AccountManager(context: Context) {
         private set(value) = prefs.edit().putString(KEY_CODE, value).apply()
 
     /**
+     * The access token a public relay wants, when there is one.
+     *
+     * Beeper's registration relay authenticates the caller with a token on top
+     * of the pairing code; a self-hosted one takes the code alone. Kept beside
+     * the other two because it is the same kind of thing - the address of a
+     * service that vends validation data, not anything on the Apple ID.
+     */
+    var relayToken: String?
+        get() = prefs.getString(KEY_TOKEN, null)
+        private set(value) = prefs.edit().putString(KEY_TOKEN, value).apply()
+
+    /**
      * Exported Mac hardware, base64, when signing in as a real machine.
      *
      * Takes precedence over the relay when both are set. A relay manufactures
@@ -185,7 +197,7 @@ class AccountManager(context: Context) {
             return@withContext false
         }
         try {
-            core.configureRelay(host, code, null)
+            core.configureRelay(host, code, relayToken)
             if (!core.isRegistered()) {
                 _state.value = AccountState.NeedsSignIn
                 return@withContext false
@@ -307,17 +319,23 @@ class AccountManager(context: Context) {
         _state.value = AccountState.NeedsRelay
     }
 
-    suspend fun configureRelay(host: String, code: String) = withContext(Dispatchers.IO) {
+    suspend fun configureRelay(
+        host: String,
+        code: String,
+        token: String? = null,
+    ) = withContext(Dispatchers.IO) {
         val normalized = host.trim().let {
             // A bare host is the common thing to type; without a scheme the
             // request fails with a URL parse error that explains nothing.
             if (it.startsWith("http://") || it.startsWith("https://")) it else "http://$it"
         }.trimEnd('/')
+        val cleanToken = token?.trim()?.takeIf { it.isNotEmpty() }
 
         try {
-            core.configureRelay(normalized, code.trim(), null)
+            core.configureRelay(normalized, code.trim(), cleanToken)
             relayHost = normalized
             relayCode = code.trim()
+            relayToken = cleanToken
             if (core.isRegistered()) becomeReady()
             else _state.value = AccountState.NeedsSignIn
         } catch (e: Throwable) {
@@ -334,7 +352,7 @@ class AccountManager(context: Context) {
      * validation produces.
      */
     suspend fun configureHardware(base64: String) = withContext(Dispatchers.IO) {
-        val cleaned = base64.trim().replace("\n", "").replace(" ", "")
+        val cleaned = base64.filterNot(Char::isWhitespace)
         val bytes = try {
             android.util.Base64.decode(cleaned, android.util.Base64.DEFAULT)
         } catch (e: Throwable) {
@@ -344,13 +362,43 @@ class AccountManager(context: Context) {
             )
             return@withContext
         }
+
+        // Read before it is refused, so the refusal can name the machine the
+        // export came from. Otherwise "this route is closed" and "you pasted
+        // half of it" produce the same screen, and they have nothing in common
+        // to do about them.
+        val describes = runCatching { uniffi.imessage_core.describeHardware(bytes) }.getOrNull()
+
         try {
             core.configureHardware(bytes)
             hardwareBlob = cleaned
             if (core.isRegistered()) becomeReady()
             else _state.value = AccountState.NeedsSignIn
         } catch (e: Throwable) {
-            _state.value = AccountState.Failed(e.readable(), AccountState.NeedsRelay)
+            _state.value = AccountState.Failed(
+                buildString {
+                    if (describes != null) {
+                        appendLine(
+                            "That export read fine - it's a ${describes.model} " +
+                                "running macOS ${describes.osVersion}."
+                        )
+                        appendLine()
+                    }
+                    appendLine(e.readable())
+                    // A refusal that doesn't say what would work is a dead end,
+                    // and this one has two ways out that need the same Mac the
+                    // export came from.
+                    if (describes != null) {
+                        appendLine()
+                        append(
+                            "That Mac can still get you in: run BlueBubbles Server " +
+                                "on it and connect to that, or run a registration " +
+                                "relay on it and enter its address and code here."
+                        )
+                    }
+                },
+                AccountState.NeedsRelay,
+            )
         }
     }
 
@@ -869,6 +917,7 @@ class AccountManager(context: Context) {
         /** Apple's rate limits are measured in hours, so this is generous. */
         const val REREGISTER_INTERVAL_MS = 24 * 60 * 60 * 1000L
         const val KEY_CODE = "relay_code"
+        const val KEY_TOKEN = "relay_token"
         const val KEY_HARDWARE = "hardware_blob"
     }
 }

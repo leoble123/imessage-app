@@ -107,21 +107,44 @@ for the preview and frame delivery, ML Kit for the decode, restricted to the
 QR format only; it stops itself after the first successful decode rather than
 continuing to scan.
 
-What the decoded text has to look like (`QrSetupCode.kt`) is one of:
+**Paste a code instead** sits beside it and takes the same formats as text,
+for when a code won't scan - a dense export on a dim screen is the usual
+reason.
+
+What a code can be (`QrSetupCode.kt`):
 
 - **A BlueBubbles server's own QR** - `["password","https://host"]`, the same
   two-element JSON array the upstream OpenBubbles app's server-connection QR
   already encodes. A BlueBubbles/OpenBubbles server's existing QR code works
   here unchanged; nothing new has to be generated for it.
-- **This fork's relay pairing code** - `{"host":"...","code":"..."}` (a few
-  key aliases are accepted: `relayHost`/`relay_host`, `pairingCode`/
-  `pairing_code`), or a **plain fallback** `host|code`, for a relay operator
-  with no JSON tooling on hand - e.g. `qrencode "150.136.167.146:5005|abc123"`
-  against whatever pairing code the relay printed.
+- **A relay** - `{"host":"...","code":"...","token":"..."}` (`token` optional,
+  and `relayHost`/`relay_host`, `pairingCode`/`pairing_code` accepted as
+  aliases), or the **plain fallback** `host|code` / `host|code|token` for an
+  operator with no JSON tooling on hand - e.g.
+  `qrencode "150.136.167.146:5005|abc123"`. The token is what a *public* relay
+  (Beeper's) authenticates with on top of the pairing code; a self-hosted
+  relay takes the code alone, which is why the field is marked optional.
+- **An OpenAbsinthe hardware export** - the `OABS` blob OpenBubbles' Mac
+  exporter produces, base64 when pasted and raw bytes when scanned.
 
-Either shape is fed straight into the same `AccountManager.connectToMacServer`
-/ `configureRelay` calls the manual fields use - the QR path is a faster way
-to fill in the same setup, not a second one. A code the parser doesn't
-recognize shows an inline error and leaves the manual fields available rather
-than getting stuck. The decoded payload is never logged: it's a server
-password or a pairing code either way.
+That last one is **recognised but refused**, and deliberately so. A hardware
+config has to generate its own validation data for every registration, and
+that work lives in `open-absinthe`'s `ValidationCtx`, whose `new`,
+`key_establishment` and `sign` are all `todo!()` in the public tree (with
+`HardwareConfig::from_validation_data` panicking outright). Nobody computes
+NAC on the phone from public code - the shipping clients that do it carry
+Apple's own, which is not something this repo will reproduce. So the app reads
+the export, says which Mac it describes (`describe_hardware` in the core
+parses it without touching the network), and explains that the same Mac can
+still get you in by running either BlueBubbles Server or a registration relay.
+Reading it and saying why beats a scan that silently does nothing, which is
+what reading only ML Kit's text value produced - an export's QR is binary, so
+`rawValue` is null for it and only `rawBytes` has anything in it.
+
+Everything that isn't refused feeds straight into the same
+`AccountManager.connectToMacServer` / `configureRelay` calls the manual fields
+use - the QR and paste paths are faster ways to fill in the same setup, not a
+second one. A code the parser doesn't recognise shows an inline error and
+leaves manual entry available rather than getting stuck. Nothing decoded is
+ever logged: it's a server password, a pairing code or a machine's identity,
+whichever shape it arrived in.

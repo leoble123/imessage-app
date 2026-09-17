@@ -1857,6 +1857,31 @@ fn parse_hardware(encoded: &[u8], udid: String) -> Result<MacOSConfig, CoreError
     })
 }
 
+/// What an exported hardware blob turned out to describe.
+#[derive(uniffi::Record)]
+pub struct HardwareSummary {
+    /// Apple's model identifier, e.g. `MacBookPro18,3`.
+    pub model: String,
+    /// The macOS version the export was taken on.
+    pub os_version: String,
+}
+
+/// Reads an exported OpenAbsinthe blob and says which machine it describes.
+///
+/// Parsing only - no registration, no network - and deliberately separate
+/// from [`ImessageCore::configure_hardware`], which refuses one of these.
+/// Being told which Mac the export came from is what separates "I pasted it
+/// wrong" from "this route is closed", and those have completely different
+/// fixes; without it a refusal looks like the blob was never read.
+#[uniffi::export]
+pub fn describe_hardware(encoded: Vec<u8>) -> Result<HardwareSummary, CoreError> {
+    let config = parse_hardware(encoded.as_slice(), String::new())?;
+    Ok(HardwareSummary {
+        model: config.inner.product_name,
+        os_version: config.version,
+    })
+}
+
 /// One run of a message body: ordinary text, or somebody's name as a mention.
 #[derive(uniffi::Record)]
 pub struct TextRun {

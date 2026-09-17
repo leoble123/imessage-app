@@ -859,6 +859,8 @@ internal open class UniffiVTableCallbackInterfaceEventListener(
 
 
 
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -973,6 +975,8 @@ internal interface UniffiLib : Library {
     ): Long
     fun uniffi_imessage_core_fn_method_imessagecore_validate_targets(`ptr`: Pointer,`handles`: RustBuffer.ByValue,`sender`: RustBuffer.ByValue,
     ): Long
+    fun uniffi_imessage_core_fn_func_describe_hardware(`encoded`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_imessage_core_fn_func_probe_relay(`host`: RustBuffer.ByValue,`code`: RustBuffer.ByValue,`token`: RustBuffer.ByValue,
     ): Long
     fun ffi_imessage_core_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1087,6 +1091,8 @@ internal interface UniffiLib : Library {
     ): Unit
     fun ffi_imessage_core_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    fun uniffi_imessage_core_checksum_func_describe_hardware(
+    ): Short
     fun uniffi_imessage_core_checksum_func_probe_relay(
     ): Short
     fun uniffi_imessage_core_checksum_method_eventlistener_on_event(
@@ -1190,6 +1196,9 @@ private fun uniffiCheckContractApiVersion(lib: UniffiLib) {
 
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: UniffiLib) {
+    if (lib.uniffi_imessage_core_checksum_func_describe_hardware() != 40880.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_imessage_core_checksum_func_probe_relay() != 65242.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -3749,6 +3758,47 @@ public object FfiConverterTypeHandles: FfiConverterRustBuffer<Handles> {
 
 
 /**
+ * What an exported hardware blob turned out to describe.
+ */
+data class HardwareSummary (
+    /**
+     * Apple's model identifier, e.g. `MacBookPro18,3`.
+     */
+    var `model`: kotlin.String, 
+    /**
+     * The macOS version the export was taken on.
+     */
+    var `osVersion`: kotlin.String
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeHardwareSummary: FfiConverterRustBuffer<HardwareSummary> {
+    override fun read(buf: ByteBuffer): HardwareSummary {
+        return HardwareSummary(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: HardwareSummary) = (
+            FfiConverterString.allocationSize(value.`model`) +
+            FfiConverterString.allocationSize(value.`osVersion`)
+    )
+
+    override fun write(value: HardwareSummary, buf: ByteBuffer) {
+            FfiConverterString.write(value.`model`, buf)
+            FfiConverterString.write(value.`osVersion`, buf)
+    }
+}
+
+
+
+/**
  * A single event from the push connection, addressed to a conversation.
  */
 data class IncomingEvent (
@@ -5097,6 +5147,25 @@ public object FfiConverterSequenceTypeTextRun: FfiConverterRustBuffer<List<TextR
 
 
 
+
+        /**
+         * Reads an exported OpenAbsinthe blob and says which machine it describes.
+         *
+         * Parsing only - no registration, no network - and deliberately separate
+         * from [`ImessageCore::configure_hardware`], which refuses one of these.
+         * Being told which Mac the export came from is what separates "I pasted it
+         * wrong" from "this route is closed", and those have completely different
+         * fixes; without it a refusal looks like the blob was never read.
+         */
+    @Throws(CoreException::class) fun `describeHardware`(`encoded`: kotlin.ByteArray): HardwareSummary {
+            return FfiConverterTypeHardwareSummary.lift(
+    uniffiRustCallWithError(CoreException) { _status ->
+    UniffiLib.INSTANCE.uniffi_imessage_core_fn_func_describe_hardware(
+        FfiConverterByteArray.lower(`encoded`),_status)
+}
+    )
+    }
+    
 
         /**
          * Fetches the OS versions a relay reports. Useful on its own as a connectivity

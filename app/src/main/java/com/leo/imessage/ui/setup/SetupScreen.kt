@@ -65,6 +65,9 @@ import com.leo.imessage.ui.components.scaleFrom
 import com.leo.imessage.ui.theme.LocalPalette
 import kotlinx.coroutines.launch
 
+/** Which way into iMessage the first step is currently offering. */
+private enum class SetupWay { RELAY, MAC, PASTE }
+
 /**
  * The setup flow: relay, Apple ID, second factor.
  *
@@ -87,22 +90,20 @@ fun SetupScreen(
     // Kept across steps so going back doesn't wipe what was already typed.
     var host by remember { mutableStateOf(account.relayHost.orEmpty()) }
     var code by remember { mutableStateOf(account.relayCode.orEmpty()) }
+    var token by remember { mutableStateOf(account.relayToken.orEmpty()) }
 
-    // The other way in: a Mac running BlueBubbles, which needs no Apple
-    // sign-in at all. Kept on the same screen rather than behind its own flow,
-    // because the choice is "how does this phone reach iMessage" and that is
-    // one decision, not two.
-    var macMode by remember { mutableStateOf(account.usingMacServer) }
+    // Which of the ways in this screen is currently showing. The choice is
+    // "how does this phone reach iMessage", which is one decision rather than
+    // three separate flows.
+    var way by remember {
+        mutableStateOf(if (account.usingMacServer) SetupWay.MAC else SetupWay.RELAY)
+    }
     var macUrl by remember { mutableStateOf(account.macServer.orEmpty()) }
     var macPassword by remember { mutableStateOf(account.macPassword.orEmpty()) }
     var macResult by remember { mutableStateOf<String?>(null) }
-    // There is only one way in, and it is the relay.
-    //
-    // A "use my Mac's hardware instead" option lived here and could never have
-    // worked: validation data is computed by Apple's own code, which is what a
-    // relay runs, and the crate that would otherwise do it on-device is a stub
-    // that panics. Leaving the option up meant a setup screen offering a route
-    // that ends in a crash.
+    // Whatever was pasted into the code box: a server QR's contents, a relay's
+    // details, or a hardware export.
+    var pasted by remember { mutableStateOf("") }
     // Numbers Apple says it can text, once asked. Empty until then - there is
     // nothing to show before the question has been put to it.
     var smsNumbers by remember { mutableStateOf<List<Pair<UInt, String>>>(emptyList()) }
@@ -138,29 +139,45 @@ fun SetupScreen(
         scanError = null
         when (payload) {
             is QrSetupPayload.MacServer -> {
-                macMode = true
+                way = SetupWay.MAC
                 macUrl = payload.url
                 macPassword = payload.password
                 run { macResult = account.connectToMacServer(payload.url, payload.password) }
             }
             is QrSetupPayload.Relay -> {
-                macMode = false
+                way = SetupWay.RELAY
                 host = payload.host
                 code = payload.code
-                run { account.configureRelay(payload.host, payload.code) }
+                payload.token?.let { token = it }
+                run { account.configureRelay(payload.host, payload.code, payload.token ?: token) }
             }
+            // Refused by the core, with the reason - see
+            // AccountManager.configureHardware. Sent there rather than turned
+            // away here so the answer comes from the code that actually knows,
+            // and names the Mac the export describes.
+            is QrSetupPayload.MacHardware -> run { account.configureHardware(payload.base64) }
         }
     }
 
-    fun handleScanResult(raw: String) {
+    // Never logged, in either of these: what arrives is a server password, a
+    // pairing code or a machine's identity, whichever shape it came in.
+    fun handleScanResult(text: String?, bytes: ByteArray?) {
         showScanner = false
-        // Never logged: this is exactly the pairing code / server password
-        // the QR encodes, which is the one thing this screen must not write
-        // anywhere but into the account it configures.
-        val payload = QrSetupCode.parse(raw)
+        val payload = QrSetupCode.parseScan(text, bytes)
         if (payload == null) {
             scanError = "That QR code isn't a setup code this app recognizes. " +
-                "Try again, or enter the details below."
+                "Try again, or paste the code instead."
+        } else {
+            applyScannedPayload(payload)
+        }
+    }
+
+    fun handlePastedCode(raw: String) {
+        val payload = QrSetupCode.parse(raw)
+        if (payload == null) {
+            scanError = "That isn't a setup code this app recognizes. It takes a " +
+                "server QR's contents, a relay as host|code, or a Mac hardware " +
+                "export beginning with OABS."
         } else {
             applyScannedPayload(payload)
         }
@@ -205,7 +222,15 @@ fun SetupScreen(
                         textAlign = TextAlign.Center,
                     )
                 }
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(14.dp))
+                // The way out when a code won't scan - a dense hardware export
+                // on a dim screen is the usual reason - without having to find
+                // it inside whichever form happens to be showing.
+                Link("Paste the code instead", palette.accent) {
+                    scanError = null
+                    way = SetupWay.PASTE
+                }
+                Spacer(Modifier.height(20.dp))
                 Text("or set up manually", color = palette.tertiaryLabel, fontSize = 13.sp)
                 Spacer(Modifier.height(8.dp))
             }
@@ -221,91 +246,118 @@ fun SetupScreen(
                 label = "setup-step",
             ) { _ ->
                 when (state) {
-                    AccountState.NeedsRelay -> if (macMode) Step(
-                        title = "Connect to your Mac",
-                        detail = "Enter the address and password from BlueBubbles Server " +
-                            "on your Mac. The Mac does the talking to Apple, so there's " +
-                            "no sign-in, no registration, and nothing for Apple to refuse.",
-                        action = "Connect",
-                        busy = busy,
-                        enabled = macUrl.isNotBlank() && macPassword.isNotBlank(),
-                        onAction = {
-                            run { macResult = account.connectToMacServer(macUrl, macPassword) }
-                        },
-                    ) {
-                        Field(
-                            value = macUrl,
-                            onValueChange = { macUrl = it },
-                            placeholder = "https://your-server.trycloudflare.com",
-                            keyboard = KeyboardType.Uri,
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        Field(
-                            value = macPassword,
-                            onValueChange = { macPassword = it },
-                            placeholder = "Server password",
-                        )
-                        macResult?.let {
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                it,
-                                color = palette.secondaryLabel,
-                                fontSize = 13.sp,
-                                textAlign = TextAlign.Center,
+                    AccountState.NeedsRelay -> when (way) {
+                        SetupWay.MAC -> Step(
+                            title = "Connect to your Mac",
+                            detail = "Enter the address and password from BlueBubbles Server " +
+                                "on your Mac. The Mac does the talking to Apple, so there's " +
+                                "no sign-in, no registration, and nothing for Apple to refuse.",
+                            action = "Connect",
+                            busy = busy,
+                            enabled = macUrl.isNotBlank() && macPassword.isNotBlank(),
+                            onAction = {
+                                run { macResult = account.connectToMacServer(macUrl, macPassword) }
+                            },
+                        ) {
+                            Field(
+                                value = macUrl,
+                                onValueChange = { macUrl = it },
+                                placeholder = "https://your-server.trycloudflare.com",
+                                keyboard = KeyboardType.Uri,
                             )
+                            Spacer(Modifier.height(10.dp))
+                            Field(
+                                value = macPassword,
+                                onValueChange = { macPassword = it },
+                                placeholder = "Server password",
+                            )
+                            macResult?.let {
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    it,
+                                    color = palette.secondaryLabel,
+                                    fontSize = 13.sp,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
+                            Spacer(Modifier.height(16.dp))
+                            Link("Use a registration server instead", palette.secondaryLabel) {
+                                way = SetupWay.RELAY
+                                macResult = null
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            Link("Paste a code instead", palette.secondaryLabel) {
+                                way = SetupWay.PASTE
+                            }
                         }
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            "Use a registration server instead",
-                            color = palette.secondaryLabel,
-                            fontSize = 14.sp,
-                            modifier = Modifier.clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) { macMode = false; macResult = null },
-                        )
-                    } else Step(
-                        title = "Connect your server",
-                        detail = "Enter the address of your registration server and the " +
-                            "pairing code it printed. This is what lets the app " +
-                            "register with Apple.",
-                        action = "Continue",
-                        busy = busy,
-                        enabled = host.isNotBlank() && code.isNotBlank(),
-                        onAction = { run { account.configureRelay(host, code) } },
-                    ) {
-                        Field(
-                            value = host,
-                            onValueChange = { host = it },
-                            placeholder = "150.136.167.146:5005",
-                            keyboard = KeyboardType.Uri,
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        Field(
-                            value = code,
-                            onValueChange = { code = it },
-                            placeholder = "Pairing code",
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            "I have a Mac running BlueBubbles",
-                            color = palette.accent,
-                            fontSize = 14.sp,
-                            modifier = Modifier.clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) { macMode = true },
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            "Look around with sample data",
-                            color = palette.secondaryLabel,
-                            fontSize = 14.sp,
-                            modifier = Modifier.clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) { account.useDemo() },
-                        )
+
+                        SetupWay.RELAY -> Step(
+                            title = "Connect your server",
+                            detail = "Enter the address of your registration server and the " +
+                                "pairing code it printed. This is what lets the app " +
+                                "register with Apple.",
+                            action = "Continue",
+                            busy = busy,
+                            enabled = host.isNotBlank() && code.isNotBlank(),
+                            onAction = { run { account.configureRelay(host, code, token) } },
+                        ) {
+                            Field(
+                                value = host,
+                                onValueChange = { host = it },
+                                placeholder = "150.136.167.146:5005",
+                                keyboard = KeyboardType.Uri,
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Field(
+                                value = code,
+                                onValueChange = { code = it },
+                                placeholder = "Pairing code",
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            // Only a public relay asks for one - Beeper's does,
+                            // a self-hosted one takes the code alone - so it is
+                            // marked optional rather than left out, which is
+                            // what made a public relay unusable from this form.
+                            Field(
+                                value = token,
+                                onValueChange = { token = it },
+                                placeholder = "Access token (optional)",
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Link("I have a Mac running BlueBubbles", palette.accent) {
+                                way = SetupWay.MAC
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            Link("Paste a code instead", palette.secondaryLabel) {
+                                way = SetupWay.PASTE
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            Link("Look around with sample data", palette.secondaryLabel) {
+                                account.useDemo()
+                            }
+                        }
+
+                        SetupWay.PASTE -> Step(
+                            title = "Paste a setup code",
+                            detail = "Whatever your QR code contains, pasted as text: a " +
+                                "server's address and password, a relay as host|code, or a " +
+                                "Mac hardware export beginning with OABS.",
+                            action = "Continue",
+                            busy = busy,
+                            enabled = pasted.isNotBlank(),
+                            onAction = { handlePastedCode(pasted) },
+                        ) {
+                            Field(
+                                value = pasted,
+                                onValueChange = { pasted = it; scanError = null },
+                                placeholder = "Paste the code",
+                                tall = true,
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Link("Type the details instead", palette.secondaryLabel) {
+                                way = SetupWay.RELAY
+                            }
+                        }
                     }
 
                     AccountState.NeedsSignIn -> Step(
@@ -508,11 +560,26 @@ fun SetupScreen(
         if (showScanner) {
             BackHandler { showScanner = false }
             QrScannerScreen(
-                onResult = { raw -> handleScanResult(raw) },
+                onResult = { text, bytes -> handleScanResult(text, bytes) },
                 onCancel = { showScanner = false },
             )
         }
     }
+}
+
+/** One of the quiet text choices under a step's main action. */
+@Composable
+private fun Link(text: String, color: Color, onClick: () -> Unit) {
+    Text(
+        text,
+        color = color,
+        fontSize = 14.sp,
+        modifier = Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onClick,
+        ),
+    )
 }
 
 /** The prominent action the QR-based flow is meant to be found by first. */
@@ -633,22 +700,28 @@ private fun Field(
     keyboard: KeyboardType = KeyboardType.Text,
     secret: Boolean = false,
     centered: Boolean = false,
+    /**
+     * Room for something long. A hardware export runs to hundreds of
+     * characters, and a 50dp single-line box shows about six of them at a
+     * time - enough to make a correct paste look like a mangled one.
+     */
+    tall: Boolean = false,
 ) {
     val palette = LocalPalette.current
     Box(
         Modifier
             .fillMaxWidth()
-            .height(50.dp)
+            .height(if (tall) 140.dp else 50.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(palette.fieldBackground)
-            .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.CenterStart,
+            .padding(horizontal = 16.dp, vertical = if (tall) 12.dp else 0.dp),
+        contentAlignment = if (tall) Alignment.TopStart else Alignment.CenterStart,
     ) {
         if (value.isEmpty()) {
             Text(
                 placeholder,
                 color = palette.tertiaryLabel,
-                fontSize = 17.sp,
+                fontSize = if (tall) 13.sp else 17.sp,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = if (centered) TextAlign.Center else TextAlign.Start,
             )
@@ -656,10 +729,12 @@ private fun Field(
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
-            singleLine = true,
+            singleLine = !tall,
             textStyle = MaterialTheme.typography.bodyLarge.copy(
                 color = palette.label,
-                fontSize = 17.sp,
+                // Small enough that a pasted blob reads as one block rather
+                // than as a wall scrolling past a slot.
+                fontSize = if (tall) 13.sp else 17.sp,
                 textAlign = if (centered) TextAlign.Center else TextAlign.Start,
                 // A six-digit code reads as digits, not prose.
                 letterSpacing = if (centered) 6.sp else 0.sp,
@@ -669,10 +744,10 @@ private fun Field(
                 if (secret) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
             keyboardOptions = KeyboardOptions(
                 keyboardType = keyboard,
-                imeAction = ImeAction.Next,
+                imeAction = if (tall) ImeAction.Default else ImeAction.Next,
                 autoCorrectEnabled = false,
             ),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = if (tall) Modifier.fillMaxSize() else Modifier.fillMaxWidth(),
         )
     }
 }
