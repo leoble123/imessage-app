@@ -96,3 +96,32 @@ Remaining to connect it:
 2. Generate Kotlin bindings (`uniffi-bindgen generate --language kotlin`)
 3. Implement `RustBackend : MessagingBackend` over those bindings
 4. Swap the `backend` line in `MainActivity`
+
+## QR setup
+
+The setup screen leads with a **Scan QR Code** action, so pairing doesn't mean
+hand-typing a host and a pairing code, or a server URL and its password.
+Camera permission is requested only once scanning is actually started - the
+rest of setup never touches it. The scanner (`QrScannerScreen.kt`) is CameraX
+for the preview and frame delivery, ML Kit for the decode, restricted to the
+QR format only; it stops itself after the first successful decode rather than
+continuing to scan.
+
+What the decoded text has to look like (`QrSetupCode.kt`) is one of:
+
+- **A BlueBubbles server's own QR** - `["password","https://host"]`, the same
+  two-element JSON array the upstream OpenBubbles app's server-connection QR
+  already encodes. A BlueBubbles/OpenBubbles server's existing QR code works
+  here unchanged; nothing new has to be generated for it.
+- **This fork's relay pairing code** - `{"host":"...","code":"..."}` (a few
+  key aliases are accepted: `relayHost`/`relay_host`, `pairingCode`/
+  `pairing_code`), or a **plain fallback** `host|code`, for a relay operator
+  with no JSON tooling on hand - e.g. `qrencode "150.136.167.146:5005|abc123"`
+  against whatever pairing code the relay printed.
+
+Either shape is fed straight into the same `AccountManager.connectToMacServer`
+/ `configureRelay` calls the manual fields use - the QR path is a faster way
+to fill in the same setup, not a second one. A code the parser doesn't
+recognize shows an inline error and leaves the manual fields available rather
+than getting stuck. The decoded payload is never logged: it's a server
+password or a pairing code either way.

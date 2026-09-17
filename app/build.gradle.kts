@@ -107,6 +107,17 @@ dependencies {
     // runtime with a NoClassDefFoundError that points nowhere useful.
     implementation("net.java.dev.jna:jna:5.15.0@aar")
 
+    // QR scanning for setup: CameraX drives the preview and frame delivery,
+    // ML Kit does the actual decode. Kept to just the barcode model rather
+    // than the full ML Kit bundle - the others pull in a Play Services
+    // dependency this app otherwise has no use for.
+    val cameraxVersion = "1.4.1"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     // The history is the only copy of the conversation that exists, so the

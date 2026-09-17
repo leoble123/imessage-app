@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,8 +51,14 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material3.Icon
 import com.leo.imessage.data.AccountManager
 import com.leo.imessage.data.AccountState
+import com.leo.imessage.data.QrSetupCode
+import com.leo.imessage.data.QrSetupPayload
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import com.leo.imessage.ui.components.pressScale
 import com.leo.imessage.ui.components.scaleFrom
@@ -103,6 +110,12 @@ fun SetupScreen(
     var password by remember { mutableStateOf("") }
     var factor by remember { mutableStateOf("") }
 
+    // QR setup: a dedicated full-screen scanner covers this one rather than
+    // living in the nav stack, since it's a single yes/no decision (scanned
+    // or cancelled) rather than a place you navigate to.
+    var showScanner by remember { mutableStateOf(false) }
+    var scanError by remember { mutableStateOf<String?>(null) }
+
     // Ready means there is now a live connection to keep alive. Demo mode
     // doesn't get a service - there's nothing connected to hold open.
     androidx.compose.runtime.LaunchedEffect(state) {
@@ -118,6 +131,38 @@ fun SetupScreen(
             } finally {
                 busy = false
             }
+        }
+    }
+
+    fun applyScannedPayload(payload: QrSetupPayload) {
+        scanError = null
+        when (payload) {
+            is QrSetupPayload.MacServer -> {
+                macMode = true
+                macUrl = payload.url
+                macPassword = payload.password
+                run { macResult = account.connectToMacServer(payload.url, payload.password) }
+            }
+            is QrSetupPayload.Relay -> {
+                macMode = false
+                host = payload.host
+                code = payload.code
+                run { account.configureRelay(payload.host, payload.code) }
+            }
+        }
+    }
+
+    fun handleScanResult(raw: String) {
+        showScanner = false
+        // Never logged: this is exactly the pairing code / server password
+        // the QR encodes, which is the one thing this screen must not write
+        // anywhere but into the account it configures.
+        val payload = QrSetupCode.parse(raw)
+        if (payload == null) {
+            scanError = "That QR code isn't a setup code this app recognizes. " +
+                "Try again, or enter the details below."
+        } else {
+            applyScannedPayload(payload)
         }
     }
 
@@ -148,6 +193,22 @@ fun SetupScreen(
             verticalArrangement = Arrangement.Center,
         ) {
             Spacer(Modifier.height(48.dp))
+
+            if (state == AccountState.NeedsRelay) {
+                ScanQrButton(busy = busy, onClick = { scanError = null; showScanner = true })
+                scanError?.let {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        it,
+                        color = palette.secondaryLabel,
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                Spacer(Modifier.height(24.dp))
+                Text("or set up manually", color = palette.tertiaryLabel, fontSize = 13.sp)
+                Spacer(Modifier.height(8.dp))
+            }
 
             AnimatedContent(
                 targetState = state::class,
@@ -442,6 +503,45 @@ fun SetupScreen(
             }
 
             Spacer(Modifier.height(48.dp))
+        }
+
+        if (showScanner) {
+            BackHandler { showScanner = false }
+            QrScannerScreen(
+                onResult = { raw -> handleScanResult(raw) },
+                onCancel = { showScanner = false },
+            )
+        }
+    }
+}
+
+/** The prominent action the QR-based flow is meant to be found by first. */
+@Composable
+private fun ScanQrButton(busy: Boolean, onClick: () -> Unit) {
+    val palette = LocalPalette.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale = pressScale(pressed && !busy)
+
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(50.dp)
+            .scaleFrom(scale)
+            .clip(RoundedCornerShape(25.dp))
+            .background(palette.accent)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = !busy,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.QrCodeScanner, contentDescription = null, tint = Color.White)
+            Spacer(Modifier.width(10.dp))
+            Text("Scan QR Code", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
