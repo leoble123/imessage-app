@@ -21,6 +21,14 @@ if [ ! -d "$NDK" ]; then
     exit 1
 fi
 
+# cloudkit-proto's build script shells out to protoc directly; without it the
+# failure surfaces as an opaque build-script exit rather than a missing-tool
+# message pointing at what to install.
+if ! command -v protoc >/dev/null; then
+    echo "No protoc on PATH. Install protobuf-compiler (apt: protobuf-compiler)." >&2
+    exit 1
+fi
+
 BIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
 
 mkdir -p "$HERE/.cargo"

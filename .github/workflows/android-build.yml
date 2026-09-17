@@ -8,6 +8,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      NDK_VERSION: 27.2.12479018
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -25,6 +28,48 @@ jobs:
 
       - name: Accept licenses
         run: yes | sdkmanager --licenses || true
+
+      - name: Install Android NDK
+        run: sdkmanager --install "ndk;${NDK_VERSION}"
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install Rust nightly
+        run: |
+          rustup toolchain install nightly
+          rustup +nightly target add aarch64-linux-android
+
+      # rustpush itself, plus the compiled .so and bindgen binary - none of
+      # this changes unless rust-core/src, the bindgen crate, or rustpush's
+      # own pinned commit changes, and a full rebuild otherwise costs most of
+      # this workflow's runtime on every push.
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            vendor/rustpush
+            rust-core/target
+            bindgen/target
+          key: rust-core-${{ runner.os }}-${{ hashFiles('rust-core/src/**', 'rust-core/Cargo.toml', 'rust-core/Cargo.lock', 'bindgen/**') }}
+
+      # The vendored rustpush checkout is skipped when the cache above
+      # already restored one - re-cloning and re-patching it every run would
+      # throw away most of the point of caching it.
+      - name: Vendor rustpush
+        run: |
+          if [ ! -d vendor/rustpush/.git ]; then
+            ./rust-core/setup.sh
+          else
+            echo "vendor/rustpush already present from cache"
+          fi
+
+      - name: Build the Rust core
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSION }}
+        run: ./rust-core/build.sh
 
       - name: Build
         run: |

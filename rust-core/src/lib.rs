@@ -1220,7 +1220,7 @@ impl ImessageCore {
             .ok_or_else(|| CoreError::new("not started"))?;
         client
             .identity
-            .validate_targets_fresh(&handles, "com.apple.madrid", &sender)
+            .validate_targets(&handles, "com.apple.madrid", &sender)
             .await
             .map_err(|e| CoreError::new(format!("couldn't look those up: {e}")))
     }
