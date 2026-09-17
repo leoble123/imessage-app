@@ -101,6 +101,8 @@ fun SetupScreen(
     var macUrl by remember { mutableStateOf(account.macServer.orEmpty()) }
     var macPassword by remember { mutableStateOf(account.macPassword.orEmpty()) }
     var macResult by remember { mutableStateOf<String?>(null) }
+    // What a relay said when it was asked, before anything was signed in.
+    var relayResult by remember { mutableStateOf<String?>(null) }
     // Whatever was pasted into the code box: a server QR's contents, a relay's
     // details, or a hardware export.
     var pasted by remember { mutableStateOf("") }
@@ -323,7 +325,24 @@ fun SetupScreen(
                                 onValueChange = { token = it },
                                 placeholder = "Access token (optional)",
                             )
+                            relayResult?.let {
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    it,
+                                    color = palette.secondaryLabel,
+                                    fontSize = 13.sp,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
                             Spacer(Modifier.height(16.dp))
+                            // Worth its own control because the answer is
+                            // three-way - down, wrong code, or up and here is
+                            // what is behind it - and signing in to find out
+                            // costs an Apple ID round trip to learn none of it.
+                            Link("Test this server", palette.accent) {
+                                run { relayResult = account.probeRelay(host, code, token) }
+                            }
+                            Spacer(Modifier.height(12.dp))
                             Link("I have a Mac running BlueBubbles", palette.accent) {
                                 way = SetupWay.MAC
                             }

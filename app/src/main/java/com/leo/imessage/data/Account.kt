@@ -319,16 +319,73 @@ class AccountManager(context: Context) {
         _state.value = AccountState.NeedsRelay
     }
 
+    /**
+     * Asks a relay what it is, without signing anything in.
+     *
+     * The one question setup otherwise cannot answer until far too late. A
+     * relay that is switched off, a pairing code that doesn't match, and a
+     * relay with nothing behind it to generate validation data all fail the
+     * same way once sign-in is under way: somewhere after the Apple ID, with
+     * an error that reads like the account's fault. Asked here they are three
+     * different answers, and the good one names the machine actually serving
+     * it - which is the whole question when the relay lives on a box you
+     * can't see.
+     */
+    suspend fun probeRelay(
+        host: String,
+        code: String,
+        token: String? = null,
+    ): String = withContext(Dispatchers.IO) {
+        val normalized = normalizeHost(host)
+        val trimmedCode = code.trim()
+        if (normalized.isBlank() || trimmedCode.isBlank()) {
+            return@withContext "Both the address and the pairing code are needed."
+        }
+
+        val reported = try {
+            uniffi.imessage_core.probeRelay(
+                normalized,
+                trimmedCode,
+                token?.trim()?.takeIf { it.isNotEmpty() },
+            )
+        } catch (cancel: kotlinx.coroutines.CancellationException) {
+            throw cancel
+        } catch (e: Throwable) {
+            return@withContext e.readable()
+        }
+
+        val versions = runCatching { org.json.JSONObject(reported) }.getOrNull()
+            ?: return@withContext "That server answered, so it's up and the code is right."
+        // Deliberately not the serial or the device id it also reports: those
+        // identify somebody's machine and nothing here needs them.
+        val name = versions.optString("software_name").orEmpty()
+        val version = versions.optString("software_version").orEmpty()
+        val hardware = versions.optString("hardware_version").orEmpty()
+        buildString {
+            append("That server is up and took the code.")
+            if (name.isNotBlank()) {
+                append(" Behind it: $name")
+                if (version.isNotBlank()) append(" $version")
+                if (hardware.isNotBlank()) append(" on a $hardware")
+                append(".")
+            }
+        }
+    }
+
+    /**
+     * A bare host is the common thing to type, and without a scheme the
+     * request fails with a URL parse error that explains nothing.
+     */
+    private fun normalizeHost(host: String): String = host.trim()
+        .let { if (it.startsWith("http://") || it.startsWith("https://")) it else "http://$it" }
+        .trimEnd('/')
+
     suspend fun configureRelay(
         host: String,
         code: String,
         token: String? = null,
     ) = withContext(Dispatchers.IO) {
-        val normalized = host.trim().let {
-            // A bare host is the common thing to type; without a scheme the
-            // request fails with a URL parse error that explains nothing.
-            if (it.startsWith("http://") || it.startsWith("https://")) it else "http://$it"
-        }.trimEnd('/')
+        val normalized = normalizeHost(host)
         val cleanToken = token?.trim()?.takeIf { it.isNotEmpty() }
 
         try {
@@ -575,9 +632,7 @@ class AccountManager(context: Context) {
      * back through two-factor is its own way to lose a day.
      */
     suspend fun switchRelay(host: String, code: String): String = withContext(Dispatchers.IO) {
-        val normalized = host.trim().let {
-            if (it.startsWith("http://") || it.startsWith("https://")) it else "http://$it"
-        }.trimEnd('/')
+        val normalized = normalizeHost(host)
         val trimmedCode = code.trim()
         if (normalized.isBlank() || trimmedCode.isBlank()) {
             return@withContext "Both the server and the code are needed."
